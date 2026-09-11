@@ -1,0 +1,8 @@
+{
+  "_comment": "Where this copy of GameCut looks for updates, and whose signature it trusts. Edit before building. Everything here is baked into the .exe on purpose: an update is never allowed to change where the next update comes from.",
+  "manifestUrl": "https://joshthefrazer.github.io/GameCut/update.json",
+  "_publicKey": "Run `npm run keygen` once. It writes the public half here and the private half somewhere only you have. With this empty, GameCut will not install anything from the network at all.",
+  "publicKey": "MCowBQYDK2VwAyEApoiPiomFwulh8i88j6UwM8YfclDi4gIJzUxJndpamkw=",
+  "checkEveryHours": 6,
+  "autoCheck": true
+}

@@ -1,0 +1,109 @@
+/* ── Timeline ──────────────────────────────────────────────── */
+.timeline__bar{
+  flex:none;display:flex;align-items:center;gap:14px;
+  padding:8px 10px;border-bottom:1px solid var(--glass-line);
+}
+.tl-tools,.tl-beat,.tl-zoom{display:flex;align-items:center;gap:5px}
+/* The bar carries three unrelated jobs — editing, music, zoom. Sitting them
+   in their own wells says so at a glance and stops the row reading as one
+   undifferentiated strip of icons. */
+.tl-tools,.tl-beat{
+  padding:3px 5px;border-radius:var(--r-md);
+  background:var(--well);border:1px solid var(--glass-line);
+}
+.tl-beat{margin-inline:auto}
+.tl-zoom{min-width:230px;justify-content:flex-end}
+.tl-zoom .rng{width:118px}
+
+.timeline__body{flex:1;min-height:0;display:flex;overflow:hidden}
+
+/* Track headers ------------------------------------------------ */
+.timeline__headers{
+  width:var(--track-head-w);flex:none;
+  border-right:1px solid var(--glass-line);
+  background:var(--tl-ruler-bg);
+  overflow:hidden;position:relative;
+}
+.th-spacer{height:var(--ruler-h);border-bottom:1px solid var(--glass-line);
+  background:var(--tl-ruler-bg);
+  display:flex;align-items:center;padding:0 10px;
+  font-size:9.5px;text-transform:uppercase;letter-spacing:.12em;color:var(--txt-3)}
+.th{
+  display:flex;align-items:center;gap:7px;padding:0 9px;
+  border-bottom:1px solid var(--glass-line);
+  position:relative;transition:background var(--dur) var(--ease);
+}
+.th:hover{background:rgba(59,130,246,.10)}
+.th.is-active{background:rgba(59,130,246,.18)}
+.th::before{content:"";position:absolute;left:0;top:6px;bottom:6px;width:3px;border-radius:0 3px 3px 0;background:var(--th-color,var(--txt-3))}
+.th__name{
+  flex:1;min-width:0;font-size:11.5px;font-weight:560;color:var(--txt-0);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.th__kind{font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--txt-2)}
+.th__btns{display:flex;gap:1px}
+.th__b{
+  width:20px;height:20px;border-radius:4px;display:grid;place-items:center;
+  font-size:9.5px;font-weight:700;color:var(--txt-1);
+  transition:all var(--dur) var(--ease);
+}
+.th__b svg{width:12px;height:12px}
+.th__b:hover{background:rgba(59,130,246,.20);color:var(--acc-hi)}
+.th__b.is-on{color:var(--acc-hi);background:rgba(59,130,246,.18)}
+.th__b.is-off{color:var(--danger);background:rgba(225,29,72,.12)}
+
+/* Canvas viewport ---------------------------------------------- */
+.timeline__view{flex:1;min-width:0;position:relative;overflow:hidden;cursor:default;background:var(--tl-lane)}
+.timeline__view canvas{position:absolute;inset:0;width:100%;height:100%}
+.tl-drop{position:absolute;inset:0}
+.tl-drop.is-over{
+  background:rgba(37,99,235,.08);
+  box-shadow:inset 0 0 0 2px var(--acc);
+}
+
+/* Vertical scrollbar (inside the canvas viewport) --------------- */
+.tl-vscroll{
+  position:absolute;right:2px;top:var(--ruler-h);bottom:2px;width:9px;
+  pointer-events:none;opacity:0;transition:opacity .18s var(--ease);
+}
+.timeline__view:hover .tl-vscroll{opacity:1}
+.tl-vscroll__thumb{
+  position:absolute;left:2px;width:5px;border-radius:99px;min-height:24px;
+  background:var(--glass-line-2);cursor:grab;pointer-events:auto;
+}
+.tl-vscroll__thumb:hover{background:rgba(0,0,0,.38)}
+.tl-vscroll__thumb.is-drag{background:var(--acc);cursor:grabbing}
+.tl-vscroll[hidden]{display:none}
+
+/* Horizontal scrollbar ----------------------------------------- */
+.tl-hscroll{
+  flex:none;height:11px;margin-left:var(--track-head-w);
+  position:relative;border-top:1px solid rgba(0,0,0,.07);
+}
+.tl-hscroll__thumb{
+  position:absolute;top:3px;height:5px;border-radius:99px;
+  background:var(--glass-line-2);cursor:grab;min-width:28px;
+  transition:background var(--dur) var(--ease);
+}
+.tl-hscroll__thumb:hover{background:rgba(0,0,0,.34)}
+.tl-hscroll__thumb.is-drag{background:var(--acc);cursor:grabbing}
+
+/* Cursor states driven by interactions.js ---------------------- */
+.timeline__view[data-cursor="move"]{cursor:grab}
+.timeline__view[data-cursor="grabbing"]{cursor:grabbing}
+.timeline__view[data-cursor="trim"]{cursor:ew-resize}
+.timeline__view[data-cursor="scrub"]{cursor:col-resize}
+.timeline__view[data-cursor="pick"]{cursor:pointer}
+
+/* The trailing "add a lane" row. Wider, worded, and quiet until hovered —
+   it sits under the tracks permanently and must not compete with them. */
+.th__add{
+  height:20px;padding:0 6px;border-radius:5px;white-space:nowrap;
+  font-size:10px;font-weight:600;letter-spacing:0;
+  color:var(--txt-3);border:1px solid transparent;
+  transition:color var(--dur) var(--ease),background var(--dur) var(--ease),
+             border-color var(--dur) var(--ease);
+}
+.th--add{gap:3px;padding:0 6px}
+.th--add::before{display:none}
+.th__add:hover{color:var(--acc-hi);background:rgba(59,130,246,.16);border-color:var(--acc-line)}

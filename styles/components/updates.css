@@ -1,0 +1,123 @@
+/* ── Updates panel ─────────────────────────────────────────────
+   Same shape as the help sheet: a dark card on a flat scrim. No blur —
+   the timeline and preview are still alive behind it. */
+.upd{
+  position:fixed;inset:0;z-index:370;
+  display:grid;place-items:center;padding:26px;
+  background:rgba(4,9,20,.74);
+  opacity:0;transition:opacity .16s var(--ease-out);
+}
+.upd.is-on{opacity:1}
+.upd__card{
+  width:min(560px,100%);max-height:100%;
+  display:flex;flex-direction:column;min-height:0;
+  border-radius:var(--r-lg,14px);
+  background:var(--bg-2);border:1px solid var(--glass-line);
+  box-shadow:0 40px 90px -30px rgba(0,0,0,.6);
+  transform:translateY(10px) scale(.99);
+  transition:transform .18s var(--ease-out);
+}
+.upd.is-on .upd__card{transform:none}
+.upd__top{
+  flex:none;display:flex;align-items:center;gap:12px;
+  padding:13px 14px;border-bottom:1px solid var(--glass-line);
+}
+.upd__top>b{flex:1;font-size:14.5px;font-weight:650;letter-spacing:-.01em}
+.upd__x{
+  width:28px;height:28px;border-radius:var(--r-sm);color:var(--txt-2);font-size:13px;
+}
+.upd__x:hover{background:rgba(255,255,255,.08);color:var(--txt-0)}
+.upd__body{flex:1;min-height:0;overflow:auto;padding:14px}
+
+.upd__now{
+  padding:12px 13px;border-radius:var(--r-md);
+  background:var(--well);border:1px solid var(--glass-line);
+}
+.upd__now b{display:block;font-size:13.5px;font-weight:640;color:var(--txt-0)}
+.upd__now span{display:block;margin-top:4px;font-size:12px;line-height:1.55;color:var(--txt-2)}
+/* The two states worth colouring: something waiting, and something wrong. */
+.upd__now[data-phase="ready"]{border-color:var(--acc-line);background:var(--acc-soft)}
+.upd__now[data-phase="needs-installer"]{border-color:rgba(251,191,36,.4);background:rgba(251,191,36,.10)}
+.upd__now[data-phase="error"]{border-color:rgba(244,63,94,.4);background:rgba(244,63,94,.08)}
+
+.upd__notes{margin:10px 0 0;padding:0 0 0 18px}
+.upd__notes li{font-size:12px;line-height:1.6;color:var(--txt-1);margin:2px 0}
+
+.upd__actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.upd__btn{
+  height:30px;padding:0 13px;border-radius:var(--r-md);
+  border:1px solid var(--glass-line);background:var(--surface);
+  font-size:12.5px;font-weight:560;color:var(--txt-1);
+  transition:all var(--dur) var(--ease);
+}
+.upd__btn:hover:not(:disabled){background:var(--surface-hi);color:var(--txt-0);border-color:var(--glass-line-2)}
+.upd__btn:disabled{opacity:.5;pointer-events:none}
+.upd__btn--primary{
+  color:#fff;font-weight:600;border-color:var(--acc-lo);
+  background:linear-gradient(180deg,var(--acc-hi),var(--acc));
+  box-shadow:0 6px 18px -8px var(--acc-glow);
+}
+.upd__btn--primary:hover:not(:disabled){filter:brightness(1.07);color:#fff}
+
+.upd__facts{
+  display:grid;grid-template-columns:auto 1fr;gap:4px 14px;
+  margin:16px 0 0;padding:12px 0 0;border-top:1px solid var(--glass-line);
+}
+.upd__facts dt{font-size:11.5px;color:var(--txt-3)}
+.upd__facts dd{margin:0;font-size:11.5px;color:var(--txt-1);font-family:var(--f-mono)}
+
+.upd__h{
+  margin:18px 0 8px;padding-top:14px;border-top:1px solid var(--glass-line);
+  font-size:10.5px;font-weight:680;letter-spacing:.11em;text-transform:uppercase;color:var(--txt-3);
+}
+.upd__rel{padding:8px 0;border-bottom:1px solid var(--glass-line)}
+.upd__rel:last-of-type{border-bottom:0}
+.upd__relhead{display:flex;align-items:baseline;gap:9px}
+.upd__relhead b{font-size:12.5px;font-weight:650;color:var(--txt-0);font-family:var(--f-mono)}
+.upd__relhead span{font-size:11px;color:var(--txt-3)}
+.upd__foot{
+  display:flex;gap:8px;flex-wrap:wrap;
+  margin-top:16px;padding-top:12px;border-top:1px solid var(--glass-line);
+}
+.upd__foot .upd__btn{font-size:11.5px;height:27px;color:var(--txt-2)}
+
+/* ── The corner card ───────────────────────────────────────────
+   Bottom-left, above the timeline but clear of the toasts on the right. */
+.updcard{
+  position:fixed;left:18px;bottom:18px;z-index:340;width:320px;
+  padding:12px 13px 13px;border-radius:var(--r-md);
+  background:rgba(9,17,34,.98);
+  border:1px solid rgba(140,180,255,.22);
+  box-shadow:0 22px 54px -18px rgba(0,0,0,.85), 0 2px 10px rgba(0,0,0,.4);
+  opacity:0;transform:translateY(10px);
+  transition:opacity .2s var(--ease-out),transform .2s var(--ease-out);
+}
+.updcard.is-on{opacity:1;transform:none}
+.updcard__head{display:flex;align-items:center;gap:8px}
+.updcard__head b{flex:1;font-size:12.5px;font-weight:650;color:#fff}
+.updcard__dot{
+  width:8px;height:8px;border-radius:50%;flex:none;
+  background:var(--acc-2);box-shadow:0 0 0 3px rgba(34,211,238,.18);
+}
+.updcard--new .updcard__dot{background:var(--ok);box-shadow:0 0 0 3px rgba(45,212,191,.18)}
+.updcard__x{
+  width:22px;height:22px;border-radius:5px;color:#7e90b4;font-size:11px;
+}
+.updcard__x:hover{background:rgba(255,255,255,.1);color:#fff}
+.updcard__body{margin-top:7px;font-size:11.5px;line-height:1.55;color:#a9b8d4}
+.updcard__body .upd__notes{margin:0;padding-left:16px}
+.updcard__body .upd__notes li{color:#c3d0e8;font-size:11.5px}
+.updcard__more{margin:5px 0 0;font-size:11px;color:#7e90b4}
+.updcard__row{display:flex;gap:7px;margin-top:11px}
+.updcard__row .upd__btn{height:27px;font-size:11.5px}
+
+/* The version chip grows a dot when something is waiting behind it. */
+.chip--ver.has-update{position:relative;border-color:var(--acc-line);color:var(--acc-hi)}
+.chip--ver.has-update::after{
+  content:"";position:absolute;top:-3px;right:-3px;width:7px;height:7px;border-radius:50%;
+  background:var(--acc-2);box-shadow:0 0 0 2px var(--bg-1);
+}
+
+@media (max-width:720px){
+  .updcard{left:12px;right:12px;width:auto}
+}

@@ -1,0 +1,167 @@
+/* ── Inspector ─────────────────────────────────────────────── */
+.insp__head{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.insp__swatch{width:9px;height:26px;border-radius:3px;flex:none;background:var(--c,var(--acc))}
+.insp__title{flex:1;min-width:0}
+.insp__title b{display:block;font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.insp__title span{font-size:10px;font-family:var(--f-mono);color:var(--txt-3)}
+
+.group{
+  border:1px solid var(--glass-line);border-radius:var(--r-md);
+  background:var(--surface);margin-bottom:9px;overflow:hidden;
+}
+.group__h{
+  display:flex;align-items:center;gap:7px;width:100%;height:30px;padding:0 9px;
+  font-size:10px;text-transform:uppercase;letter-spacing:.11em;color:var(--txt-2);font-weight:600;
+}
+.group__h:hover{color:var(--acc-lo)}
+.group__h .caret{width:12px;height:12px;transition:transform var(--dur) var(--ease);color:var(--txt-3)}
+.group.is-closed .caret{transform:rotate(-90deg)}
+.group.is-closed .group__c{display:none}
+.group__c{padding:4px 9px 10px;display:flex;flex-direction:column;gap:7px}
+
+.row{display:grid;grid-template-columns:64px 1fr;align-items:center;gap:8px;min-height:24px}
+.row>label{font-size:11px;color:var(--txt-2)}
+.row--wide{grid-template-columns:1fr}
+.row__pair{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.row__slider{display:grid;grid-template-columns:1fr 52px;gap:8px;align-items:center}
+
+.num{
+  display:flex;align-items:center;height:24px;padding:0 7px;
+  border-radius:var(--r-sm);border:1px solid var(--glass-line);background:var(--surface);
+  cursor:ew-resize;
+}
+.num__k{font-size:9.5px;color:var(--txt-3);margin-right:5px;text-transform:uppercase;letter-spacing:.08em}
+.num input{
+  width:100%;min-width:0;background:none;border:0;text-align:right;
+  font-family:var(--f-mono);font-size:11.5px;cursor:ew-resize;color:var(--txt-0);
+}
+.num:hover{border-color:var(--acc-line)}
+.num:focus-within{border-color:var(--acc);box-shadow:0 0 0 3px var(--acc-soft);cursor:text}
+.num:focus-within input{cursor:text}
+
+.sel{
+  height:24px;width:100%;padding:0 6px;border-radius:var(--r-sm);
+  border:1px solid var(--glass-line);background:var(--field);font-size:11.5px;color:var(--txt-0);
+  -webkit-appearance:none;appearance:none;cursor:pointer;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2366788f' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 5px center;background-size:12px;
+  padding-right:20px;
+}
+.sel:focus{border-color:var(--acc);box-shadow:0 0 0 3px var(--acc-soft)}
+.sel option{background:var(--field);color:var(--txt-0)}
+
+.swatch{
+  width:100%;height:24px;border-radius:var(--r-sm);border:1px solid var(--glass-line);
+  padding:0;overflow:hidden;cursor:pointer;background:var(--surface);
+}
+.swatch::-webkit-color-swatch-wrapper{padding:2px}
+.swatch::-webkit-color-swatch{border:0;border-radius:3px}
+
+.txt-in{
+  width:100%;height:24px;padding:0 7px;border-radius:var(--r-sm);
+  border:1px solid var(--glass-line);background:var(--field);font-size:11.5px;color:var(--txt-0);
+}
+.txt-area{
+  width:100%;min-height:54px;resize:vertical;padding:6px 7px;border-radius:var(--r-sm);
+  border:1px solid var(--glass-line);background:var(--field);font-size:11.5px;color:var(--txt-0);
+  font-family:var(--f-ui);line-height:1.4;
+}
+.txt-in:focus,.txt-area:focus{border-color:var(--acc);box-shadow:0 0 0 3px var(--acc-soft)}
+
+/* Keyframe stopwatch ------------------------------------------ */
+.kf{
+  width:18px;height:18px;border-radius:4px;display:grid;place-items:center;flex:none;
+  color:var(--txt-3);transition:all var(--dur) var(--ease);
+}
+.kf svg{width:11px;height:11px}
+.kf:hover{color:var(--txt-0);background:rgba(37,99,235,.10)}
+.kf.is-on{color:#fff;background:var(--acc)}
+.row--kf{grid-template-columns:64px 1fr 18px}
+
+/* Alignment grid ---------------------------------------------- */
+.align9{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;width:74px}
+.align9 button{
+  height:20px;border-radius:4px;border:1px solid var(--glass-line);
+  color:var(--txt-3);display:grid;place-items:center;background:var(--surface);
+}
+.align9 button:hover{background:rgba(37,99,235,.08);color:var(--acc-lo)}
+.align9 button.is-on{background:var(--acc);border-color:var(--acc-lo);color:#fff}
+.align9 i{width:8px;height:2px;border-radius:1px;background:currentColor;display:block}
+
+/* Font drop zone ---------------------------------------------- */
+.fontdrop{
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  height:28px;border-radius:var(--r-sm);border:1px dashed var(--glass-line-2);
+  font-size:11px;color:var(--txt-2);cursor:pointer;width:100%;background:var(--surface);
+  transition:all var(--dur) var(--ease);
+}
+.fontdrop:hover{border-color:var(--acc);color:var(--acc-lo);background:var(--acc-soft)}
+.fontdrop svg{width:13px;height:13px}
+
+/* ── Text: looks gallery ───────────────────────────────────────
+   Finished looks come first, numbers second. The chip on each button
+   is the look itself rendered in CSS, so the button shows what it
+   does instead of describing it. Every glow here is a text-shadow —
+   static, rasterized once, and therefore free per frame. */
+.looks{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:6px;width:100%;
+}
+.look{
+  position:relative;display:flex;flex-direction:column;align-items:center;gap:5px;
+  padding:9px 4px 7px;border-radius:var(--r-md);
+  border:1px solid var(--glass-line);background:var(--field);
+  transition:border-color var(--dur) var(--ease),
+             box-shadow var(--dur) var(--ease),
+             transform var(--dur) var(--ease);
+}
+.look:hover{
+  border-color:var(--acc-line);transform:translateY(-1px);
+  box-shadow:var(--glow-acc);
+}
+.look__chip{
+  font-size:17px;line-height:1.15;letter-spacing:.01em;
+  display:inline-block;max-width:100%;
+}
+.look__name{
+  font-size:10px;font-weight:600;color:var(--txt-2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;
+}
+.look:hover .look__name{color:var(--txt-0)}
+.look__x{
+  position:absolute;top:-5px;right:-5px;width:16px;height:16px;
+  border-radius:50%;background:var(--danger);color:#fff;
+  font-size:12px;font-style:normal;line-height:15px;text-align:center;
+  opacity:0;transition:opacity var(--dur) var(--ease);
+}
+.look:hover .look__x{opacity:1}
+
+/* ── Text: chip rows (entrance, alignment, fill, plate) ──────── */
+.chips{display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end}
+.chip-btn{
+  height:24px;padding:0 9px;border-radius:var(--r-sm);
+  border:1px solid var(--glass-line);background:var(--surface);
+  font-size:11px;font-weight:600;color:var(--txt-2);
+  transition:all var(--dur) var(--ease);
+}
+.chip-btn:hover{color:var(--txt-0);border-color:var(--glass-line-2);background:var(--surface-hi)}
+.chip-btn.is-on{
+  color:#fff;background:var(--acc);border-color:transparent;
+  box-shadow:var(--glow-acc);
+}
+
+/* ── Text: colour swatches ─────────────────────────────────── */
+.swatches{display:flex;flex-wrap:wrap;gap:4px;align-items:center;justify-content:flex-end}
+.sw{
+  width:17px;height:17px;border-radius:5px;flex:none;
+  border:1px solid var(--glass-line-2);
+  transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease);
+}
+.sw:hover{transform:scale(1.15)}
+.sw.is-on{box-shadow:0 0 0 2px var(--bg-1),0 0 0 3.5px var(--acc),var(--glow-acc)}
+
+/* Explanatory copy inside a group — used where a control needs a
+   sentence more than it needs another number. */
+.insp__help{
+  margin:0 0 9px;font-size:11.5px;line-height:1.5;color:var(--txt-2);
+}
+.insp__help b{color:var(--txt-1);font-weight:650}

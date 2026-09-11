@@ -1,0 +1,57 @@
+/* ── Transitions panel ─────────────────────────────────────────
+   A grid of pictures. You choose a transition by looking at one, so the
+   tile is the control and the name underneath is the caption. */
+.trs__head{
+  padding:2px 2px 12px;border-bottom:1px solid var(--glass-line);margin-bottom:12px;
+}
+.trs__head b{display:block;font-size:12.5px;font-weight:640;color:var(--txt-0)}
+.trs__head span{display:block;margin-top:3px;font-size:11px;line-height:1.5;color:var(--txt-2)}
+
+.trs__grid{
+  display:grid;gap:8px;
+  grid-template-columns:repeat(auto-fill,minmax(96px,1fr));
+}
+.trs{
+  display:flex;flex-direction:column;gap:6px;padding:6px;
+  border-radius:var(--r-md);
+  border:1px solid var(--glass-line);background:var(--surface);
+  transition:border-color var(--dur) var(--ease),background var(--dur) var(--ease),
+             transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease);
+}
+.trs:hover:not(:disabled){
+  border-color:var(--acc-line);background:var(--surface-hi);
+  transform:translateY(-1px);box-shadow:0 6px 18px -12px var(--acc-glow);
+}
+.trs:disabled{opacity:.42;pointer-events:none}
+.trs.is-on{
+  border-color:var(--acc);background:var(--acc-soft);
+  box-shadow:0 0 0 1px var(--acc) inset;
+}
+.trs__art{
+  display:block;border-radius:var(--r-sm);overflow:hidden;
+  background:#05080f;line-height:0;
+}
+.trs__art svg{width:100%;height:auto;display:block}
+.trs__name{
+  font-size:11px;font-weight:580;color:var(--txt-1);text-align:left;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.trs.is-on .trs__name{color:var(--txt-0);font-weight:650}
+
+.trs__len{margin-top:16px}
+.trs__len label{
+  display:flex;align-items:baseline;justify-content:space-between;gap:8px;
+  font-size:11.5px;color:var(--txt-1);margin-bottom:6px;
+}
+.trs__len label b{font-family:var(--f-mono);font-size:11px;color:var(--acc-hi)}
+.trs__len .rng{width:100%}
+.trs__note{margin:8px 0 0;font-size:11px;line-height:1.5;color:var(--txt-3)}
+
+.trs__off,.trs__all{
+  display:block;width:100%;margin-top:9px;height:28px;
+  border-radius:var(--r-sm);border:1px solid var(--glass-line);
+  background:var(--surface);font-size:11.5px;font-weight:560;color:var(--txt-1);
+  transition:all var(--dur) var(--ease);
+}
+.trs__off:hover{color:var(--danger);border-color:rgba(244,63,94,.5);background:rgba(244,63,94,.1)}
+.trs__all:hover{color:var(--acc-hi);border-color:var(--acc-line);background:var(--surface-hi)}

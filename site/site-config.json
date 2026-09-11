@@ -1,0 +1,17 @@
+{
+  "_comment": "The website. `npm run site:init <address>` fills in baseUrl and points the app at it; everything else here is yours to edit. `npm run release` builds the site from this plus CHANGELOG.md.",
+  "baseUrl": "https://joshthefrazer.github.io/GameCut/",
+  "_publishDir": "The folder npm run release writes the finished site into. 'docs' is a folder GitHub Pages can serve directly, so publishing is a commit and a push rather than dragging files anywhere. Change it only if you know why.",
+  "publishDir": "docs",
+  "name": "GameCut",
+  "tagline": "A video editor for gaming clips that runs on your machine.",
+  "blurb": "Multi-track timeline, CapCut-style transitions, a text engine built for titles, beat-synced cutting, and export straight to MP4. No account, no upload, no subscription — your footage never leaves your computer.",
+  "_installer": "Where the Download button points. 'folder' means the .exe sits next to the page, which is the simplest thing that works. Set it to a full https:// address instead (a GitHub release, say) if the repository gets heavy.",
+  "installer": "folder",
+  "links": [],
+  "_lastInstaller": "Filled in by npm run release so the Download button keeps working on releases that did not rebuild the .exe. Leave it alone.",
+  "lastInstaller": {
+    "name": "GameCut-1.5.0-x64.exe",
+    "version": "1.5.0"
+  }
+}

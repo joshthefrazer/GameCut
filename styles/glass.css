@@ -1,0 +1,38 @@
+/* ── Glass surfaces ────────────────────────────────────────────
+   White frost over the pale blue ground. The opaque white scrim sits
+   under the translucent layer so panel content keeps full contrast
+   while the ambient wash still tints the edges.
+
+   No `backdrop-filter`. It is the single most expensive property a live
+   editor can put on a full-size panel: the compositor has to read back
+   everything painted behind the element, blur it, and re-composite — every
+   time anything behind it changes, over the panel's whole area. Five panels
+   of it meant the window was being blurred continuously, and the bill grew
+   with the window. The scrim underneath is already 96% opaque, so the blur
+   was doing almost nothing you could see; dropping it changes the look by
+   almost nothing and the frame rate by everything.        */
+.glass{
+  position:relative;
+  background:
+    linear-gradient(180deg, var(--glass-bg-2), var(--glass-bg) 62%, var(--bg-1));
+  border:1px solid var(--glass-line);
+  border-radius:var(--r-lg);
+  box-shadow:var(--sh-panel);
+  isolation:isolate;
+}
+/* hairline highlight along the top edge */
+.glass::before{
+  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:linear-gradient(180deg, var(--glass-hi), rgba(255,255,255,0) 34%);
+  mask:linear-gradient(#000,#000) content-box, linear-gradient(#000,#000);
+  mask-composite:exclude;-webkit-mask-composite:xor;padding:1px;
+  opacity:.85;
+}
+.glass--flat{border-radius:0;border-left:0;border-right:0;border-top:0}
+.glass--well{
+  background:var(--well);
+  border:1px solid rgba(15,27,51,.07);
+  box-shadow:0 1px 4px rgba(15,27,51,.05) inset;
+  backdrop-filter:none;-webkit-backdrop-filter:none;
+}
+.glass--well::before{display:none}

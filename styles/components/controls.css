@@ -1,0 +1,190 @@
+/* ── Buttons ───────────────────────────────────────────────── */
+.btn{
+  display:inline-flex;align-items:center;gap:6px;
+  height:30px;padding:0 11px;border-radius:var(--r-md);
+  font-size:12.5px;font-weight:540;color:var(--txt-0);
+  border:1px solid transparent;
+  transition:background var(--dur) var(--ease),border-color var(--dur) var(--ease),transform .08s var(--ease);
+}
+.btn svg{width:15px;height:15px}
+.btn:active{transform:translateY(.5px) scale(.985)}
+.btn--ghost{color:var(--txt-1);border-color:var(--glass-line);background:var(--surface)}
+.btn--ghost:hover{background:var(--surface-hi);color:var(--acc-lo);border-color:var(--acc-line);box-shadow:0 1px 3px rgba(0,0,0,.07)}
+.btn--ghost:disabled{opacity:.36;pointer-events:none}
+.btn--primary{
+  color:#fff;font-weight:600;
+  background:linear-gradient(180deg,var(--acc-hi),var(--acc));
+  border-color:var(--acc-lo);
+  box-shadow:0 6px 18px -8px var(--acc-glow), 0 1px 0 rgba(255,255,255,.34) inset;
+}
+.btn--primary:hover{filter:brightness(1.07)}
+
+.tbtn{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:30px;height:28px;border-radius:var(--r-sm);color:var(--txt-1);
+  transition:background var(--dur) var(--ease),color var(--dur) var(--ease);
+}
+.tbtn svg{width:16px;height:16px}
+.tbtn:hover{background:rgba(37,99,235,.09);color:var(--acc-lo)}
+.tbtn.is-active{background:var(--acc-soft);color:var(--acc-lo)}
+.tbtn--wide{width:auto;padding:0 10px;font-size:11.5px;border:1px solid var(--glass-line);background:var(--surface)}
+.tbtn--play{
+  width:36px;height:32px;border-radius:var(--r-md);color:#fff;
+  background:linear-gradient(180deg,var(--acc-hi),var(--acc));
+  border:1px solid var(--acc-lo);
+  box-shadow:0 4px 14px -6px var(--acc-glow);
+}
+.tbtn--play:hover{filter:brightness(1.07);background:linear-gradient(180deg,var(--acc-hi),var(--acc))}
+.tbtn--play svg{width:18px;height:18px}
+
+.tgl{
+  height:26px;padding:0 10px;border-radius:var(--r-sm);
+  font-size:11.5px;font-weight:530;color:var(--txt-2);
+  border:1px solid var(--glass-line);background:var(--surface);
+  transition:all var(--dur) var(--ease);
+}
+.tgl:hover{color:var(--txt-0);border-color:var(--glass-line-2);background:var(--surface-hi)}
+.tgl.is-active{
+  color:#fff;border-color:var(--acc-lo);
+  background:linear-gradient(180deg,var(--acc-hi),var(--acc));
+  box-shadow:0 3px 10px -4px var(--acc-glow);
+}
+
+.divider-v{width:1px;height:18px;background:var(--glass-line);flex:none;margin:0 3px}
+
+/* ── Segmented control (aspect ratio) ──────────────────────── */
+.seg{
+  display:inline-flex;padding:3px;gap:2px;border-radius:var(--r-md);
+  background:var(--well);border:1px solid var(--glass-line);
+}
+.seg__btn{
+  display:inline-flex;align-items:center;gap:6px;
+  height:24px;padding:0 10px;border-radius:var(--r-sm);
+  font-size:11.5px;font-weight:540;color:var(--txt-2);
+  transition:all var(--dur) var(--ease);
+}
+.seg__btn:hover{color:var(--txt-0)}
+.seg__btn.is-active{
+  color:var(--acc-lo);background:var(--surface);
+  box-shadow:0 1px 3px var(--glass-line-2),0 0 0 1px rgba(37,99,235,.18);
+}
+.ar{display:block;border:1.5px solid currentColor;border-radius:2px;opacity:.85}
+.ar--169{width:14px;height:8px}
+.ar--916{width:8px;height:14px}
+.ar--11{width:11px;height:11px}
+.ar--45{width:9px;height:11px}
+
+/* ── Tabs ──────────────────────────────────────────────────── */
+.tabs{
+  display:flex;gap:1px;padding:8px 6px 0;flex:none;overflow:hidden;
+  border-bottom:1px solid var(--glass-line);
+}
+.tab{
+  position:relative;height:28px;padding:0 7px;border-radius:var(--r-sm) var(--r-sm) 0 0;
+  font-size:11px;font-weight:540;color:var(--txt-2);white-space:nowrap;
+  min-width:0;flex:0 1 auto;overflow:hidden;text-overflow:ellipsis;
+  transition:color var(--dur) var(--ease);
+}
+.tab:hover{color:var(--txt-1)}
+.tab.is-active{color:var(--acc-lo);font-weight:600}
+.tab.is-active::after{
+  content:"";position:absolute;left:6px;right:6px;bottom:-1px;height:2px;border-radius:2px;
+  background:linear-gradient(90deg,var(--acc),var(--acc-2));
+}
+
+/* ── Chips & readouts ──────────────────────────────────────── */
+.chip{
+  display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:99px;
+  font-size:10.5px;font-weight:540;color:var(--txt-2);
+  background:var(--well);border:1px solid var(--glass-line);
+  white-space:nowrap;
+}
+.chip--mono{font-family:var(--f-mono);letter-spacing:.01em}
+.tc{font-family:var(--f-mono);font-size:12px;letter-spacing:.02em;font-variant-numeric:tabular-nums}
+.tc--big{font-size:14.5px;font-weight:600;color:var(--txt-0)}
+.tc--dim{color:var(--txt-3)}
+.tc--dim b{color:var(--txt-2);font-weight:500}
+
+/* ── Range sliders ─────────────────────────────────────────── */
+.rng{
+  -webkit-appearance:none;appearance:none;height:18px;background:none;cursor:pointer;width:120px;
+}
+.rng::-webkit-slider-runnable-track{
+  height:3px;border-radius:99px;
+  background:linear-gradient(90deg,var(--acc) var(--fill,50%),var(--glass-line-2) var(--fill,50%));
+}
+.rng::-webkit-slider-thumb{
+  -webkit-appearance:none;width:12px;height:12px;border-radius:50%;margin-top:-4.5px;
+  background:var(--surface);border:1.5px solid var(--acc);
+  box-shadow:0 1px 4px var(--glass-line-2);
+  transition:box-shadow var(--dur) var(--ease);
+}
+.rng:hover::-webkit-slider-thumb{box-shadow:0 1px 4px var(--glass-line-2),0 0 0 5px var(--acc-soft)}
+.rng::-moz-range-track{height:3px;border-radius:99px;background:var(--glass-line-2)}
+.rng::-moz-range-progress{height:3px;border-radius:99px;background:var(--acc)}
+.rng::-moz-range-thumb{width:11px;height:11px;border:1.5px solid var(--acc);border-radius:50%;background:var(--surface)}
+.rng--vol{width:86px}
+
+/* ── Mini numeric field ────────────────────────────────────── */
+.mini-field{
+  display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 8px;
+  border-radius:var(--r-sm);border:1px solid var(--glass-line);background:var(--surface);
+}
+.mini-field>span{font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:var(--txt-3)}
+.mini-field input{
+  width:46px;background:none;border:0;font-family:var(--f-mono);font-size:11.5px;
+  text-align:right;-moz-appearance:textfield;color:var(--txt-0);
+}
+.mini-field input::-webkit-outer-spin-button,
+.mini-field input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.mini-field:focus-within{border-color:var(--acc);box-shadow:0 0 0 3px var(--acc-soft)}
+
+/* ── Empty state ───────────────────────────────────────────── */
+.empty{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+  padding:34px 18px;text-align:center;color:var(--txt-3);
+  border:1px dashed var(--glass-line-2);border-radius:var(--r-lg);
+  background:var(--surface);
+}
+.empty svg{width:26px;height:26px;opacity:.6}
+.empty b{display:block;color:var(--txt-1);font-size:12.5px;font-weight:560}
+.empty span{font-size:11px;line-height:1.5;max-width:210px}
+
+/* Version chip — says what is actually loaded, not what the .exe is called.
+   Lights up when an update is running on top of the built-in files. */
+.chip--ver{
+  font-family:var(--f-mono);font-size:10.5px;font-weight:600;
+  height:24px;padding:0 8px;border-radius:var(--r-sm);
+  border:1px solid var(--glass-line);background:var(--surface);color:var(--txt-2);
+  transition:all var(--dur) var(--ease);
+}
+.chip--ver:hover{color:var(--txt-0);border-color:var(--acc-line);background:var(--surface-hi)}
+.chip--ver.is-updated{
+  color:var(--acc-hi);border-color:var(--acc-line);box-shadow:var(--glow-acc);
+}
+
+/* ── Save state chip ───────────────────────────────────────────
+   Three states, told by colour and by words. The dot alone would be a
+   puzzle; the words alone would be easy to miss at the edge of the eye. */
+.savechip{
+  display:inline-flex;align-items:center;gap:7px;flex:none;
+  height:26px;padding:0 10px 0 8px;border-radius:99px;
+  font-size:11px;font-weight:580;letter-spacing:.01em;
+  border:1px solid var(--glass-line);background:var(--surface);color:var(--txt-2);
+  transition:color var(--dur) var(--ease),border-color var(--dur) var(--ease),
+             background var(--dur) var(--ease);
+  white-space:nowrap;
+}
+.savechip:hover{background:var(--surface-hi);color:var(--txt-0)}
+.savechip__dot{
+  width:7px;height:7px;border-radius:50%;flex:none;background:var(--txt-3);
+  transition:background var(--dur) var(--ease);
+}
+.savechip[data-state="saved"] .savechip__dot{background:var(--ok)}
+.savechip[data-state="dirty"]{color:var(--warn);border-color:rgba(251,191,36,.4)}
+.savechip[data-state="dirty"] .savechip__dot{background:var(--warn)}
+.savechip[data-state="busy"] .savechip__dot{background:var(--acc-hi)}
+
+/* Square ghost button for a single glyph — the padded pill shape reads as
+   "this has a label that failed to load" when there is only an icon in it. */
+.btn--icon{width:30px;padding:0;justify-content:center}

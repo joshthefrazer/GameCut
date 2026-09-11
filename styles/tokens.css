@@ -1,0 +1,123 @@
+/* ── Design tokens — Midnight (black / blue) ───────────────────
+   Single source of truth. The DOM reads these directly; the canvas
+   renderers mirror the --tl-* / --clip-* block via src/ui/theme.js.
+   Change a value here and both follow.
+
+   Glows are box-shadow and text-shadow only — never `filter: blur()`
+   and never `backdrop-filter`. Those are re-rasterized whenever
+   anything behind them moves, and the bill grows with the window; an
+   earlier version of this interface cost the editor 55fps that way.
+   A static shadow is rasterized once and cached, so it is free.     */
+:root{
+  color-scheme: dark;
+
+  /* Ground — near-black with a blue cast, never flat grey */
+  --bg-0:#070b14;
+  --bg-1:#0b1120;
+  --bg-2:#111a2e;
+  --well:rgba(120,170,255,.055);
+  /* Control surfaces. Every button, field and tile reads these rather than
+     naming a colour, which is what makes a retheme a one-file edit. */
+  --surface:rgba(120,170,255,.07);
+  --surface-hi:rgba(120,170,255,.13);
+  --field:#0c1426;
+
+  /* Panels — dark glass, lifted by a hairline rather than a blur */
+  --glass-bg:rgba(17,26,46,.92);
+  --glass-bg-2:rgba(13,20,36,.96);
+  --glass-hi:rgba(120,170,255,.14);
+  --glass-line:rgba(120,170,255,.13);
+  --glass-line-2:rgba(120,170,255,.26);
+
+  /* Type */
+  --txt-0:#eaf2ff;
+  --txt-1:#b8c9e4;
+  --txt-2:#8296b5;
+  --txt-3:#5b6b86;
+
+  /* Accents */
+  --acc:#3b82f6;
+  --acc-hi:#60a5fa;
+  --acc-lo:#2563eb;
+  --acc-2:#22d3ee;
+  --acc-glow:rgba(59,130,246,.55);
+  --acc-soft:rgba(59,130,246,.15);
+  --acc-line:rgba(59,130,246,.55);
+  --danger:#f43f5e;
+  --warn:#fbbf24;
+  --ok:#2dd4bf;
+
+  /* Track identity */
+  --clip-video:#2563eb;
+  --clip-video-2:#60a5fa;
+  --clip-audio:#0d9488;
+  --clip-audio-2:#2dd4bf;
+  --clip-text:#6366f1;
+  --clip-text-2:#a5b4fc;
+  --clip-fx:#0891b2;
+
+  /* Canvas: timeline surfaces (mirrored by theme.js) */
+  --tl-lane:#0c1322;
+  --tl-lane-alt:#0f1728;
+  --tl-lane-active:rgba(59,130,246,.10);
+  --tl-lane-audio:rgba(45,212,191,.06);
+  --tl-lane-line:rgba(120,170,255,.09);
+  --tl-ruler-bg:#0a0f1c;
+  --tl-ruler-line:rgba(120,170,255,.18);
+  --tl-ruler-tick:rgba(160,200,255,.38);
+  --tl-ruler-text:rgba(200,222,255,.62);
+  --tl-grid:rgba(120,170,255,.06);
+  --tl-edge:rgba(120,170,255,.12);
+  --tl-beat:rgba(59,130,246,.32);
+  --tl-beat-bar:rgba(96,165,250,.75);
+  --tl-playhead:#f43f5e;
+  --tl-snap:#22d3ee;
+  --tl-ghost-fill:rgba(59,130,246,.26);
+  --tl-ghost-line:rgba(96,165,250,.95);
+
+  /* Canvas: clip interior */
+  --clip-label:#ffffff;
+  --clip-label-dim:rgba(255,255,255,.70);
+  --clip-header:rgba(4,10,24,.42);
+  --clip-sel-ring:#60a5fa;
+  --clip-sel-edge:#0b1120;
+  --clip-key:#fde047;
+  --clip-wave-mid:rgba(255,255,255,.28);
+  --marker:#fbbf24;
+
+  /* Geometry */
+  --r-xl:18px;
+  --r-lg:14px;
+  --r-md:9px;
+  --r-sm:6px;
+
+  /* Elevation — depth from black, light from blue */
+  --sh-panel:
+    0 1px 0 rgba(120,170,255,.09) inset,
+    0 18px 44px -22px rgba(0,0,0,.9),
+    0 1px 3px rgba(0,0,0,.5);
+  --sh-pop:
+    0 24px 56px -20px rgba(0,0,0,.92),
+    0 0 0 1px rgba(120,170,255,.14);
+  --sh-acc:
+    0 0 0 1px var(--acc-line),
+    0 0 20px -4px var(--acc-glow);
+  /* The signature glow. Static, so it costs nothing per frame. */
+  --glow-acc:0 0 18px -2px var(--acc-glow);
+  --glow-soft:0 0 26px -6px rgba(59,130,246,.45);
+
+  /* Motion */
+  --ease:cubic-bezier(.22,.61,.36,1);
+  --ease-out:cubic-bezier(.16,1,.3,1);
+  --dur:.16s;
+
+  /* Fonts */
+  --f-ui:"Inter","SF Pro Display",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
+  --f-mono:"SF Mono","JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+
+  /* Layout */
+  --topbar-h:52px;
+  --gutter:6px;
+  --track-head-w:184px;
+  --ruler-h:30px;
+}

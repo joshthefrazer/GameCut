@@ -1,1 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GameCut — Studio</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%232563eb'/%3E%3Cstop offset='1' stop-color='%230ea5e9'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='url(%23g)'/%3E%3Cpath d='M12 9l12 7-12 7z' fill='white'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="./styles/tokens.css">
+<link rel="stylesheet" href="./styles/base.css">
+<link rel="stylesheet" href="./styles/glass.css">
+<link rel="stylesheet" href="./styles/layout.css">
+<link rel="stylesheet" href="./styles/components/controls.css">
+<link rel="stylesheet" href="./styles/components/preview.css">
+<link rel="stylesheet" href="./styles/components/timeline.css">
+<link rel="stylesheet" href="./styles/components/media-pool.css">
+<link rel="stylesheet" href="./styles/components/inspector.css">
+<link rel="stylesheet" href="./styles/components/export.css">
+<link rel="stylesheet" href="./styles/components/home.css">
+<link rel="stylesheet" href="./styles/components/help.css">
+<link rel="stylesheet" href="./styles/components/transitions.css">
+<link rel="stylesheet" href="./styles/components/updates.css">
+</head>
+<body>
+<div class="aurora" aria-hidden="true"></div>
 
+<div class="app" id="app">
+
+  <!-- ── HOME ──────────────────────────────────────────────────
+       Sits above everything and is shown by the .is-home class on #app.
+       The editor stays built underneath rather than being torn down, so
+       opening a project is a view change, not a reload. -->
+  <section class="home" id="homeScreen">
+    <div class="home__bar">
+      <span class="brand__mark"></span>
+      <span class="home__title">GameCut</span>
+      <span class="home__ver" id="homeVer"></span>
+      <button class="btn btn--ghost" id="homeHelp" style="margin-left:auto">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.2a2.5 2.5 0 1 1 3.3 2.4c-.6.2-.9.7-.9 1.4v.5"/><path d="M12 17.2h.01"/></svg>
+        How it works
+      </button>
+    </div>
+
+    <div class="home__body">
+      <button class="home__new" id="homeNew">
+        <span class="home__newInner">
+          <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+          New project
+        </span>
+      </button>
+
+      <div class="home__head">
+        <b>Projects</b>
+        <span class="home__count" id="homeCount"></span>
+      </div>
+      <div class="home__grid" id="homeGrid"></div>
+    </div>
+  </section>
+
+  <!-- ── TOP BAR ───────────────────────────────────────────── -->
+  <header class="topbar glass glass--flat">
+    <div class="topbar__brand">
+      <span class="brand__mark"></span>
+      <span class="brand__name">GameCut</span>
+      <span class="brand__tag">studio</span>
+    </div>
+
+    <div class="topbar__project">
+      <input class="proj-name" id="projName" value="Untitled Project" spellcheck="false" aria-label="Project name">
+      <span class="proj-meta" id="projMeta">1920×1080 · 60fps</span>
+    </div>
+
+    <div class="topbar__center seg" role="group" aria-label="Aspect ratio" id="aspectSeg">
+      <button class="seg__btn is-active" data-ar="16:9"><i class="ar ar--169"></i>16:9</button>
+      <button class="seg__btn" data-ar="9:16"><i class="ar ar--916"></i>9:16</button>
+      <button class="seg__btn" data-ar="1:1"><i class="ar ar--11"></i>1:1</button>
+      <button class="seg__btn" data-ar="4:5"><i class="ar ar--45"></i>4:5</button>
+    </div>
+
+    <div class="topbar__actions">
+      <button class="btn btn--ghost" id="btnUndo" title="Undo (Ctrl+Z)">
+        <svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h9a7 7 0 0 1 0 14h-3"/></svg>
+      </button>
+      <button class="btn btn--ghost" id="btnRedo" title="Redo (Ctrl+Shift+Z)">
+        <svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9h-9a7 7 0 0 0 0 14h3"/></svg>
+      </button>
+      <button class="savechip" id="saveChip" data-state="idle">
+        <i class="savechip__dot"></i><span id="saveChipText">Saved</span>
+      </button>
+      <span class="divider-v"></span>
+      <button class="btn btn--ghost" id="btnHome" title="Back to your projects">
+        <svg viewBox="0 0 24 24"><path d="M3 10.5 12 4l9 6.5"/><path d="M5 10v10h14V10"/></svg>
+        Projects
+      </button>
+      <button class="btn btn--ghost btn--icon" id="btnHelp" aria-label="Help">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.2a2.5 2.5 0 1 1 3.3 2.4c-.6.2-.9.7-.9 1.4v.5"/><path d="M12 17.2h.01"/></svg>
+      </button>
+      <button class="chip chip--ver" id="verChip" title="Version">v—</button>
+      <span class="divider-v"></span>
+      <button class="btn btn--ghost" id="btnImport" title="Import media (I)">
+        <svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+        Import
+      </button>
+      <button class="btn btn--primary" id="btnExport">
+        <svg viewBox="0 0 24 24"><path d="M12 4v12"/><path d="m7 11 5 5 5-5"/><path d="M4 19h16"/></svg>
+        Export
+      </button>
+    </div>
+  </header>
+
+  <!-- ── WORKSPACE ─────────────────────────────────────────── -->
+  <main class="workspace" id="workspace">
+
+    <aside class="panel panel--left glass" id="leftPanel">
+      <!-- Two panes: your footage, and how one shot becomes the next.
+           Effects and Graphics are still absent on purpose — they were
+           catalogs that stored a choice and rendered nothing. Transitions
+           earned their tab back by being written first. -->
+      <nav class="tabs" id="leftTabs">
+        <button class="tab is-active" data-tab="media" id="tabMedia">Media</button>
+        <button class="tab" data-tab="trans" id="tabTrans">Transitions</button>
+      </nav>
+      <div class="panel__body">
+        <section class="tabpane is-active" data-pane="media" id="poolRoot"></section>
+        <section class="tabpane" data-pane="trans" id="transRoot"></section>
+      </div>
+    </aside>
+
+    <div class="gutter gutter--v" data-resize="left" role="separator" aria-orientation="vertical"></div>
+
+    <section class="stage">
+      <div class="preview glass" id="previewPanel">
+        <div class="preview__topline">
+          <span class="chip" id="resChip">1920 × 1080</span>
+          <div class="preview__toggles">
+            <button class="tgl is-active" id="tglGuides" title="Safe guides">Guides</button>
+            <button class="tgl" id="tglGrid" title="Rule-of-thirds grid">Grid</button>
+            <button class="tgl" id="btnCrop" title="Crop out a region (C) — draw a box on the picture and it becomes its own resizable layer on top">Crop</button>
+            <button class="tgl is-active" id="tglSnap" title="Snapping (N)">Snap</button>
+          </div>
+          <label class="qsel" title="Preview quality. Lower is smoother with long or 4K footage — it does not affect your export.">
+            <span>Preview</span>
+            <select id="previewQuality">
+              <option value="1">Full</option>
+              <option value="0.5" selected>Half</option>
+              <option value="0.25">Quarter</option>
+            </select>
+          </label>
+          <span class="chip chip--mono" id="fpsChip">— fps</span>
+          <button class="tbtn" id="btnFullscreen" title="Fullscreen preview (F)">
+            <svg class="ico-fsEnter" viewBox="0 0 24 24"><path d="M8 3H3v5"/><path d="M16 3h5v5"/><path d="M16 21h5v-5"/><path d="M8 21H3v-5"/></svg>
+            <svg class="ico-fsExit" viewBox="0 0 24 24" hidden><path d="M3 8h5V3"/><path d="M21 8h-5V3"/><path d="M21 16h-5v5"/><path d="M3 16h5v5"/></svg>
+          </button>
+        </div>
+
+        <div class="preview__viewport" id="previewViewport">
+          <div class="preview__frame" id="previewFrame">
+            <canvas id="previewCanvas"></canvas>
+            <div class="preview__overlay" id="previewOverlay"></div>
+            <svg class="preview__guides" id="previewGuides" aria-hidden="true"></svg>
+          </div>
+        </div>
+
+        <div class="transport" id="transport">
+          <div class="transport__left">
+            <span class="playstate" id="playState" data-playing="false">
+              <i class="playstate__dot"></i><span class="playstate__label">Paused</span>
+            </span>
+            <span class="tc tc--big" id="tcCurrent">00:00:00:00</span>
+            <span class="tc tc--dim">/ <b id="tcTotal">00:00:00:00</b></span>
+          </div>
+          <div class="transport__center">
+            <button class="tbtn" id="btnStart" title="Go to start (Home)"><svg viewBox="0 0 24 24"><path d="M6 5v14"/><path d="M19 5 9 12l10 7z" fill="currentColor" stroke="none"/></svg></button>
+            <button class="tbtn" id="btnPrevFrame" title="Previous frame (←)"><svg viewBox="0 0 24 24"><path d="M15 5 7 12l8 7z" fill="currentColor" stroke="none"/></svg></button>
+            <button class="tbtn tbtn--play" id="btnPlay" title="Play (Space)" aria-pressed="false">
+              <svg class="ico-play" viewBox="0 0 24 24"><path d="M8 5.5 19 12 8 18.5z" fill="currentColor" stroke="none"/></svg>
+              <svg class="ico-pause" viewBox="0 0 24 24" hidden><path d="M8 5h3v14H8zM13 5h3v14h-3z" fill="currentColor" stroke="none"/></svg>
+            </button>
+            <button class="tbtn" id="btnNextFrame" title="Next frame (→)"><svg viewBox="0 0 24 24"><path d="M9 5l8 7-8 7z" fill="currentColor" stroke="none"/></svg></button>
+            <button class="tbtn" id="btnEnd" title="Go to end (End)"><svg viewBox="0 0 24 24"><path d="M18 5v14"/><path d="M5 5l10 7-10 7z" fill="currentColor" stroke="none"/></svg></button>
+            <span class="divider-v"></span>
+            <button class="tbtn" id="btnLoop" title="Loop playback (L)"><svg viewBox="0 0 24 24"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg></button>
+          </div>
+          <div class="transport__right">
+            <button class="tbtn" id="btnMute" title="Mute (M)"><svg viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><path d="M16 9a4 4 0 0 1 0 6"/><path d="M19 6.5a8 8 0 0 1 0 11"/></svg></button>
+            <input type="range" class="rng rng--vol" id="masterVol" min="0" max="100" value="85" aria-label="Master volume">
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="gutter gutter--v" data-resize="right" role="separator" aria-orientation="vertical"></div>
+
+    <aside class="panel panel--right glass" id="rightPanel">
+      <nav class="tabs" id="rightTabs">
+        <button class="tab is-active" data-tab="inspect">Inspector</button>
+        <button class="tab" data-tab="audio">Audio</button>
+      </nav>
+      <div class="panel__body">
+        <section class="tabpane is-active" data-pane="inspect" id="inspectorRoot"></section>
+        <section class="tabpane" data-pane="audio" id="audioRoot"></section>
+      </div>
+    </aside>
+  </main>
+
+  <div class="gutter gutter--h" data-resize="bottom" role="separator" aria-orientation="horizontal"></div>
+
+  <!-- ── TIMELINE ──────────────────────────────────────────── -->
+  <footer class="timeline glass" id="timelinePanel">
+    <div class="timeline__bar">
+      <div class="tl-tools">
+        <button class="tbtn" id="btnSplit" title="Split at playhead (S)"><svg viewBox="0 0 24 24"><path d="M12 3v18"/><path d="m7 8 5 4-5 4"/><path d="m17 8-5 4 5 4"/></svg></button>
+        <button class="tbtn" id="btnDelete" title="Delete selection (Del)"><svg viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M9 7V5h6v2"/><path d="M6 7l1 13h10l1-13"/></svg></button>
+        <button class="tbtn" id="btnDuplicate" title="Duplicate (Ctrl+D)"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg></button>
+        <span class="divider-v"></span>
+        <button class="tbtn" id="btnAddText" title="Add text clip (T)"><svg viewBox="0 0 24 24"><path d="M5 6V4h14v2"/><path d="M12 4v16"/><path d="M9 20h6"/></svg></button>
+        <button class="tbtn" id="btnMarker" title="Add marker (M)"><svg viewBox="0 0 24 24"><path d="M6 3v18"/><path d="M6 4h11l-2.5 3.5L17 11H6z" fill="currentColor" stroke="none"/></svg></button>
+        <span class="divider-v"></span>
+        <button class="tgl" id="btnRipple" title="Ripple edit">Ripple</button>
+        <button class="tgl is-active" id="btnMagnet" title="Snapping (N)">Magnet</button>
+      </div>
+
+      <div class="tl-beat">
+        <label class="mini-field" title="Beat grid BPM for music sync">
+          <span>BPM</span>
+          <input type="number" id="bpmInput" value="128" min="40" max="300" step="0.5">
+        </label>
+        <button class="tgl" id="btnBeatGrid" title="Show beat grid">Beat grid</button>
+        <button class="tbtn tbtn--wide" id="btnTapTempo" title="Tap tempo">Tap</button>
+      </div>
+
+      <div class="tl-zoom">
+        <button class="tbtn" id="btnZoomFit" title="Zoom to fit (Shift+Z)"><svg viewBox="0 0 24 24"><path d="M9 4H4v5"/><path d="M15 4h5v5"/><path d="M15 20h5v-5"/><path d="M9 20H4v-5"/></svg></button>
+        <input type="range" class="rng" id="zoomRange" min="0" max="1000" value="420" aria-label="Timeline zoom">
+        <span class="chip chip--mono" id="zoomChip">1.0×</span>
+      </div>
+    </div>
+
+    <div class="timeline__body">
+      <div class="timeline__headers" id="trackHeaders"></div>
+      <div class="timeline__view" id="timelineView">
+        <canvas id="timelineCanvas"></canvas>
+        <div class="tl-drop" id="tlDrop"></div>
+        <div class="tl-vscroll" id="tlVScroll"><div class="tl-vscroll__thumb" id="tlVThumb"></div></div>
+      </div>
+    </div>
+    <div class="tl-hscroll" id="tlHScroll"><div class="tl-hscroll__thumb" id="tlHThumb"></div></div>
+  </footer>
+</div>
+
+<input type="file" id="filePicker" multiple accept="video/*,audio/*,image/*,.ttf,.otf,.woff,.woff2" hidden>
+<div class="modal" id="exportModal" hidden></div>
+<div class="toast-stack" id="toasts"></div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>

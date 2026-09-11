@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{NAME}} — {{TAGLINE}}</title>
+<meta name="description" content="{{BLURB}}">
+<meta property="og:title" content="{{NAME}} {{VERSION}}">
+<meta property="og:description" content="{{TAGLINE}}">
+<meta property="og:type" content="website">
+<meta property="og:image" content="{{BASE}}shots/editor.png">
+<meta name="theme-color" content="#070b14">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%232563eb'/%3E%3Cstop offset='1' stop-color='%230ea5e9'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='url(%23g)'/%3E%3Cpath d='M12 9l12 7-12 7z' fill='white'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="top__in">
+    <span class="mark"></span>
+    <span class="top__name">{{NAME}}</span>
+    <span class="top__ver">v{{VERSION}}</span>
+    <nav class="top__nav">
+      <a href="#what">What it does</a>
+      <a href="#look">Look</a>
+      <a href="#privacy">Your footage</a>
+      <a href="#changes">What&rsquo;s new</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <div class="hero">
+      <h1>Cut your clips.<br><b>Keep your footage.</b></h1>
+      <p>{{BLURB}}</p>
+
+      <div class="cta">
+        <a class="btn btn--go" href="{{INSTALLER_HREF}}"{{INSTALLER_ATTRS}}>
+          <svg viewBox="0 0 24 24"><path d="M12 4v12"/><path d="m7 11 5 5 5-5"/><path d="M4 19h16"/></svg>
+          Download for Windows
+        </a>
+        <a class="btn" href="#changes">
+          <svg viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h10"/></svg>
+          What&rsquo;s new in {{VERSION}}
+        </a>
+      </div>
+      <p class="cta__note">{{INSTALLER_NOTE}}</p>
+    </div>
+
+    <div class="shot"><img src="shots/editor.png" alt="The GameCut editor: timeline, preview and the transitions panel" width="1600" height="940"></div>
+  </div>
+
+  <section id="what">
+    <div class="wrap">
+      <p class="h2">What it does</p>
+      <h2 class="h3">Built for gameplay, not for wedding videos.</h2>
+      <div class="grid">
+
+        <div class="card">
+          <span class="card__ico"><svg viewBox="0 0 24 24"><path d="M3 7h18v10H3z"/><path d="M7 7v10M17 7v10"/></svg></span>
+          <h4>A real timeline</h4>
+          <p>Multi-track video, text and audio. Drag, trim, split at the playhead, snap to other clips or to the beat. Zoom with Ctrl+scroll. Everything is undoable.</p>
+        </div>
+
+        <div class="card">
+          <span class="card__ico"><svg viewBox="0 0 24 24"><path d="M4 5l7 7-7 7z"/><path d="M20 5l-7 7 7 7z"/></svg></span>
+          <h4>Transitions on the cut</h4>
+          <p>A button appears where two clips meet. Click it and pick Dissolve, Dip to black or a Slide. It sits across the cut, half either side, so the shot still changes where you cut it.</p>
+        </div>
+
+        <div class="card">
+          <span class="card__ico"><svg viewBox="0 0 24 24"><path d="M8 3v13a2 2 0 0 0 2 2h11"/><path d="M3 8h13a2 2 0 0 1 2 2v11"/></svg></span>
+          <h4>Crop anything out</h4>
+          <p>Drag a box round a coin counter or a killfeed &mdash; or trace any shape freehand. It becomes its own live layer you can move and magnify, with the gameplay still running underneath.</p>
+        </div>
+
+        <div class="card">
+          <span class="card__ico"><svg viewBox="0 0 24 24"><path d="M5 6V4h14v2"/><path d="M12 4v16"/><path d="M9 20h6"/></svg></span>
+          <h4>Text that looks finished</h4>
+          <p>A row of ready-made looks rather than a column of sliders. Gradient fill, glow separate from shadow, background plates, one-click entrances, and any font on your computer.</p>
+        </div>
+
+        <div class="card">
+          <span class="card__ico"><svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></span>
+          <h4>Cuts on the beat</h4>
+          <p>Set the BPM or tap it out, and the timeline draws a line on every beat for clips to snap to. Made for cutting to a Suno track.</p>
+        </div>
+
+        <div class="card">
+          <span class="card__ico"><svg viewBox="0 0 24 24"><path d="M12 4v12"/><path d="m7 11 5 5 5-5"/><path d="M4 19h16"/></svg></span>
+          <h4>Straight to MP4</h4>
+          <p>Renders at full resolution through the same code that draws the preview, so what you watched is what you get. 16:9, 9:16 for Shorts, 1:1 and 4:5 &mdash; switching reframes every clip.</p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <section id="look">
+    <div class="wrap">
+      <p class="h2">Look</p>
+      <h2 class="h3">Nothing is an unlabelled icon.</h2>
+      <div class="gal">
+        <figure>
+          <img src="shots/crop.png" alt="Tracing a shape freehand with the crop tool" loading="lazy">
+          <figcaption>The crop tool in Draw mode &mdash; trace any shape, keep only what is inside it.</figcaption>
+        </figure>
+        <figure>
+          <img src="shots/projects.png" alt="The projects screen" loading="lazy">
+          <figcaption>Opens on your projects, and saves itself every half minute.</figcaption>
+        </figure>
+        <figure>
+          <img src="shots/help.png" alt="The help sheet" loading="lazy">
+          <figcaption>Press <kbd>?</kbd> for a searchable sheet: every tool, in plain words, and every shortcut.</figcaption>
+        </figure>
+        <figure>
+          <img src="shots/updates.png" alt="The updates panel" loading="lazy">
+          <figcaption>New versions arrive quietly and wait until you install them.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section id="privacy">
+    <div class="wrap">
+      <p class="h2">Your footage</p>
+      <h2 class="h3">It never leaves your computer. That is enforced, not promised.</h2>
+      <div class="priv">
+        <ul>
+          <li><b>Your recordings are never uploaded, and never copied.</b> A project remembers where your files are on your own drive and plays them from there. Move a file and it tells you, rather than pretending.</li>
+          <li><b>The editor cannot reach the network at all.</b> Not &ldquo;does not&rdquo; &mdash; the part of the app that holds your footage, projects and text is refused every network protocol at the process level. There is no code path from your project to the internet.</li>
+          <li><b>No account, no sign-in, no telemetry.</b> Nothing is counted, timed or reported. There is nothing to opt out of.</li>
+          <li><b>One request, ever.</b> Every few hours the app reads one small file from this site to see whether there is a newer version. No identifier, nothing sent, nothing about you or your work. Updates are signed, so nothing can install itself but a real release.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="changes">
+    <div class="wrap">
+      <p class="h2">What&rsquo;s new</p>
+      <h2 class="h3">Every version, and what it brought.</h2>
+      {{CHANGELOG}}
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>{{NAME}} v{{VERSION}} &middot; Windows &middot; free</span>
+    <span class="sp"><a href="{{INSTALLER_HREF}}">Download</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

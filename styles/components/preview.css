@@ -1,0 +1,206 @@
+/* ── Preview panel ─────────────────────────────────────────── */
+.preview__topline{
+  display:flex;align-items:center;gap:10px;flex:none;
+  padding:8px 12px;border-bottom:1px solid var(--glass-line);
+}
+.preview__toggles{display:flex;gap:4px;margin-inline:auto}
+
+/* The viewer surround stays a neutral slate even in the light theme —
+   judging exposure and color against white lies to your eye. Every NLE
+   does this. It's tinted toward the blue ground so it still belongs. */
+.preview__viewport{
+  flex:1;min-height:0;position:relative;
+  display:grid;place-items:center;
+  padding:18px;
+  background:
+    radial-gradient(120% 120% at 50% 0%, rgba(59,130,246,.10), transparent 62%),
+    #0a0f1b;
+}
+/* subtle checker so transparent regions read as transparent */
+.preview__viewport::before{
+  content:"";position:absolute;inset:0;pointer-events:none;opacity:.30;
+  background-image:linear-gradient(45deg,rgba(255,255,255,.03) 25%,transparent 25%,transparent 75%,rgba(255,255,255,.03) 75%),
+                   linear-gradient(45deg,rgba(255,255,255,.03) 25%,transparent 25%,transparent 75%,rgba(255,255,255,.03) 75%);
+  background-size:22px 22px;background-position:0 0,11px 11px;
+}
+.preview__frame{
+  position:relative;
+  border-radius:var(--r-md);
+  overflow:hidden;
+  box-shadow:
+    0 0 0 1px rgba(120,170,255,.20),
+    0 0 34px -10px rgba(59,130,246,.35),
+    0 26px 64px -28px rgba(0,0,0,.95);
+  background:#000;
+  transition:width .22s var(--ease-out),height .22s var(--ease-out);
+}
+.preview__frame canvas{width:100%;height:100%;display:block}
+.preview__overlay,.preview__guides{position:absolute;inset:0}
+.preview__overlay{pointer-events:none}
+.preview__guides{pointer-events:none;overflow:visible}
+
+/* Crop tool ---------------------------------------------------- */
+.preview__overlay.is-cropping{cursor:crosshair}
+.crop{position:absolute;inset:0;pointer-events:none}
+.crop__dim{position:absolute;background:rgba(6,12,28,.58)}
+.crop__box{
+  position:absolute;
+  outline:1.5px dashed var(--acc-2);
+  outline-offset:-1px;
+  box-shadow:0 0 0 1px rgba(255,255,255,.55) inset;
+}
+.crop__size{
+  position:absolute;left:0;bottom:-20px;white-space:nowrap;
+  font-family:var(--f-mono);font-size:10px;font-weight:600;color:#fff;
+  background:var(--acc);padding:1px 5px;border-radius:3px;
+}
+.crop__hint{
+  position:absolute;left:50%;bottom:12px;transform:translateX(-50%);
+  white-space:nowrap;font-size:11.5px;font-weight:600;color:#fff;
+  background:rgba(8,20,45,.88);padding:5px 11px;border-radius:var(--r-sm);
+  border:1px solid rgba(255,255,255,.18);
+}
+
+/* On-canvas transform gizmo ----------------------------------- */
+.gizmo{position:absolute;pointer-events:none}
+.gizmo__box{
+  position:absolute;inset:0;
+  outline:1.5px solid var(--acc-2);
+  outline-offset:-1px;
+  box-shadow:0 0 14px -2px rgba(14,165,233,.55);
+}
+.gizmo__h{
+  position:absolute;width:9px;height:9px;margin:-5px 0 0 -5px;
+  background:var(--surface);border:1.5px solid var(--acc-2);border-radius:2px;
+  pointer-events:auto;box-shadow:0 1px 4px rgba(0,0,0,.6);
+}
+.gizmo__h[data-h="nw"]{cursor:nwse-resize}
+.gizmo__h[data-h="ne"]{cursor:nesw-resize}
+.gizmo__h[data-h="se"]{cursor:nwse-resize}
+.gizmo__h[data-h="sw"]{cursor:nesw-resize}
+.gizmo__h[data-h="n"],.gizmo__h[data-h="s"]{cursor:ns-resize}
+.gizmo__h[data-h="e"],.gizmo__h[data-h="w"]{cursor:ew-resize}
+.gizmo__rot{
+  position:absolute;left:50%;top:-26px;margin-left:-7px;
+  width:14px;height:14px;border-radius:50%;
+  background:var(--surface);border:1.5px solid var(--acc-2);cursor:grab;pointer-events:auto;
+  box-shadow:0 1px 4px rgba(0,0,0,.5);
+}
+.gizmo__label{
+  position:absolute;left:0;top:-22px;white-space:nowrap;
+  font-family:var(--f-mono);font-size:10px;color:#fff;font-weight:600;
+  background:var(--acc);padding:1px 5px;border-radius:3px;
+}
+.gizmo__hitbox{position:absolute;inset:0;pointer-events:auto;cursor:move}
+
+/* Preview quality picker -------------------------------------- */
+.qsel{
+  display:inline-flex;align-items:center;gap:6px;flex:none;
+  height:26px;padding:0 4px 0 9px;border-radius:var(--r-sm);
+  border:1px solid var(--glass-line);background:var(--surface);
+}
+.qsel>span{font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:var(--txt-3)}
+.qsel select{
+  border:0;background:none;font-size:11.5px;font-weight:540;color:var(--txt-1);
+  cursor:pointer;padding:0 2px;
+}
+.qsel:focus-within{border-color:var(--acc);box-shadow:0 0 0 3px var(--acc-soft)}
+.preview:fullscreen .qsel{background:var(--surface);border-color:rgba(255,255,255,.16)}
+.preview:fullscreen .qsel select{color:#e8eef8}
+.preview:fullscreen .qsel option{color:#0f1b33}
+
+/* Transport --------------------------------------------------- */
+.transport{
+  flex:none;display:flex;align-items:center;gap:12px;
+  padding:9px 12px;border-top:1px solid var(--glass-line);
+  background:var(--surface);
+}
+.transport__left{display:flex;align-items:center;gap:8px;min-width:190px}
+
+/* Play / pause state ------------------------------------------
+   The button alone was too quiet to answer "is it running?" at a glance,
+   so the state is also spelled out, with a dot that pulses only while
+   playing — motion is what the eye actually catches. */
+.playstate{
+  display:inline-flex;align-items:center;gap:6px;flex:none;
+  height:22px;padding:0 9px 0 7px;border-radius:99px;
+  font-size:10.5px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;
+  border:1px solid var(--glass-line);background:var(--well);color:var(--txt-2);
+  transition:color var(--dur) var(--ease),background var(--dur) var(--ease),
+             border-color var(--dur) var(--ease);
+}
+.playstate__dot{
+  width:7px;height:7px;border-radius:50%;flex:none;
+  background:var(--txt-3);transition:background var(--dur) var(--ease);
+}
+.playstate[data-playing="true"]{
+  color:#fff;background:var(--ok);border-color:transparent;
+  box-shadow:0 2px 10px -3px rgba(13,148,136,.7);
+}
+.playstate[data-playing="true"] .playstate__dot{
+  background:var(--surface);animation:pulse 1.1s var(--ease) infinite;
+}
+@keyframes pulse{
+  0%,100%{opacity:1;transform:scale(1)}
+  50%{opacity:.45;transform:scale(.78)}
+}
+@media (prefers-reduced-motion:reduce){
+  .playstate[data-playing="true"] .playstate__dot{animation:none}
+}
+
+/* Playing turns the transport button red — it now means "stop", and a
+   different colour reads faster than a different glyph. */
+.tbtn--play[aria-pressed="true"]{
+  background:linear-gradient(180deg,#f43f5e,var(--danger));
+  border-color:#be123c;
+  box-shadow:0 4px 14px -6px rgba(225,29,72,.65);
+}
+.tbtn--play[aria-pressed="true"]:hover{
+  background:linear-gradient(180deg,#f43f5e,var(--danger));filter:brightness(1.07);
+}
+
+/* Fullscreen -------------------------------------------------- */
+.preview:fullscreen{background:#0b0f18;border-radius:0;border:0}
+.preview:fullscreen .preview__viewport{padding:0}
+.preview:fullscreen .preview__topline,
+.preview:fullscreen .transport{
+  /* Opaque, not blurred — this chrome sits directly over playing video. */
+  background:rgba(11,15,24,.94);border-color:rgba(255,255,255,.10);
+}
+/* In fullscreen the chrome sits on a dark ground, so its light-theme
+   foreground colours have to flip or they vanish. */
+.preview:fullscreen .chip,
+.preview:fullscreen .tgl,
+.preview:fullscreen .tc,
+.preview:fullscreen .tbtn{color:#e8eef8}
+.preview:fullscreen .chip{background:var(--surface);border-color:rgba(255,255,255,.16)}
+.preview:fullscreen .tc--dim{color:#8b9ab3}
+.preview:fullscreen .tgl{background:var(--surface);border-color:rgba(255,255,255,.16)}
+.preview:fullscreen .tgl.is-active{color:#fff}
+.preview:fullscreen .playstate{
+  background:var(--surface);border-color:rgba(255,255,255,.16);color:#c3cede;
+}
+.preview:fullscreen .playstate[data-playing="true"]{background:var(--ok);color:#fff}
+.transport__center{display:flex;align-items:center;gap:4px;margin-inline:auto}
+.transport__right{display:flex;align-items:center;gap:8px;min-width:190px;justify-content:flex-end}
+
+/* Freehand crop ------------------------------------------------ */
+.crop__ink{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.crop__ink path{
+  fill:rgba(59,130,246,.18);
+  stroke:var(--acc-2);stroke-width:3;
+  vector-effect:non-scaling-stroke;
+  stroke-linejoin:round;stroke-linecap:round;
+}
+.preview__overlay.is-drawing{cursor:cell}
+.crop__modes{
+  position:absolute;left:50%;top:12px;transform:translateX(-50%);
+  display:flex;gap:3px;padding:3px;border-radius:var(--r-sm);
+  background:rgba(8,20,45,.9);border:1px solid rgba(120,170,255,.25);
+}
+.crop__modes button{
+  height:22px;padding:0 12px;border-radius:4px;
+  font-size:11px;font-weight:650;color:var(--txt-2);
+}
+.crop__modes button:hover{color:#fff}
+.crop__modes button.is-on{background:var(--acc);color:#fff}

@@ -1,0 +1,143 @@
+/* ── Hover tips ────────────────────────────────────────────────
+   A shade darker than the panels behind it, with a hairline edge. An overlay
+   has to read as sitting *on top of* the interface rather than being part of
+   it, and depth is the cheapest way to say so. */
+.tip{
+  position:fixed;z-index:400;pointer-events:none;
+  max-width:290px;padding:9px 11px 10px;
+  border-radius:var(--r-md);
+  background:rgba(9,17,34,.97);
+  border:1px solid rgba(140,180,255,.22);
+  box-shadow:0 16px 40px -14px rgba(0,0,0,.8), 0 2px 8px rgba(0,0,0,.35);
+  color:#e9eefb;
+  opacity:0;transform:translateY(-3px);
+  transition:opacity .13s var(--ease-out),transform .13s var(--ease-out);
+}
+.tip.is-on{opacity:1;transform:none}
+.tip b{
+  display:flex;align-items:center;gap:8px;
+  font-size:12px;font-weight:640;letter-spacing:-.005em;color:#fff;
+}
+.tip span{display:block;margin-top:4px;font-size:11.5px;line-height:1.45;color:#a9b8d4}
+.tip kbd,.help kbd,.ctx kbd{
+  font-family:var(--f-mono);font-size:9.5px;font-weight:600;
+  padding:1.5px 5px;border-radius:4px;white-space:nowrap;
+  background:rgba(255,255,255,.11);border:1px solid rgba(255,255,255,.17);color:#cfe0ff;
+}
+.tip b kbd{margin-left:auto}
+
+/* ── Help sheet ────────────────────────────────────────────── */
+.help{
+  position:fixed;inset:0;z-index:360;
+  display:grid;place-items:center;padding:26px;
+  /* A flat scrim, not a blur. `backdrop-filter` re-rasterizes everything
+     behind it whenever anything back there moves — and the timeline and
+     preview are still alive under this sheet. A dark wash reads the same and
+     costs one fill. */
+  background:rgba(4,9,20,.74);
+  opacity:0;transition:opacity .18s var(--ease-out);
+}
+.help.is-on{opacity:1}
+.help__card{
+  width:min(860px,100%);max-height:100%;
+  display:flex;flex-direction:column;min-height:0;
+  border-radius:var(--r-lg,14px);
+  background:var(--bg-2);
+  border:1px solid var(--glass-line);
+  box-shadow:0 40px 90px -30px rgba(0,0,0,.6);
+  transform:translateY(10px) scale(.99);
+  transition:transform .2s var(--ease-out);
+}
+.help.is-on .help__card{transform:none}
+.help__top{
+  flex:none;display:flex;align-items:center;gap:12px;
+  padding:13px 14px;border-bottom:1px solid var(--glass-line);
+}
+.help__top>b{font-size:14.5px;font-weight:650;letter-spacing:-.01em;white-space:nowrap}
+.help__find{
+  flex:1;min-width:0;height:30px;padding:0 11px;
+  border-radius:var(--r-md);border:1px solid var(--glass-line);
+  background:var(--field);font-size:12.5px;color:var(--txt-0);
+}
+.help__find:focus{border-color:var(--acc);box-shadow:0 0 0 3px var(--acc-soft);outline:none}
+.help__x{
+  flex:none;width:28px;height:28px;border-radius:var(--r-sm);
+  color:var(--txt-2);font-size:13px;
+}
+.help__x:hover{background:rgba(255,255,255,.08);color:var(--txt-0)}
+
+.help__body{flex:1;min-height:0;overflow:auto;padding:6px 14px 16px}
+.help__sec{padding-top:12px}
+.help__sec h3{
+  position:sticky;top:0;z-index:1;margin:0 0 4px;padding:7px 0 5px;
+  font-size:10.5px;font-weight:680;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--txt-3);background:var(--bg-2);
+}
+.help__row{
+  display:grid;grid-template-columns:190px 1fr;gap:12px;align-items:baseline;
+  padding:6px 8px;border-radius:var(--r-sm);
+}
+.help__row:hover{background:rgba(37,99,235,.055)}
+.help__row>b{
+  display:flex;align-items:center;gap:7px;flex-wrap:wrap;
+  font-size:12.5px;font-weight:600;color:var(--txt-0);
+}
+.help__row>span{font-size:12px;line-height:1.5;color:var(--txt-1)}
+.help kbd{background:var(--well);border-color:var(--glass-line);color:var(--txt-1)}
+
+.help__row--key{grid-template-columns:190px 1fr}
+.help__row--key>kbd{justify-self:start;font-size:10.5px;padding:3px 7px}
+
+.help__step{display:grid;grid-template-columns:26px 1fr;gap:11px;padding:7px 8px}
+.help__step i{
+  width:22px;height:22px;border-radius:50%;display:grid;place-items:center;
+  font-style:normal;font-size:11px;font-weight:700;color:#fff;
+  background:linear-gradient(160deg,var(--acc-hi),var(--acc));
+}
+.help__step b{display:block;font-size:13px;font-weight:620;margin-bottom:2px}
+.help__step span{display:block;font-size:12px;line-height:1.55;color:var(--txt-1)}
+.help__none{padding:20px 8px;font-size:12.5px;color:var(--txt-2)}
+
+@media (max-width:720px){
+  .help__row,.help__row--key{grid-template-columns:1fr}
+}
+
+/* ── Right-click menu ──────────────────────────────────────── */
+.ctx{position:fixed;z-index:380}
+.ctx__panel{
+  min-width:216px;padding:5px;
+  border-radius:var(--r-md);
+  background:rgba(9,17,34,.98);
+  border:1px solid rgba(140,180,255,.2);
+  box-shadow:0 22px 54px -18px rgba(0,0,0,.8), 0 2px 10px rgba(0,0,0,.4);
+}
+.ctx__head{
+  padding:6px 9px 7px;font-size:10.5px;font-weight:650;
+  letter-spacing:.09em;text-transform:uppercase;color:#7e90b4;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.ctx__item{
+  display:flex;align-items:center;gap:10px;width:100%;
+  padding:6px 9px;border-radius:5px;
+  font-size:12.5px;font-weight:520;color:#dfe7f7;text-align:left;
+}
+.ctx__item>span{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ctx__item:hover{background:var(--acc);color:#fff}
+.ctx__item:hover kbd{background:rgba(255,255,255,.2);border-color:transparent;color:#fff}
+.ctx__item:disabled{opacity:.4;pointer-events:none}
+.ctx__item.is-on::after{content:"✓";font-size:11px;color:#7dd3fc}
+.ctx__item:hover.is-on::after{color:#fff}
+.ctx__item--sub::after{content:"›";font-size:14px;line-height:1;color:#7e90b4}
+.ctx__item--sub:hover::after{color:#fff}
+.ctx__sep{display:block;height:1px;margin:4px 7px;background:rgba(255,255,255,.1)}
+
+/* Submenus open on hover and are held open by the gap-free wrapper — a
+   flyout you have to cross empty space to reach closes under the pointer. */
+.ctx__wrap{position:relative}
+.ctx__flyout{
+  position:absolute;left:100%;top:-5px;margin-left:1px;
+  display:none;
+}
+.ctx__wrap:hover>.ctx__flyout{display:block}
+/* Flip to the left when there is no room on the right. */
+.ctx--flipL .ctx__flyout{left:auto;right:100%;margin:0 1px 0 0}

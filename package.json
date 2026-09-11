@@ -1,0 +1,106 @@
+{
+  "name": "gamecut",
+  "version": "1.5.0",
+  "private": true,
+  "type": "module",
+  "main": "electron-main.cjs",
+  "description": "Desktop video editor for gaming clips \u2014 multi-track timeline, CapCut-style text engine, beat-synced cutting.",
+  "author": "GameCut",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --x64",
+    "dist:all": "electron-builder -wml",
+    "icon": "python3 qa/make-icon.py",
+    "test": "node qa/qa.mjs qa/out",
+    "test:electron": "node qa/electron.mjs qa/out",
+    "test:media": "node qa/media-electron.mjs qa/out",
+    "test:packaged": "node qa/packaged.mjs ./dist/linux-unpacked/gamecut qa/out",
+    "test:export": "node qa/export.mjs qa/out",
+    "test:long": "node qa/longform.mjs",
+    "diag:chrome": "node qa/chrome-cost.mjs",
+    "diag:fps": "node qa/playback-fps.mjs",
+    "diag:export": "node qa/export-cost.mjs",
+    "update": "node tools/make-update.mjs",
+    "keygen": "node tools/keygen.mjs",
+    "release": "node tools/release.mjs",
+    "test:update": "node qa/update-net.mjs",
+    "site:init": "node tools/site-init.mjs",
+    "site:preview": "node tools/site-preview.mjs",
+    "test:site": "node qa/site.mjs"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.gamecut.studio",
+    "productName": "GameCut",
+    "copyright": "Copyright \u00a9 2026 GameCut",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron-main.cjs",
+      "preload.cjs",
+      "updater.cjs",
+      "update-config.json",
+      "index.html",
+      "src/**/*",
+      "styles/**/*",
+      "vendor/**/*",
+      "assets/**/*",
+      "package.json",
+      "!**/*.map",
+      "!**/.DS_Store",
+      "!qa/**",
+      "!build/**",
+      "!dist/**"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "dir",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "GameCut",
+      "deleteAppDataOnUninstall": false,
+      "include": "build/installer.nsh",
+      "allowElevation": true,
+      "runAfterFinish": true
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.video"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "AudioVideo"
+    }
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

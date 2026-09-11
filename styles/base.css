@@ -1,0 +1,66 @@
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  background:var(--bg-0);
+  color:var(--txt-0);
+  font:13px/1.45 var(--f-ui);
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+  overflow:hidden;
+  user-select:none;
+  overscroll-behavior:none;
+}
+img,canvas,svg{display:block;max-width:100%}
+button,input,select{font:inherit;color:inherit}
+button{background:none;border:0;padding:0;cursor:pointer}
+[hidden]{display:none!important}
+b,strong{font-weight:600}
+
+svg{fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(120,170,255,.18);border-radius:99px;border:3px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background:rgba(120,170,255,.34);background-clip:content-box}
+
+::selection{background:rgba(59,130,246,.34);color:#fff}
+
+:focus{outline:none}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px;border-radius:var(--r-sm)}
+
+/* Ambient wash — pale blue light bleeding in from the top corners ---
+   ------------------------------------------------------------------
+   This used to be three big circles with `filter:blur(120px)`, drifting
+   forever on a 30s animation. It looked identical to what is here now and it
+   cost the entire editor: a blurred, animating layer never stops being
+   re-rasterized, and the cost scales with the window's area. Measured in a
+   software-rendered build at 1600x1000, an empty rAF loop ran at 5fps with
+   those blobs alive and 60fps without them. That was the lag — not decoding,
+   not compositing the picture, not the machine.
+
+   Baked into the background as plain radial gradients, the same wash is
+   rasterized once and never touched again. Anything ambient and decorative in
+   here has to earn its place against the preview's frame budget, and a moving
+   blur cannot. */
+.aurora{
+  position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(46vw 46vw at 4% -6%,  rgba(37,99,235,.28), rgba(37,99,235,0) 64%),
+    radial-gradient(40vw 40vw at 97% -2%, rgba(34,211,238,.16), rgba(34,211,238,0) 64%),
+    radial-gradient(62vw 34vw at 54% 106%, rgba(79,70,229,.20), rgba(79,70,229,0) 66%),
+    radial-gradient(130% 100% at 50% -25%, #0d1526 0%, #090e1b 46%, var(--bg-0) 100%);
+}
+
+/* Toasts ------------------------------------------------------ */
+.toast-stack{position:fixed;right:18px;bottom:18px;z-index:90;display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+.toast{
+  padding:9px 14px;border-radius:var(--r-md);
+  background:var(--bg-2);
+  border:1px solid var(--glass-line-2);box-shadow:var(--sh-pop);
+  font-size:12.5px;font-weight:500;color:var(--txt-0);
+  animation:toastIn .28s var(--ease-out);
+}
+.toast--err{border-color:rgba(225,29,72,.45);box-shadow:var(--sh-pop),0 0 0 3px rgba(225,29,72,.10)}
+.toast--ok{border-color:rgba(13,148,136,.45);box-shadow:var(--sh-pop),0 0 0 3px rgba(13,148,136,.10)}
+@keyframes toastIn{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:none}}

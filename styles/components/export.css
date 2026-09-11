@@ -1,0 +1,117 @@
+/* ── Modal shell ───────────────────────────────────────────── */
+.modal{position:fixed;inset:0;z-index:80;display:grid;place-items:center;padding:24px}
+.modal[hidden]{display:none!important}
+.modal__scrim{
+  /* No blur: this scrim covers the whole window and the panel above it
+     animates a progress bar, so a backdrop-filter here re-blurs the entire
+     editor on every progress tick — during the one job that needs the CPU. */
+  position:absolute;inset:0;background:rgba(0,0,0,.44);
+  animation:scrimIn .18s var(--ease-out);
+}
+@keyframes scrimIn{from{opacity:0}to{opacity:1}}
+
+.modal__panel{
+  position:relative;width:min(560px,100%);max-height:calc(100vh - 48px);
+  display:flex;flex-direction:column;overflow:hidden;
+  border-radius:var(--r-xl);box-shadow:var(--sh-pop);
+  animation:panelIn .22s var(--ease-out);
+}
+@keyframes panelIn{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
+
+.modal__head{
+  display:flex;align-items:center;gap:12px;flex:none;
+  padding:15px 16px 13px;border-bottom:1px solid var(--glass-line);
+}
+.modal__head>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.modal__head b{font-size:15px;font-weight:640;letter-spacing:-.01em}
+.modal__head span{font-size:11.5px;color:var(--txt-2);font-family:var(--f-mono)}
+
+.modal__foot{
+  display:flex;align-items:center;gap:14px;flex:none;
+  padding:12px 16px;border-top:1px solid var(--glass-line);
+  background:var(--surface);
+}
+.modal__hint{flex:1;min-width:0;font-size:11px;color:var(--txt-2);line-height:1.45}
+.modal__actions{display:flex;gap:8px;flex:none}
+
+.modal__warn{
+  margin:12px 16px 0;padding:9px 12px;border-radius:var(--r-md);
+  font-size:11.5px;line-height:1.5;
+  background:rgba(245,158,11,.11);border:1px solid rgba(245,158,11,.4);color:#8a5a00;
+}
+.modal .empty{margin:16px}
+
+/* ── Preset chooser ────────────────────────────────────────── */
+.xp-list{
+  flex:1;min-height:0;overflow-y:auto;
+  padding:12px 16px;display:flex;flex-direction:column;gap:7px;
+}
+.xp{
+  display:flex;align-items:center;gap:11px;width:100%;text-align:left;
+  padding:11px 12px;border-radius:var(--r-md);
+  border:1px solid var(--glass-line);background:var(--surface);
+  transition:border-color var(--dur) var(--ease),box-shadow var(--dur) var(--ease),
+             background var(--dur) var(--ease);
+}
+.xp:hover{border-color:var(--acc-line);background:rgba(37,99,235,.03)}
+.xp.is-on{border-color:var(--acc);box-shadow:0 0 0 3px var(--acc-soft);background:rgba(37,99,235,.05)}
+
+.xp__radio{
+  width:16px;height:16px;border-radius:50%;flex:none;
+  border:1.5px solid var(--glass-line-2);position:relative;
+  transition:border-color var(--dur) var(--ease);
+}
+.xp.is-on .xp__radio{border-color:var(--acc)}
+.xp.is-on .xp__radio::after{
+  content:"";position:absolute;inset:3px;border-radius:50%;background:var(--acc);
+}
+
+.xp__text{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.xp__text b{font-size:12.5px;font-weight:600;color:var(--txt-0)}
+.xp__text span{font-size:11px;color:var(--txt-2);line-height:1.4}
+
+.xp__meta{flex:none;text-align:right;display:flex;flex-direction:column;gap:1px}
+.xp__meta b{font-size:11.5px;font-family:var(--f-mono);color:var(--txt-1)}
+.xp__meta span{font-size:10px;color:var(--txt-3);font-family:var(--f-mono)}
+
+/* ── Progress ──────────────────────────────────────────────── */
+.xp-progress{padding:22px 16px 18px;display:flex;flex-direction:column;gap:12px}
+.xp-bar{
+  height:9px;border-radius:99px;overflow:hidden;
+  background:var(--well);box-shadow:0 1px 2px rgba(0,0,0,.06) inset;
+}
+.xp-bar i{
+  display:block;height:100%;border-radius:99px;
+  background:linear-gradient(90deg,var(--acc),var(--acc-2));
+  transition:width .25s var(--ease);
+}
+.xp-stats{display:flex;align-items:baseline;gap:10px}
+.xp-stats b{font-size:22px;font-weight:660;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.xp-stats span{font-size:11.5px;color:var(--txt-2);font-family:var(--f-mono)}
+
+/* ── Done ──────────────────────────────────────────────────── */
+.modal__panel--ok .modal__head{border-bottom-color:rgba(13,148,136,.28)}
+.xp-done{display:flex;align-items:center;gap:13px;padding:20px 16px}
+.xp-tick{
+  width:34px;height:34px;flex:none;color:#fff;stroke-width:2.6;
+  background:var(--ok);border-radius:50%;padding:7px;
+  box-shadow:0 4px 14px -4px rgba(13,148,136,.6);
+}
+.xp-done>div{min-width:0;display:flex;flex-direction:column;gap:2px}
+.xp-done b{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.xp-done>div>span{
+  font-size:10.5px;color:var(--txt-3);font-family:var(--f-mono);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left;
+}
+
+/* Frame-exact toggle ------------------------------------------ */
+.xp-exact{
+  display:flex;gap:10px;align-items:flex-start;
+  margin:0 var(--modal-pad,18px) 4px;padding:10px 12px;
+  border:1px solid var(--glass-line);border-radius:var(--r-md);
+  background:var(--well);cursor:pointer;
+}
+.xp-exact input{margin-top:2px;flex:none;accent-color:var(--acc)}
+.xp-exact > span{display:flex;flex-direction:column;gap:3px}
+.xp-exact b{font-size:12.5px;font-weight:650;color:var(--txt-0)}
+.xp-exact > span > span{font-size:11.5px;line-height:1.45;color:var(--txt-2)}

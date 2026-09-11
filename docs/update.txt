@@ -1,0 +1,33 @@
+{
+  "product": "gamecut",
+  "channel": "stable",
+  "version": "1.5.0",
+  "published": "2026-09-11T23:48:04.369Z",
+  "rollout": 1,
+  "needsInstaller": false,
+  "minShell": null,
+  "bundle": {
+    "path": "GameCut-1.5.0.gcupdate",
+    "sha256": "cd675c3575eb3d28414faef2e65179dfb34a612ad2e5fbf99175a5dcceb14d60",
+    "bytes": 562133
+  },
+  "installer": {
+    "path": "GameCut-1.5.0-x64.exe"
+  },
+  "notes": [
+    "GameCut can now update itself. When you publish a new version it arrives quietly in the background and a card asks whether to install it — nothing changes until you say yes.",
+    "The version number in the top bar opens an Updates panel: what you are running, what is waiting, and the full log of everything that has changed.",
+    "Every update is signed. An install refuses anything that is not signed by the key it was built with, so nothing can push code to your machine but you."
+  ],
+  "history": [
+    {
+      "version": "1.5.0",
+      "published": "2026-09-11T23:48:04.310Z",
+      "notes": [
+        "GameCut can now update itself. When you publish a new version it arrives quietly in the background and a card asks whether to install it — nothing changes until you say yes.",
+        "The version number in the top bar opens an Updates panel: what you are running, what is waiting, and the full log of everything that has changed.",
+        "Every update is signed. An install refuses anything that is not signed by the key it was built with, so nothing can push code to your machine but you."
+      ]
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+# Build output and dependencies
+node_modules/
+dist/
+
+# Test artifacts
+qa/out/
+qa/fixtures/
+
+# The signing key. It must never be in the repository — anyone who has it can
+# push an update to every install of GameCut you have ever handed out. It lives
+# in ~/.gamecut by default; these patterns are a net in case one ends up here.
+*signing-key*
+*.pem
+*.key
+
+# Console output from the .bat scripts, kept so a failed run can be read back.
+*.log
+gc-*.bat
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# The built website IS committed — GitHub Pages serves it from docs/.
+# Do not add docs/ here.

@@ -1,0 +1,116 @@
+/* ── Home screen ───────────────────────────────────────────────
+   Covers the editor rather than replacing it: the compositor, the
+   decoders and the audio graph are all built at boot and cost nothing
+   while hidden, so opening a project is a class change instead of a
+   reload. */
+.home{
+  position:fixed;inset:0;z-index:60;
+  display:none;flex-direction:column;
+  background:
+    radial-gradient(58vw 44vw at 6% -10%, rgba(37,99,235,.20), rgba(37,99,235,0) 62%),
+    radial-gradient(46vw 40vw at 98% 4%, rgba(34,211,238,.13), rgba(34,211,238,0) 62%),
+    var(--bg-0);
+}
+.app.is-home .home{display:flex}
+/* Hide the editor from assistive tech and the tab order too, not just the eye. */
+.app.is-home .topbar,
+.app.is-home .workspace{visibility:hidden}
+
+.home__bar{
+  flex:none;display:flex;align-items:center;gap:10px;
+  height:var(--topbar-h);padding:0 18px;
+  border-bottom:1px solid var(--glass-line);
+  -webkit-app-region:drag;
+}
+.home__bar > *{-webkit-app-region:no-drag}
+.home__title{font-size:14px;font-weight:700;letter-spacing:-.01em;color:var(--txt-0)}
+.home__ver{font-family:var(--f-mono);font-size:10.5px;color:var(--txt-3)}
+
+.home__body{
+  flex:1;min-height:0;overflow-y:auto;
+  padding:26px 30px 40px;max-width:1180px;width:100%;margin:0 auto;
+}
+
+/* The gradient card. A static background-image, so it is rasterized once —
+   no animation and no filter, which is the rule the whole interface keeps. */
+.home__new{
+  display:block;width:100%;height:132px;border-radius:var(--r-lg);
+  background:linear-gradient(100deg,#7c3aed 0%,#4f46e5 26%,#2563eb 54%,#0ea5e9 78%,#22d3ee 100%);
+  box-shadow:0 0 0 1px rgba(120,170,255,.22), 0 18px 44px -20px rgba(37,99,235,.75);
+  transition:transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+.home__new:hover{
+  transform:translateY(-2px);
+  box-shadow:0 0 0 1px rgba(120,170,255,.38), 0 24px 56px -20px rgba(37,99,235,.9);
+}
+.home__new:active{transform:translateY(0)}
+.home__newInner{
+  display:flex;align-items:center;justify-content:center;gap:10px;height:100%;
+  font-size:17px;font-weight:650;color:#fff;letter-spacing:-.01em;
+  text-shadow:0 1px 10px rgba(4,10,24,.35);
+}
+.home__newInner svg{width:22px;height:22px;stroke-width:2.2}
+
+.home__head{
+  display:flex;align-items:baseline;gap:9px;margin:26px 0 12px;
+  font-size:13px;color:var(--txt-0);
+}
+.home__count{font-size:11.5px;color:var(--txt-3)}
+
+.home__grid{
+  display:grid;gap:14px;
+  grid-template-columns:repeat(auto-fill,minmax(190px,1fr));
+}
+.home__empty{
+  grid-column:1/-1;padding:38px 20px;text-align:center;
+  border:1px dashed var(--glass-line-2);border-radius:var(--r-lg);
+}
+.home__empty b{display:block;font-size:13.5px;color:var(--txt-1);margin-bottom:6px}
+.home__empty span{font-size:12px;color:var(--txt-3);line-height:1.55;max-width:420px;display:inline-block}
+
+.proj{
+  position:relative;display:flex;flex-direction:column;gap:8px;text-align:left;
+  padding:8px;border-radius:var(--r-md);
+  border:1px solid var(--glass-line);background:var(--glass-bg);
+  transition:border-color var(--dur) var(--ease),
+             box-shadow var(--dur) var(--ease),
+             transform var(--dur) var(--ease);
+}
+.proj:hover{
+  transform:translateY(-2px);border-color:var(--acc-line);
+  box-shadow:var(--glow-acc);
+}
+.proj__shot{
+  display:block;aspect-ratio:16/9;border-radius:var(--r-sm);overflow:hidden;
+  background:#05080f;
+}
+.proj__shot img{width:100%;height:100%;object-fit:cover;display:block}
+.proj__blank{
+  display:block;width:100%;height:100%;
+  background:linear-gradient(135deg,rgba(59,130,246,.18),rgba(34,211,238,.10));
+}
+.proj__meta{display:flex;flex-direction:column;gap:2px;min-width:0;padding:0 2px 2px}
+.proj__name{
+  font-size:12.5px;font-weight:600;color:var(--txt-0);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.proj__sub{font-size:10.5px;color:var(--txt-3)}
+.proj__del{
+  position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;
+  background:var(--danger);color:#fff;font-style:normal;font-size:11px;
+  line-height:20px;text-align:center;opacity:0;
+  transition:opacity var(--dur) var(--ease);
+}
+.proj:hover .proj__del{opacity:1}
+.proj__del:hover{filter:brightness(1.12)}
+/* Armed: it stops being a glyph and becomes a word, because "✕ again" is not
+   a question anyone reads. */
+.proj__del.is-armed{
+  opacity:1;width:auto;padding:0 9px;border-radius:99px;
+  font-size:10.5px;font-weight:700;letter-spacing:.02em;
+  box-shadow:0 2px 10px -3px rgba(244,63,94,.8);
+}
+
+/* Missing footage — the clip stays on the timeline so you can see what is
+   gone and point it at the file again. */
+.asset.is-missing{border-color:var(--danger);opacity:.75}
