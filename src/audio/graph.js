@@ -97,6 +97,14 @@ export class AudioGraph {
     /** clipId -> <audio> for long audio-only files. */
     this.streamEls = new Map();
     this.streaming = [];
+    /**
+     * clipId -> the GainNode carrying that clip, while it is scheduled.
+     *
+     * Kept so a fader can be heard as it moves. Without it, changing a clip's
+     * volume during playback does nothing until the transport is touched, and
+     * mixing by ear — which is the only way anyone mixes — becomes impossible.
+     */
+    this.gains = new Map();
   }
 
   /**
@@ -224,6 +232,7 @@ export class AudioGraph {
         src.connect(g).connect(this.master);
         src.start(when, offset, Math.min(dur, buf.duration - offset));
         this.nodes.push(src, g);
+        this.gains.set(clip.id, g);
       }
     }
   }
@@ -245,9 +254,40 @@ export class AudioGraph {
     }
   }
 
+  /**
+   * Make one clip's level match the document, right now.
+   *
+   * Called while a fader is moving. A clip with fades has ramps already booked
+   * against the old level, and re-pointing those mid-ramp is not worth the
+   * arithmetic — the caller reschedules the whole graph on release instead, so
+   * the only thing that can be briefly wrong is a fade's end point during the
+   * drag itself.
+   */
+  liveGain(clip) {
+    const track = this.store.doc.tracks.find(t => t.clips.includes(clip));
+    const level = (clip.muted ? 0 : (clip.volume ?? 1)) * (track?.volume ?? 1);
+
+    const g = this.gains.get(clip.id);
+    if (g) {
+      if (clip.fadeIn || clip.fadeOut) {
+        // Leave the booked ramps alone; they are relative to the old level and
+        // will be rebuilt on release. Setting .value here would be ignored.
+      } else {
+        try { g.gain.value = level; } catch { /* node already finished */ }
+      }
+    }
+
+    const s = this.streaming.find(x => x.clip === clip);
+    if (s) {
+      const master = this.store.rt.muted ? 0 : (this.store.rt.volume ?? 1);
+      s.el.volume = Math.max(0, Math.min(1, level * master));
+    }
+  }
+
   stop() {
     for (const n of this.nodes) { try { n.stop?.(); n.disconnect(); } catch {} }
     this.nodes.length = 0;
+    this.gains.clear();
     this.#silenceStreams();
   }
 }

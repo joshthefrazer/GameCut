@@ -659,17 +659,22 @@ await step('every left-panel tab is backed by something real', async () => {
   const r = await page.evaluate(() => ({
     tabs: [...document.querySelectorAll('#leftTabs .tab')].map(t => t.dataset.tab),
     panes: [...document.querySelectorAll('#leftPanel .tabpane')].map(p => p.dataset.pane),
-    stragglers: ['effectsRoot', 'graphicsRoot'].filter(id => document.getElementById(id)),
+    stragglers: ['effectsRoot'].filter(id => document.getElementById(id)),
     transTiles: document.querySelectorAll('#transRoot .trs').length,
     transApplies: typeof window.gc?.transitions?.target === 'function',
+    // Graphics has to be more than a heading: a way in, and looks to pick from.
+    gfxAdd: !!document.getElementById('gfxAdd'),
+    gfxLooks: document.querySelectorAll('#gfxRoot .gfxlook').length,
   }));
   if (r.stragglers.length) throw new Error('removed panels still in the DOM: ' + r.stragglers.join(', '));
   if (r.tabs.join() !== r.panes.join()) {
     throw new Error(`tabs (${r.tabs.join(', ')}) do not match panes (${r.panes.join(', ')})`);
   }
-  if (r.tabs.join() !== 'media,trans') throw new Error('unexpected tabs: ' + r.tabs.join(', '));
+  if (r.tabs.join() !== 'media,trans,gfx') throw new Error('unexpected tabs: ' + r.tabs.join(', '));
   if (r.transTiles < 4) throw new Error('transitions panel has ' + r.transTiles + ' tiles');
   if (!r.transApplies) throw new Error('transitions panel exposes no way to apply anything');
+  if (!r.gfxAdd) throw new Error('the Graphics tab offers no way to add one');
+  if (r.gfxLooks < 5) throw new Error('the Graphics tab offers ' + r.gfxLooks + ' looks');
 });
 
 await step('media filters are the three that exist', async () => {
@@ -1240,6 +1245,41 @@ await step('Remove puts the cut back to a hard cut', async () => {
   if (r.lit) throw new Error('the badge still says a transition is set');
 });
 
+await step('the transitions panel has a preview stage', async () => {
+  const seam = await seamOnScreen();
+  await page.mouse.click(seam.x, seam.y);
+  await sleep(300);
+  const r = await page.evaluate(() => {
+    const cv = document.getElementById('transPreview');
+    const cap = document.getElementById('transPreviewCap');
+    return { cv: !!cv, cap: cap?.textContent.trim() || '', w: cv?.width, h: cv?.height };
+  });
+  if (!r.cv) throw new Error('no preview canvas in the transitions panel');
+  if (!r.cap) throw new Error('the preview says nothing at all');
+  if (!r.w || !r.h) throw new Error(`preview canvas is ${r.w}x${r.h}`);
+});
+
+await step('hovering a transition says what it would do', async () => {
+  const seam = await seamOnScreen();
+  await page.mouse.click(seam.x, seam.y);
+  await sleep(300);
+  const before = await page.evaluate(() =>
+    document.getElementById('transPreviewCap')?.textContent.trim());
+  await page.hover('.trs[data-pick="slide-up"]');
+  await sleep(160);
+  const after = await page.evaluate(() =>
+    document.getElementById('transPreviewCap')?.textContent.trim());
+  if (after === before) throw new Error(`hovering changed nothing — still "${after}"`);
+  if (!/slide up/i.test(after)) throw new Error(`hovering Slide up said "${after}"`);
+
+  // And moving away puts it back to whatever the cut is actually set to.
+  await page.mouse.move(4, 4);
+  await sleep(200);
+  const back = await page.evaluate(() =>
+    document.getElementById('transPreviewCap')?.textContent.trim());
+  if (/slide up/i.test(back)) throw new Error('the preview stayed on the hovered transition after leaving');
+});
+
 await step('the top bar says whether your work is saved', async () => {
   const r = await page.evaluate(async () => {
     const chip = document.getElementById('saveChip');
@@ -1250,6 +1290,1018 @@ await step('the top bar says whether your work is saved', async () => {
   if (!r.state) throw new Error('no save chip');
   if (r.state !== 'dirty') throw new Error('a changed project reads as ' + r.state);
   if (!/unsaved/i.test(r.text)) throw new Error('chip reads ' + r.text);
+});
+
+/* ── The mixer ───────────────────────────────────────────────────
+   For a long time the Audio tab asked what *track* a clip sat on, which meant
+   the soundtrack of every piece of gameplay footage was unreachable — the one
+   thing people most want to turn down. These checks are written against a
+   video clip on a video track on purpose. */
+console.log('\n── mixing ───────────────────────────────');
+
+/** A video clip whose asset claims to carry sound, selected, Audio tab open. */
+async function selectNoisyVideo() {
+  return page.evaluate(async () => {
+    const { makeClip } = await import('app://gamecut/src/core/schema.js');
+    const { store, assets } = window.gc;
+    for (const t of store.doc.tracks) t.clips.length = 0;
+    const asset = assets.add({
+      kind: 'video', name: 'loud.mp4', url: '', duration: 10,
+      // Enough for the panel to know there is sound without decoding anything.
+      streamAudio: true,
+    });
+    const track = store.doc.tracks.find(t => t.kind === 'video');
+    const clip = makeClip('video', {
+      trackId: track.id, assetId: asset.id, name: 'loud.mp4',
+      start: 0, duration: 5, sourceDuration: 10,
+    });
+    track.clips.push(clip);
+    store.docChanged('test clip');
+    store.select([clip.id]);
+    document.querySelector('#rightTabs [data-tab="audio"]')?.click();
+    return clip.id;
+  });
+}
+
+/**
+ * Wait until the mixer is actually showing `clipId`.
+ *
+ * The panel rebuilds on a frame, and under xvfb frames are not guaranteed to be
+ * prompt — so a fixed sleep leaves the previous selection's controls on screen
+ * and every click lands on a clip that no longer exists.
+ */
+async function mixerReady(page, clipId) {
+  await page.waitForFunction(
+    (id) => document.getElementById('audioRoot')?.dataset.clip === id,
+    clipId, { timeout: 8000, polling: 80 });
+  await sleep(60);
+}
+
+await step('a video clip can be mixed, not just music', async () => {
+  await mixerReady(page, await selectNoisyVideo());
+  const r = await page.evaluate(() => {
+    const root = document.getElementById('audioRoot');
+    return {
+      empty: !!root.querySelector('.empty'),
+      faders: root.querySelectorAll('.sldr').length,
+      text: root.textContent.slice(0, 120),
+    };
+  });
+  if (r.empty) throw new Error('the Audio tab refused a video clip: ' + r.text);
+  if (r.faders < 2) throw new Error(`expected a clip fader and a track fader, found ${r.faders}`);
+});
+
+await step('dragging the volume fader changes the clip', async () => {
+  const id = await selectNoisyVideo();
+  await mixerReady(page, id);
+  const box = await page.locator('#audioRoot .sldr .sldr__track').first().boundingBox();
+  if (!box) throw new Error('no fader on screen');
+  const at = { x: box.x + box.width * 0.25, y: box.y + box.height / 2 };
+  // A quarter of the way along a 0–200% fader is 50%.
+  await page.mouse.move(at.x, at.y);
+  await page.mouse.down();
+  await sleep(60);
+  await page.mouse.up();
+  await sleep(80);
+  const r = await page.evaluate(([cid, pt]) => {
+    const c = window.gc.store.doc.tracks.flatMap(t => t.clips).find(c => c.id === cid);
+    const el = document.elementFromPoint(pt.x, pt.y);
+    return {
+      v: c?.volume,
+      readout: document.querySelector('#audioRoot .sldr__val')?.textContent,
+      // If the click missed, this says what it actually landed on, which is
+      // the only fact that shortens the hunt.
+      hit: el ? (el.className || el.tagName) : 'nothing',
+    };
+  }, [id, at]);
+  if (r.v == null) throw new Error('clip vanished');
+  if (Math.abs(r.v - 0.5) > 0.12)
+    throw new Error(`fader set volume to ${r.v} (readout "${r.readout}"), expected about 0.5; `
+      + `the pointer was over ${r.hit} at ${Math.round(at.x)},${Math.round(at.y)} `
+      + `and the fader box was ${JSON.stringify(box)}`);
+});
+
+await step('muting a clip is remembered and undoable', async () => {
+  const id = await selectNoisyVideo();
+  await mixerReady(page, id);
+  const r = await page.evaluate(async (cid) => {
+    const find = () => window.gc.store.doc.tracks.flatMap(t => t.clips).find(c => c.id === cid);
+    const btn = [...document.querySelectorAll('#audioRoot .tgl')]
+      .find(b => /mute/i.test(b.textContent));
+    btn?.click();
+    await new Promise(r => setTimeout(r, 80));
+    const after = find()?.muted;
+    window.gc.history.undo();
+    await new Promise(r => setTimeout(r, 80));
+    return { had: !!btn, after, undone: find()?.muted };
+  }, id);
+  if (!r.had) throw new Error('no mute button in the mixer');
+  if (r.after !== true) throw new Error('clicking Mute did not mute the clip');
+  if (r.undone !== false) throw new Error('undo did not bring the sound back');
+});
+
+await step('a picture-only layer says so instead of showing a dead fader', async () => {
+  await page.evaluate(async () => {
+    window.gc.cmds.addTextClip?.();
+    await new Promise(r => setTimeout(r, 120));
+  });
+  await page.click('#btnAddText').catch(() => {});
+  await sleep(160);
+  const r = await page.evaluate(() => {
+    const root = document.getElementById('audioRoot');
+    return { empty: !!root.querySelector('.empty'), faders: root.querySelectorAll('.sldr').length };
+  });
+  if (!r.empty || r.faders) throw new Error('a text layer was offered a volume control');
+});
+
+/* ── The crop studio ─────────────────────────────────────────────
+   Driven with a real mouse on a real canvas. The thing that made the old crop
+   tool useless was its size, so the checks that matter are that the room opens
+   at full size, that a painted stroke actually becomes a mask, and that Escape
+   leaves the document exactly as it found it. */
+console.log('\n── cropping ─────────────────────────────');
+
+/** A clip with a picture, and the studio open on a stand-in frame. */
+async function openStudio() {
+  return page.evaluate(async () => {
+    const { makeClip } = await import('app://gamecut/src/core/schema.js');
+    const { openCropStudio } = await import('app://gamecut/src/ui/preview/crop-studio.js');
+    const { store, cmds, comp, assets } = window.gc;
+
+    for (const t of store.doc.tracks) t.clips.length = 0;
+    const asset = assets.add({ kind: 'video', name: 'frame.mp4', url: '', duration: 8 });
+    const track = store.doc.tracks.find(t => t.kind === 'video');
+    const clip = makeClip('video', {
+      trackId: track.id, assetId: asset.id, name: 'frame.mp4',
+      start: 0, duration: 4, sourceDuration: 8,
+    });
+    track.clips.push(clip);
+    store.docChanged('crop test');
+    store.select([clip.id]);
+
+    // A stand-in for a decoded frame. The studio only ever asks a source to be
+    // drawable and to report a size, which is exactly what a canvas is.
+    const source = document.createElement('canvas');
+    source.width = 1920; source.height = 1080;
+    const c = source.getContext('2d');
+    c.fillStyle = '#123'; c.fillRect(0, 0, 1920, 1080);
+    c.fillStyle = '#fa0'; c.fillRect(1200, 120, 400, 300);
+
+    window.__studio = openCropStudio({ clip, source, store, cmds, comp, onApply: () => {} });
+    await new Promise(r => setTimeout(r, 200));
+    return { clipId: clip.id, opened: !!window.__studio, before: track.clips.length };
+  });
+}
+
+await step('the crop room opens over the whole window', async () => {
+  const r = await openStudio();
+  if (!r.opened) throw new Error('openCropStudio returned nothing');
+  const box = await page.evaluate(() => {
+    const el = document.querySelector('.cropst');
+    if (!el) return null;
+    const b = el.getBoundingClientRect();
+    return { w: b.width, h: b.height, vw: innerWidth, vh: innerHeight,
+             tools: el.querySelectorAll('.cst').length,
+             canvas: !!el.querySelector('.cropst__cv') };
+  });
+  if (!box) throw new Error('no crop studio in the DOM');
+  if (!box.canvas) throw new Error('the studio has no canvas to draw on');
+  if (box.w < box.vw - 2 || box.h < box.vh - 2)
+    throw new Error(`the studio is ${Math.round(box.w)}×${Math.round(box.h)} inside a ${box.vw}×${box.vh} window — it is supposed to take the screen`);
+  if (box.tools < 6) throw new Error('the toolbar is missing controls: only ' + box.tools);
+});
+
+await step('Escape leaves without touching the project', async () => {
+  const r = await openStudio();
+  await page.keyboard.press('Escape');
+  await sleep(160);
+  const after = await page.evaluate((id) => ({
+    gone: !document.querySelector('.cropst'),
+    clips: window.gc.store.doc.tracks.flatMap(t => t.clips).length,
+    cropped: window.gc.store.doc.tracks.flatMap(t => t.clips).some(c => c.crop),
+    still: !!window.gc.store.doc.tracks.flatMap(t => t.clips).find(c => c.id === id),
+  }), r.clipId);
+  if (!after.gone) throw new Error('Escape did not close the studio');
+  if (after.cropped) throw new Error('Escape applied a crop anyway');
+  if (after.clips !== r.before) throw new Error(`clip count went ${r.before} → ${after.clips}`);
+  if (!after.still) throw new Error('the original clip disappeared');
+});
+
+await step('painting a shape and applying it makes a masked cut-out', async () => {
+  const r = await openStudio();
+  const stage = await page.locator('.cropst__cv').boundingBox();
+  if (!stage) throw new Error('no canvas on screen');
+
+  // A short scribble across the middle of the frame.
+  const cx = stage.x + stage.width / 2, cy = stage.y + stage.height / 2;
+  await page.mouse.move(cx - 60, cy - 30);
+  await page.mouse.down();
+  for (const [dx, dy] of [[-20, 10], [20, 20], [60, -10], [70, 20]]) {
+    await page.mouse.move(cx + dx, cy + dy);
+    await sleep(16);
+  }
+  await page.mouse.up();
+  await sleep(80);
+
+  await page.click('#cstApply');
+  await sleep(260);
+
+  const out = await page.evaluate((id) => {
+    const clips = window.gc.store.doc.tracks.flatMap(t => t.clips);
+    const made = clips.find(c => c.id !== id && c.crop);
+    return {
+      open: !!document.querySelector('.cropst'),
+      made: !!made,
+      hasMask: !!made?.crop?.mask,
+      maskIsPng: (made?.crop?.mask || '').startsWith('data:image/png'),
+      w: made?.crop?.w, h: made?.crop?.h,
+      originalUntouched: !clips.find(c => c.id === id)?.crop,
+      silent: !!made?.silent,
+    };
+  }, r.clipId);
+
+  if (out.open) throw new Error('the studio stayed open after Apply');
+  if (!out.made) throw new Error('applying the paint made no cropped layer');
+  if (!out.hasMask) throw new Error('the cut-out has no painted mask — it fell back to a plain box');
+  if (!out.maskIsPng) throw new Error('the mask is not a PNG: ' + String(out.maskIsPng));
+  if (!(out.w > 0.005 && out.w < 0.9)) throw new Error(`mask box width is ${out.w}, which cannot be right for a small scribble`);
+  if (!out.originalUntouched) throw new Error('the original clip was cropped instead of copied');
+  if (!out.silent) throw new Error('the cut-out is not silent — its audio would double up');
+});
+
+await step('the box tool still makes a plain rectangle', async () => {
+  const r = await openStudio();
+  await page.click('.cst[data-tool="box"]');
+  await sleep(80);
+  const stage = await page.locator('.cropst__cv').boundingBox();
+  const cx = stage.x + stage.width / 2, cy = stage.y + stage.height / 2;
+  await page.mouse.move(cx - 120, cy - 80);
+  await page.mouse.down();
+  await page.mouse.move(cx + 120, cy + 80, { steps: 6 });
+  await page.mouse.up();
+  await sleep(60);
+  await page.click('#cstApply');
+  await sleep(240);
+
+  const out = await page.evaluate((id) => {
+    const made = window.gc.store.doc.tracks.flatMap(t => t.clips).find(c => c.id !== id && c.crop);
+    return { made: !!made, mask: !!made?.crop?.mask, w: made?.crop?.w, h: made?.crop?.h };
+  }, r.clipId);
+  if (!out.made) throw new Error('the box tool produced no crop');
+  if (out.mask) throw new Error('the box tool left a painted mask behind');
+  if (!(out.w > 0.02 && out.h > 0.02)) throw new Error(`the box came out ${out.w}×${out.h}`);
+});
+
+await step('the studio cleans up after itself', async () => {
+  await page.evaluate(() => { document.querySelector('.cropst') && window.__studio?.close(); });
+  await sleep(120);
+  const left = await page.evaluate(() => document.querySelectorAll('.cropst').length);
+  if (left) throw new Error(left + ' crop studios still in the page');
+});
+
+/* ── Typing on the picture ───────────────────────────────────────
+   The point of this feature is that the words and the shot are looked at
+   together, so the checks are about the field appearing over the right layer,
+   the canvas not drawing the same words underneath it, and Escape putting back
+   what was there. */
+console.log('\n── typing on the picture ────────────────');
+
+/** One text clip, selected, playhead over it. */
+async function aTitle(text = 'FIRST BLOOD') {
+  return page.evaluate(async (txt) => {
+    const { makeClip } = await import('app://gamecut/src/core/schema.js');
+    const { store, playback } = window.gc;
+    for (const t of store.doc.tracks) t.clips.length = 0;
+    const track = store.doc.tracks.find(t => t.kind === 'text');
+    // Earlier sections toggle track visibility; a hidden track would put the
+    // layer out of the compositor's reach and the double-click would land on
+    // nothing.
+    track.hidden = false;
+    const clip = makeClip('text', { trackId: track.id, name: 'Title', start: 0, duration: 4 });
+    clip.text.text = txt;
+    track.clips.push(clip);
+    store.docChanged('title');
+    store.select([clip.id]);
+    playback.seek(1.2);
+    await new Promise(r => setTimeout(r, 160));
+    return clip.id;
+  }, text);
+}
+
+await step('Enter on a selected title opens a field over it', async () => {
+  await aTitle();
+  await page.keyboard.press('Enter');
+  await sleep(200);
+  const r = await page.evaluate(() => {
+    const ta = document.querySelector('.tedit');
+    if (!ta) return { none: true };
+    const b = ta.getBoundingClientRect();
+    const f = document.getElementById('previewFrame').getBoundingClientRect();
+    return {
+      value: ta.value,
+      focused: document.activeElement === ta,
+      w: b.width, h: b.height,
+      // Inside the picture, not parked in a corner of the window.
+      inFrame: b.left >= f.left - 2 && b.right <= f.right + 2
+            && b.top >= f.top - 2 && b.bottom <= f.bottom + 2,
+      suppressed: window.gc.comp.hidden.size,
+    };
+  });
+  if (r.none) throw new Error('no field appeared');
+  if (r.value !== 'FIRST BLOOD') throw new Error('the field opened with "' + r.value + '"');
+  if (!r.focused) throw new Error('the field opened without focus, so typing would go elsewhere');
+  if (!(r.w > 10 && r.h > 10)) throw new Error(`the field is ${r.w}x${r.h}`);
+  if (!r.inFrame) throw new Error('the field is not over the picture');
+  if (r.suppressed !== 1) throw new Error('the canvas is still drawing the layer underneath — the words would double up');
+});
+
+await step('typing changes the title, and it is one undo step', async () => {
+  const id = await aTitle('OLD');
+  await page.keyboard.press('Enter');
+  await sleep(180);
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type('ACE', { delay: 30 });
+  await sleep(120);
+  const live = await page.evaluate((cid) =>
+    window.gc.store.doc.tracks.flatMap(t => t.clips).find(c => c.id === cid)?.text.text, id);
+  if (live !== 'ACE') throw new Error('typing did not reach the clip: "' + live + '"');
+
+  // Clicking away commits.
+  await page.evaluate(() => document.querySelector('.tedit')?.blur());
+  await sleep(200);
+  const after = await page.evaluate((cid) => ({
+    open: !!document.querySelector('.tedit'),
+    text: window.gc.store.doc.tracks.flatMap(t => t.clips).find(c => c.id === cid)?.text.text,
+    suppressed: window.gc.comp.hidden.size,
+  }), id);
+  if (after.open) throw new Error('the field stayed open after blur');
+  if (after.text !== 'ACE') throw new Error('the change was lost on blur: "' + after.text + '"');
+  if (after.suppressed) throw new Error('the layer is still suppressed after closing');
+
+  await page.evaluate(() => window.gc.history.undo());
+  await sleep(160);
+  const undone = await page.evaluate((cid) =>
+    window.gc.store.doc.tracks.flatMap(t => t.clips).find(c => c.id === cid)?.text.text, id);
+  if (undone !== 'OLD')
+    throw new Error(`one undo left the text at "${undone}" — typing is making a history step per key`);
+});
+
+await step('Escape puts the old words back', async () => {
+  const id = await aTitle('KEEP ME');
+  await page.keyboard.press('Enter');
+  await sleep(180);
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type('rubbish', { delay: 20 });
+  await sleep(100);
+  await page.keyboard.press('Escape');
+  await sleep(200);
+  const r = await page.evaluate((cid) => ({
+    open: !!document.querySelector('.tedit'),
+    text: window.gc.store.doc.tracks.flatMap(t => t.clips).find(c => c.id === cid)?.text.text,
+    suppressed: window.gc.comp.hidden.size,
+  }), id);
+  if (r.open) throw new Error('Escape did not close the field');
+  if (r.text !== 'KEEP ME') throw new Error('Escape left "' + r.text + '" behind');
+  if (r.suppressed) throw new Error('Escape left the layer suppressed — it would be invisible');
+});
+
+await step('double-clicking the words on the preview opens the field', async () => {
+  await aTitle('DOUBLE');
+  const box = await page.evaluate(() => {
+    const { comp, store } = window.gc;
+    const clip = store.doc.tracks.flatMap(t => t.clips)[0];
+    const b = comp.bounds(clip, store.rt.playhead);
+    const f = document.getElementById('previewFrame').getBoundingClientRect();
+    return { x: f.left + b.cx * f.width, y: f.top + b.cy * f.height };
+  });
+  await page.mouse.dblclick(box.x, box.y);
+  await sleep(240);
+  const r = await page.evaluate((pt) => {
+    const el = document.elementFromPoint(pt.x, pt.y);
+    const { comp, store } = window.gc;
+    const ov = document.getElementById('previewOverlay').getBoundingClientRect();
+    const hit = comp.hitTest((pt.x - ov.left) / ov.width, (pt.y - ov.top) / ov.height, store.rt.playhead);
+    return {
+      open: !!document.querySelector('.tedit'),
+      landedOn: el ? (el.className || el.tagName) : 'nothing',
+      hit: hit ? hit.type : 'nothing',
+      t: store.rt.playhead,
+      active: comp.activeClips(store.rt.playhead).map(x => x.clip.type),
+      b: (() => { const c = store.doc.tracks.flatMap(t => t.clips)[0];
+                  const bb = comp.bounds(c, store.rt.playhead);
+                  return { cx: +bb.cx.toFixed(3), cy: +bb.cy.toFixed(3), w: +bb.w.toFixed(3), h: +bb.h.toFixed(3) }; })(),
+      n: { x: +((pt.x - ov.left) / ov.width).toFixed(3), y: +((pt.y - ov.top) / ov.height).toFixed(3) },
+    };
+  }, box);
+  if (!r.open)
+    throw new Error(`double-clicking the title did not open a field; landed on ${r.landedOn}, hit-tested as ${r.hit}, at ${JSON.stringify(r.n)} vs bounds ${JSON.stringify(r.b)}, t=${r.t}, active=${r.active.join('/')}`);
+  await page.keyboard.press('Escape');
+  await sleep(120);
+});
+
+/* ── The speed badge ─────────────────────────────────────────────
+   A "2×" that keeps up with the clip. The interesting failure is not that it
+   fails to appear — it is that it appears once, says 2×, and then quietly lies
+   after the speed is changed again. */
+console.log('\n── speed badge ──────────────────────────');
+
+async function aSpedClip(speed = 2) {
+  return page.evaluate(async (sp) => {
+    const { makeClip } = await import('app://gamecut/src/core/schema.js');
+    const { store, cmds, assets } = window.gc;
+    for (const t of store.doc.tracks) { t.clips.length = 0; t.hidden = false; }
+    const asset = assets.add({ kind: 'video', name: 'fast.mp4', url: '', duration: 30 });
+    const track = store.doc.tracks.find(t => t.kind === 'video');
+    const clip = makeClip('video', {
+      trackId: track.id, assetId: asset.id, name: 'fast.mp4',
+      start: 0, duration: 8, sourceDuration: 30,
+    });
+    track.clips.push(clip);
+    store.docChanged('speed test');
+    store.select([clip.id]);
+    cmds.setClipSpeed(clip.id, sp);
+    await new Promise(r => setTimeout(r, 160));
+    return clip.id;
+  }, speed);
+}
+
+await step('a sped-up clip offers a badge, a normal one does not', async () => {
+  await aSpedClip(2);
+  await page.evaluate(() => document.querySelector('#rightTabs [data-tab="inspect"]')?.click());
+  await sleep(220);
+  const withSpeed = await page.evaluate(() => {
+    const b = document.getElementById('btnSpeedBadge');
+    return { there: !!b, label: b?.textContent || '' };
+  });
+  if (!withSpeed.there) throw new Error('no badge button on a 2× clip');
+  if (!/2×/.test(withSpeed.label)) throw new Error('the button says "' + withSpeed.label + '"');
+
+  await page.evaluate(async () => {
+    const { store, cmds } = window.gc;
+    cmds.setClipSpeed(store.doc.tracks.flatMap(t => t.clips)[0].id, 1);
+    await new Promise(r => setTimeout(r, 200));
+  });
+  await sleep(220);
+  const normal = await page.evaluate(() => !!document.getElementById('btnSpeedBadge'));
+  if (normal) throw new Error('a clip at normal speed is still being offered a badge');
+});
+
+await step('adding the badge puts a draggable layer on the picture', async () => {
+  const id = await aSpedClip(4);
+  await page.evaluate(() => document.querySelector('#rightTabs [data-tab="inspect"]')?.click());
+  await sleep(220);
+  await page.click('#btnSpeedBadge');
+  await sleep(260);
+  const r = await page.evaluate((cid) => {
+    const { store, comp } = window.gc;
+    const badge = store.doc.tracks.flatMap(t => t.clips).find(c => c.badgeFor === cid);
+    const src = store.doc.tracks.flatMap(t => t.clips).find(c => c.id === cid);
+    const track = store.doc.tracks.find(t => t.clips.some(c => c.id === badge?.id));
+    return {
+      made: !!badge,
+      text: badge?.text?.text,
+      type: badge?.type,
+      onText: track?.kind,
+      spans: badge && src && Math.abs(badge.start - src.start) < 1e-3
+             && Math.abs(badge.duration - src.duration) < 1e-3,
+      selected: store.rt.selection.includes(badge?.id),
+      // It has to be something the compositor will actually paint.
+      visible: !!comp.activeClips(badge ? badge.start + 0.1 : 0).find(x => x.clip.id === badge?.id),
+    };
+  }, id);
+  if (!r.made) throw new Error('no badge was created');
+  if (r.type !== 'text') throw new Error('the badge is a ' + r.type + ', not a text layer you can drag');
+  if (r.text !== '4×') throw new Error('the badge says "' + r.text + '" on a 4× clip');
+  if (r.onText !== 'text') throw new Error('the badge landed on a ' + r.onText + ' track');
+  if (!r.spans) throw new Error('the badge does not cover the clip it is about');
+  if (!r.selected) throw new Error('the badge was not selected, so it cannot be dragged straight away');
+  if (!r.visible) throw new Error('the compositor will not paint the badge');
+});
+
+await step('changing the speed rewrites the badge, in one undo step', async () => {
+  const id = await aSpedClip(2);
+  await page.evaluate((cid) => window.gc.cmds.addSpeedBadge(cid), id);
+  await sleep(200);
+  const r = await page.evaluate(async (cid) => {
+    const { store, cmds, history } = window.gc;
+    const badgeText = () => store.doc.tracks.flatMap(t => t.clips)
+      .find(c => c.badgeFor === cid)?.text?.text;
+    const before = badgeText();
+    cmds.setClipSpeed(cid, 8);
+    await new Promise(r => setTimeout(r, 160));
+    const after = badgeText();
+    const src = store.doc.tracks.flatMap(t => t.clips).find(c => c.id === cid);
+    const badge = store.doc.tracks.flatMap(t => t.clips).find(c => c.badgeFor === cid);
+    const follows = Math.abs(badge.duration - src.duration) < 1e-3;
+    history.undo();
+    await new Promise(r => setTimeout(r, 160));
+    return { before, after, follows, undone: badgeText() };
+  }, id);
+  if (r.before !== '2×') throw new Error('the badge started at "' + r.before + '"');
+  if (r.after !== '8×') throw new Error(`the badge still says "${r.after}" after the clip went to 8× — it is lying about the clip`);
+  if (!r.follows) throw new Error('the badge did not shorten with the clip, so it hangs past the end');
+  if (r.undone !== '2×') throw new Error(`one undo left the badge at "${r.undone}" — the badge and the speed are separate history steps`);
+});
+
+await step('removing the badge takes it off the timeline', async () => {
+  const id = await aSpedClip(3);
+  await page.evaluate((cid) => window.gc.cmds.addSpeedBadge(cid), id);
+  await sleep(180);
+  const gone = await page.evaluate(async (cid) => {
+    const { store, cmds } = window.gc;
+    cmds.removeSpeedBadge(cid);
+    await new Promise(r => setTimeout(r, 150));
+    return !store.doc.tracks.flatMap(t => t.clips).some(c => c.badgeFor === cid);
+  }, id);
+  if (!gone) throw new Error('the badge survived being removed');
+});
+
+/* ── Smoothness ──────────────────────────────────────────────────
+   The timeline used to let the playhead walk off the right-hand edge during
+   playback, so after a few seconds you were watching one thing and looking at
+   another. */
+console.log('\n── following the playhead ───────────────');
+
+await step('the timeline follows the playhead during playback', async () => {
+  const r = await page.evaluate(async () => {
+    const { store, timeline, playback } = window.gc;
+    // A long project, zoomed in, so the playhead is guaranteed to run off.
+    for (const t of store.doc.tracks) { t.clips.length = 0; t.hidden = false; }
+    const track = store.doc.tracks.find(t => t.kind === 'text');
+    const { makeClip } = await import('app://gamecut/src/core/schema.js');
+    const c = makeClip('text', { trackId: track.id, start: 0, duration: 60 });
+    track.clips.push(c);
+    store.docChanged('follow test');
+    store.ui.zoom = 8;
+    store.ui.scrollX = 0;
+    timeline.repaint();
+
+    const startScroll = store.ui.scrollX;
+    playback.play();
+    await new Promise(res => setTimeout(res, 2600));
+    const moved = store.ui.scrollX;
+    const x = timeline.L.t2x(store.rt.playhead);
+    playback.pause();
+    return { startScroll, moved, x, W: timeline.L.W, head: store.rt.playhead };
+  });
+
+  if (!(r.head > 0.5)) throw new Error('playback did not actually run (playhead at ' + r.head + ')');
+  if (r.moved <= r.startScroll + 1e-3)
+    throw new Error(`the timeline never scrolled: still at ${r.moved} with the playhead at ${r.head}s`);
+  if (!(r.x >= -2 && r.x <= r.W + 2))
+    throw new Error(`the playhead is ${Math.round(r.x)}px into a ${r.W}px view — it has been left behind`);
+});
+
+await step('touching the timeline stops it moving by itself', async () => {
+  const r = await page.evaluate(async () => {
+    const { store, timeline, playback } = window.gc;
+    store.ui.zoom = 8;
+    playback.seek(0);
+    store.ui.scrollX = 0;
+    timeline.repaint();
+    playback.play();
+    await new Promise(res => setTimeout(res, 400));
+    // A person taking hold of the view.
+    timeline.deferFollow(4000);
+    const at = store.ui.scrollX;
+    store.ui.scrollX = 0;
+    timeline.repaint();
+    await new Promise(res => setTimeout(res, 900));
+    const after = store.ui.scrollX;
+    playback.pause();
+    return { at, after };
+  });
+  if (r.after > 0.001)
+    throw new Error(`the view yanked itself back to ${r.after} while the pointer was down`);
+});
+
+/* ── Graphics ────────────────────────────────────────────────────
+   A graphic is an image layer with a look and a movement. The looks are only
+   worth having if they reach the renderer, and the movements are only worth
+   having if they are real keyframes you can then edit — so those are the two
+   things these check, rather than that the buttons exist. */
+console.log('\n── graphics ─────────────────────────────');
+
+/** One image layer, selected, with the Inspector showing. */
+async function aGraphic() {
+  const id = await page.evaluate(async () => {
+    const { makeClip } = await import('app://gamecut/src/core/schema.js');
+    const { store, assets, playback } = window.gc;
+    for (const t of store.doc.tracks) { t.clips.length = 0; t.hidden = false; }
+    // A tiny PNG with transparency — the case the silhouette effects exist for.
+    const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==';
+    const asset = assets.add({ kind: 'image', name: 'logo.png', url: png, thumb: png, duration: 5 });
+    const track = store.doc.tracks.find(t => t.kind === 'video');
+    const clip = makeClip('image', {
+      trackId: track.id, assetId: asset.id, name: 'logo.png',
+      start: 0, duration: 4, fit: 'contain',
+    });
+    track.clips.push(clip);
+    store.docChanged('graphic');
+    store.select([clip.id]);
+    playback.seek(1);
+    document.querySelector('#rightTabs [data-tab="inspect"]')?.click();
+    return clip.id;
+  });
+  await sleep(260);
+  return id;
+}
+
+await step('an image layer is offered looks and movements', async () => {
+  await aGraphic();
+  const r = await page.evaluate(() => ({
+    looks: document.querySelectorAll('#inspectorRoot .gfxlook').length,
+    motions: document.querySelectorAll('#inspectorRoot [data-motion]').length,
+    strip: !!document.getElementById('keysStrip'),
+  }));
+  if (r.looks < 5) throw new Error('only ' + r.looks + ' looks offered');
+  if (r.motions < 6) throw new Error('only ' + r.motions + ' movements offered');
+  if (!r.strip) throw new Error('no keyframe strip');
+});
+
+await step('picking a look writes effects the renderer will use', async () => {
+  const id = await aGraphic();
+  await page.click('#inspectorRoot .gfxlook[data-look="sticker"]');
+  await sleep(240);
+  const r = await page.evaluate(async (cid) => {
+    const { store, comp } = window.gc;
+    const clip = store.doc.tracks.flatMap(t => t.clips).find(c => c.id === cid);
+    const { fxActive } = await import('app://gamecut/src/engine/layers/fx.js');
+    return { fx: clip.fx, active: fxActive(clip.fx), lit: !!comp };
+  }, id);
+  if (!r.fx) throw new Error('the look wrote nothing onto the clip');
+  if (!r.active) throw new Error('the effects block is there but reads as inert');
+  if (!(r.fx.outline > 0)) throw new Error('the Sticker look has no outline: ' + JSON.stringify(r.fx));
+});
+
+await step('a look is one undo step and can be taken off', async () => {
+  const id = await aGraphic();
+  await page.click('#inspectorRoot .gfxlook[data-look="glow"]');
+  await sleep(220);
+  const r = await page.evaluate(async (cid) => {
+    const find = () => window.gc.store.doc.tracks.flatMap(t => t.clips).find(c => c.id === cid);
+    const on = !!find().fx?.glow;
+    window.gc.history.undo();
+    await new Promise(r => setTimeout(r, 140));
+    return { on, off: !find().fx };
+  }, id);
+  if (!r.on) throw new Error('the Glow look set no glow');
+  if (!r.off) throw new Error('one undo did not take the look back off');
+});
+
+await step('a movement preset writes real, editable keyframes', async () => {
+  const id = await aGraphic();
+  await page.click('#inspectorRoot [data-motion="pop"]');
+  await sleep(300);
+  const r = await page.evaluate((cid) => {
+    const clip = window.gc.store.doc.tracks.flatMap(t => t.clips).find(c => c.id === cid);
+    const keys = clip.keys || {};
+    return {
+      paths: Object.keys(keys),
+      scale: keys['transform.scale'],
+      diamonds: document.querySelectorAll('#keysStrip .keys__k').length,
+      rows: document.querySelectorAll('#keysStrip .keys__row').length,
+    };
+  }, id);
+  if (!r.paths.length) throw new Error('the preset wrote no keyframes at all');
+  if (!r.scale || r.scale.length < 2) throw new Error('Pop in did not animate size');
+  if (r.scale[0].v >= r.scale[1].v) throw new Error('Pop in starts bigger than it ends');
+  if (!r.rows) throw new Error('the keyframe strip shows no rows for the new animation');
+  if (r.diamonds < r.scale.length) throw new Error(`${r.diamonds} diamonds for ${r.scale.length}+ keys — the strip is not showing the real keys`);
+});
+
+await step('the animation actually changes what is drawn over time', async () => {
+  const id = await aGraphic();
+  await page.click('#inspectorRoot [data-motion="slide-l"]');
+  await sleep(260);
+  const r = await page.evaluate(async (cid) => {
+    const { store } = window.gc;
+    const { evalProp } = await import('app://gamecut/src/engine/keyframes.js');
+    const clip = store.doc.tracks.flatMap(t => t.clips).find(c => c.id === cid);
+    return {
+      atStart: evalProp(clip, 'transform.x', clip.start),
+      atHalf: evalProp(clip, 'transform.x', clip.start + 0.6),
+      opacity0: evalProp(clip, 'transform.opacity', clip.start),
+    };
+  }, id);
+  if (Math.abs(r.atStart - r.atHalf) < 0.05)
+    throw new Error(`the layer barely moves: ${r.atStart} → ${r.atHalf}`);
+  if (!(r.atStart < r.atHalf)) throw new Error('"in from left" does not come from the left');
+  if (r.opacity0 > 0.01) throw new Error('the entrance does not start invisible');
+});
+
+await step('a keyframe can be dragged and deleted by hand', async () => {
+  const id = await aGraphic();
+  await page.click('#inspectorRoot [data-motion="pop"]');
+  await sleep(280);
+
+  const before = await page.evaluate((cid) => {
+    const c = window.gc.store.doc.tracks.flatMap(t => t.clips).find(x => x.id === cid);
+    return (c.keys['transform.scale'] || []).map(k => k.t);
+  }, id);
+  if (before.length < 2) throw new Error('nothing to drag');
+
+  // Drag the last diamond of the size row to the right.
+  const box = await page.evaluate(() => {
+    const row = [...document.querySelectorAll('#keysStrip .keys__row')]
+      .find(r => r.dataset.path === 'transform.scale');
+    if (!row) return null;
+    const ks = [...row.querySelectorAll('.keys__k')];
+    const track = row.querySelector('.keys__track');
+    const k = ks[ks.length - 1].getBoundingClientRect();
+    const t = track.getBoundingClientRect();
+    return { kx: k.x + k.width / 2, ky: k.y + k.height / 2, tx: t.x, tw: t.width, ty: t.y + t.height / 2 };
+  });
+  if (!box) throw new Error('no size row in the strip');
+
+  await page.mouse.move(box.kx, box.ky);
+  await page.mouse.down();
+  // Deliberately slowly, with a pause between each move.
+  //
+  // The failure this guards against is a rebuild landing in the middle of the
+  // gesture and throwing away the very button holding the pointer capture. A
+  // fast drag can outrun the animation frame that rebuilds the panel, so a
+  // quick synthetic drag passes whether or not the bug is there. Pausing longer
+  // than a frame between moves makes the race deterministic.
+  for (const p of [0.35, 0.55, 0.8]) {
+    await page.mouse.move(box.tx + box.tw * p, box.ty, { steps: 3 });
+    await sleep(150);
+  }
+  await page.mouse.up();
+  await sleep(260);
+
+  const after = await page.evaluate((cid) => {
+    const c = window.gc.store.doc.tracks.flatMap(t => t.clips).find(x => x.id === cid);
+    return (c.keys['transform.scale'] || []).map(k => k.t);
+  }, id);
+  // Not just "it moved a bit": it has to land where the pointer finished.
+  // Committing on every pointermove moved it a few pixels and then stopped
+  // dead, because the Inspector rebuilt and threw the button away mid-gesture —
+  // and an assertion that only asked for movement passed anyway.
+  const movedTo = Math.max(...after);
+  const clipDur = await page.evaluate((cid) =>
+    window.gc.store.doc.tracks.flatMap(t => t.clips).find(x => x.id === cid).duration, id);
+  const want = clipDur * 0.8;
+  if (!(movedTo > Math.max(...before) + 0.1))
+    throw new Error(`dragging did not retime the key: ${before.join(',')} → ${after.join(',')}`);
+  if (Math.abs(movedTo - want) > clipDur * 0.12)
+    throw new Error(`the key stopped at ${movedTo.toFixed(2)}s but the pointer ended at ${want.toFixed(2)}s `
+      + '— the drag was cut short, most likely by a rebuild mid-gesture');
+
+  // And double-click takes one away.
+  const n0 = after.length;
+  await page.evaluate(() => {
+    const row = [...document.querySelectorAll('#keysStrip .keys__row')]
+      .find(r => r.dataset.path === 'transform.scale');
+    const ks = [...row.querySelectorAll('.keys__k')];
+    ks[ks.length - 1].dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+  });
+  await sleep(240);
+  const n1 = await page.evaluate((cid) => {
+    const c = window.gc.store.doc.tracks.flatMap(t => t.clips).find(x => x.id === cid);
+    return (c.keys['transform.scale'] || []).length;
+  }, id);
+  if (n1 !== n0 - 1) throw new Error(`double-click left ${n1} keys, expected ${n0 - 1}`);
+});
+
+await step('removing the movement leaves the layer where it was', async () => {
+  const id = await aGraphic();
+  await page.click('#inspectorRoot [data-motion="spin"]');
+  await sleep(260);
+  await page.click('#btnClearKeys');
+  await sleep(240);
+  const r = await page.evaluate((cid) => {
+    const c = window.gc.store.doc.tracks.flatMap(t => t.clips).find(x => x.id === cid);
+    return { keys: Object.keys(c.keys || {}).length, there: !!c };
+  }, id);
+  if (!r.there) throw new Error('the layer disappeared');
+  if (r.keys) throw new Error(r.keys + ' key tracks survived being cleared');
+});
+
+/* The effects themselves, at the pixel. A look that writes numbers onto a clip
+   and then paints nothing would pass every check above. */
+await step('a glow paints light outside the layer, and a tilt reshapes it', async () => {
+  const r = await page.evaluate(async () => {
+    const { drawFx } = await import('app://gamecut/src/engine/layers/fx.js');
+
+    // A solid white square, 60×60, as the layer.
+    const piece = document.createElement('canvas');
+    piece.width = 60; piece.height = 60;
+    const pc = piece.getContext('2d');
+    pc.fillStyle = '#fff';
+    pc.fillRect(0, 0, 60, 60);
+
+    const run = (fx) => {
+      const c = document.createElement('canvas');
+      c.width = 200; c.height = 200;
+      const x = c.getContext('2d');
+      x.save();
+      x.translate(100, 100);
+      drawFx(x, piece, { radius: 0, glow: 0, shadow: 0, outline: 0, tintAmount: 0,
+                         tiltX: 0, tiltY: 0, depth: 0, ...fx }, 60, 60, 1);
+      x.restore();
+      const d = x.getImageData(0, 0, 200, 200).data;
+      // Count lit pixels that fall OUTSIDE the 60×60 the layer itself occupies.
+      let outside = 0, inside = 0, leftHalf = 0, rightHalf = 0;
+      for (let py = 0; py < 200; py++) {
+        for (let px = 0; px < 200; px++) {
+          const a = d[(py * 200 + px) * 4 + 3];
+          if (a < 24) continue;
+          const within = px >= 70 && px < 130 && py >= 70 && py < 130;
+          if (within) inside++; else outside++;
+          if (px < 100) leftHalf++; else rightHalf++;
+        }
+      }
+      return { outside, inside, leftHalf, rightHalf };
+    };
+
+    return {
+      plain: run({}),
+      glow: run({ glow: 0.25, glowColor: '#22d3ee', glowStrength: 1.4 }),
+      outline: run({ outline: 0.06, outlineColor: '#ffffff' }),
+      tilt: run({ tiltY: 35 }),
+    };
+  });
+
+  if (r.plain.outside > 40)
+    throw new Error(`a layer with no effects painted ${r.plain.outside} pixels outside itself`);
+  if (!(r.plain.inside > 3000))
+    throw new Error(`the plain layer barely painted at all (${r.plain.inside} pixels)`);
+
+  if (!(r.glow.outside > 600))
+    throw new Error(`the glow put only ${r.glow.outside} pixels outside the layer — it is not reaching the canvas`);
+  if (!(r.outline.outside > 300))
+    throw new Error(`the outline put only ${r.outline.outside} pixels outside the layer`);
+
+  // A layer turned about its vertical axis is no longer symmetrical.
+  const bias = Math.abs(r.tilt.leftHalf - r.tilt.rightHalf) / Math.max(1, r.tilt.leftHalf + r.tilt.rightHalf);
+  const flat = Math.abs(r.plain.leftHalf - r.plain.rightHalf) / Math.max(1, r.plain.leftHalf + r.plain.rightHalf);
+  if (!(bias > flat + 0.02))
+    throw new Error(`a 35° turn left the layer as symmetrical as an untilted one (${bias.toFixed(3)} vs ${flat.toFixed(3)}) — the perspective is not being applied`);
+  // ...but it must still be the same layer, roughly where it was. All the
+  // pixels landing in one half means it was squeezed into a corner, which is
+  // what happens when the tilt slices the wrong part of its source.
+  if (bias > 0.45)
+    throw new Error(`the tilted layer is entirely on one side (${(bias * 100).toFixed(0)}% bias) — it has been squashed, not turned`);
+  if (r.tilt.inside < r.plain.inside * 0.45)
+    throw new Error(`the tilted layer lost most of itself: ${r.tilt.inside} pixels vs ${r.plain.inside} untilted`);
+
+  console.log(`     glow +${r.glow.outside}px outside \u00b7 outline +${r.outline.outside}px \u00b7 tilt asymmetry ${(bias * 100).toFixed(1)}%`);
+});
+
+/* ── Regressions ─────────────────────────────────────────────────
+   One check per bug that was found by reading the code rather than by using
+   the app. Each of these looked completely fine on screen. */
+console.log('\n── regressions ──────────────────────────');
+
+await step('a movement preset still plays on a very short clip', async () => {
+  const r = await page.evaluate(async () => {
+    const { makeClip } = await import('app://gamecut/src/core/schema.js');
+    const { evalProp } = await import('app://gamecut/src/engine/keyframes.js');
+    const { MOTIONS } = await import('app://gamecut/src/ui/graphics/motion.js');
+    const { store } = window.gc;
+    for (const t of store.doc.tracks) { t.clips.length = 0; t.hidden = false; }
+    const track = store.doc.tracks.find(t => t.kind === 'text');
+    // A third of a second — what you get from a hard trim, or from putting a
+    // graphic on a clip at 16×.
+    const clip = makeClip('text', { trackId: track.id, start: 0, duration: 0.3 });
+    track.clips.push(clip);
+
+    const out = {};
+    for (const m of MOTIONS) {
+      if (m.id === 'none') continue;
+      clip.keys = m.build(clip) || {};
+      const paths = Object.keys(clip.keys);
+      // By the end of the clip, everything the preset animates must have
+      // arrived somewhere sensible rather than still being mid-entrance.
+      out[m.id] = {
+        opacityAtEnd: paths.includes('transform.opacity')
+          ? +evalProp(clip, 'transform.opacity', clip.start + clip.duration).toFixed(3) : null,
+        xAtEnd: paths.includes('transform.x')
+          ? +evalProp(clip, 'transform.x', clip.start + clip.duration).toFixed(3) : null,
+        scaleMid: paths.includes('transform.scale')
+          ? +evalProp(clip, 'transform.scale', clip.start + clip.duration * 0.5).toFixed(3) : null,
+        ordered: paths.every(p => clip.keys[p].every((k, i, a) => i === 0 || k.t >= a[i - 1].t)),
+        pastEnd: paths.some(p => clip.keys[p].some(k => k.t > clip.duration + 1e-6)),
+      };
+    }
+    clip.keys = {};
+    return out;
+  });
+
+  for (const [id, v] of Object.entries(r)) {
+    if (!v.ordered) throw new Error(`"${id}" wrote keyframes out of order on a 0.3s clip`);
+    if (v.pastEnd) throw new Error(`"${id}" put a keyframe past the end of a 0.3s clip`);
+    if (v.opacityAtEnd != null && v.opacityAtEnd < 0.9 && id !== 'popout')
+      throw new Error(`"${id}" leaves a 0.3s clip at ${v.opacityAtEnd} opacity — it never finishes appearing`);
+    if (v.xAtEnd != null && Math.abs(v.xAtEnd - 0.5) > 0.05)
+      throw new Error(`"${id}" leaves a 0.3s clip at x=${v.xAtEnd} — it never slides into place`);
+    if (v.scaleMid != null && v.scaleMid < 0.5 && id !== 'popout')
+      throw new Error(`"${id}" is still at ${v.scaleMid} scale halfway through a 0.3s clip`);
+  }
+});
+
+await step('adding a graphic is a single undo', async () => {
+  const r = await page.evaluate(async () => {
+    const { store, history, assets, graphics, cmds } = window.gc;
+    void graphics; void cmds;
+    for (const t of store.doc.tracks) { t.clips.length = 0; t.hidden = false; }
+    store.docChanged('reset');
+    const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==';
+    const asset = assets.add({ kind: 'image', name: 'logo.png', url: png, thumb: png, duration: 5 });
+
+    // Straight through the tab's own button, which is the path people take.
+    document.querySelector('#leftTabs [data-tab="gfx"]')?.click();
+    await new Promise(r => setTimeout(r, 200));
+    const tile = document.querySelector(`#gfxRoot .gfxtile[data-asset="${asset.id}"]`);
+    if (!tile) return { error: 'the graphic never appeared in the tab' };
+    tile.click();
+    await new Promise(r => setTimeout(r, 250));
+
+    const count = () => store.doc.tracks.reduce((a, t) => a + t.clips.length, 0);
+    const made = store.doc.tracks.flatMap(t => t.clips)[0];
+    const placed = { n: count(), fx: !!made?.fx, fit: made?.fit, scale: made?.transform?.scale };
+    history.undo();
+    await new Promise(r => setTimeout(r, 200));
+    return { placed, afterOneUndo: count() };
+  });
+  if (r.error) throw new Error(r.error);
+  if (r.placed.n !== 1) throw new Error('expected one clip, got ' + r.placed.n);
+  if (!r.placed.fx) throw new Error('the graphic arrived with no look on it');
+  if (r.placed.fit !== 'contain') throw new Error('the graphic arrived as ' + r.placed.fit);
+  if (!(r.placed.scale < 1)) throw new Error('the graphic arrived filling the frame');
+  if (r.afterOneUndo !== 0)
+    throw new Error(`one undo left ${r.afterOneUndo} clip(s) — placing a graphic is more than one history step`);
+});
+
+await step('an effect slider can be undone', async () => {
+  const r = await page.evaluate(async () => {
+    const { makeClip } = await import('app://gamecut/src/core/schema.js');
+    const { store, cmds, history, assets } = window.gc;
+    for (const t of store.doc.tracks) { t.clips.length = 0; t.hidden = false; }
+    const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==';
+    const asset = assets.add({ kind: 'image', name: 'g.png', url: png, thumb: png, duration: 5 });
+    const track = store.doc.tracks.find(t => t.kind === 'video');
+    const clip = makeClip('image', { trackId: track.id, assetId: asset.id, start: 0, duration: 4, fit: 'contain' });
+    clip.fx = { ...(await import('app://gamecut/src/engine/layers/fx.js')).defaultFx(), glow: 0.1 };
+    track.clips.push(clip);
+    store.docChanged('fx undo test');
+    store.select([clip.id]);
+    document.querySelector('#rightTabs [data-tab="inspect"]')?.click();
+    await new Promise(r => setTimeout(r, 250));
+    void cmds; void history;
+    return clip.id;
+  });
+
+  // Drag the Glow fader with a real pointer, the way the bug was reachable.
+  // The Look group sits well down a scrolling panel, so bring it into view
+  // first — a rect measured off-screen is still a rect, and clicking it lands
+  // on whatever is actually at those coordinates.
+  const box = await page.evaluate(async () => {
+    const row = [...document.querySelectorAll('#inspectorRoot .row')]
+      .find(x => x.querySelector('label')?.textContent === 'Glow');
+    if (!row) return null;
+    row.scrollIntoView({ block: 'center' });
+    await new Promise(r => setTimeout(r, 120));
+    const t = row.querySelector('.sldr__track')?.getBoundingClientRect();
+    return t && { x: t.x, y: t.y + t.height / 2, w: t.width };
+  });
+  if (!box) throw new Error('no Glow fader in the inspector');
+
+  await page.mouse.move(box.x + box.w * 0.7, box.y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.w * 0.75, box.y, { steps: 4 });
+  await page.mouse.up();
+  await sleep(200);
+
+  const out = await page.evaluate(async (cid) => {
+    const find = () => window.gc.store.doc.tracks.flatMap(t => t.clips).find(c => c.id === cid);
+    const after = find().fx.glow;
+    window.gc.history.undo();
+    await new Promise(r => setTimeout(r, 200));
+    return { after, undone: find()?.fx?.glow };
+  }, r);
+
+  if (!(out.after > 0.15)) {
+    const why = await page.evaluate((pt) => {
+      const el = document.elementFromPoint(pt.x, pt.y);
+      const row = [...document.querySelectorAll('#inspectorRoot .row')]
+        .find(x => x.querySelector('label')?.textContent === 'Glow');
+      const t = row?.querySelector('.sldr__track')?.getBoundingClientRect();
+      return {
+        landedOn: el ? (el.className || el.tagName) : 'nothing',
+        attached: !!row?.isConnected,
+        trackNow: t && { x: Math.round(t.x), y: Math.round(t.y), w: Math.round(t.width) },
+        readout: row?.querySelector('.sldr__val')?.textContent,
+      };
+    }, { x: box.x + box.w * 0.7, y: box.y });
+    throw new Error(`dragging the Glow fader did not change the glow (${out.after}); `
+      + `pointer was over ${why.landedOn}, row attached=${why.attached}, `
+      + `fader now at ${JSON.stringify(why.trackNow)} vs measured ${JSON.stringify(box)}, readout "${why.readout}"`);
+  }
+  if (Math.abs(out.undone - 0.1) > 1e-3)
+    throw new Error(`undo left the glow at ${out.undone}, not the 0.1 it started at `
+      + '— the fader wrote onto the document before the command took its snapshot');
 });
 
 console.log('\n── screenshots ──────────────────────────');

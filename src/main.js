@@ -15,6 +15,7 @@ import { initTimeline } from './ui/timeline/timeline-panel.js';
 import { initMediaPool } from './ui/media-pool/pool-panel.js';
 import { initInspector } from './ui/inspector/inspector-panel.js';
 import { initTransitions } from './ui/transitions/transitions-panel.js';
+import { initGraphics } from './ui/graphics/graphics-panel.js';
 import { initShortcuts } from './shortcuts.js';
 import { initExport } from './export/export-dialog.js';
 import { initDesktop } from './desktop.js';
@@ -24,6 +25,7 @@ import { initTips } from './ui/help/tips.js';
 import { initUpdates } from './ui/updates/updates-panel.js';
 import { initHelp } from './ui/help/help-overlay.js';
 import { bus } from './core/events.js';
+import { assets } from './media/asset-store.js';
 
 /* ── Boot ─────────────────────────────────────────────────────── */
 const doc     = makeProject(ASPECTS['16:9']);
@@ -55,6 +57,7 @@ const timeline = initTimeline({ store, cmds, history, playback, comp });
 initMediaPool({ store, cmds });
 initInspector({ store, cmds, comp, playback });
 const transitions = initTransitions({ store, cmds, comp, playback });
+const graphics = initGraphics({ store, cmds, comp });
 initTips();
 const help = initHelp();
 initShortcuts({ store, cmds, history, playback, timeline, preview, help });
@@ -242,4 +245,4 @@ bus.emit('toast', {
 });
 
 /* Expose for console poking during development. */
-Object.assign(window, { gc: { store, history, cmds, comp, playback, timeline, preview, transport, desktop, library, home, help, transitions, updates } });
+Object.assign(window, { gc: { store, history, cmds, comp, playback, timeline, preview, transport, desktop, library, home, help, transitions, updates, assets, graphics } });

@@ -6,6 +6,7 @@ import { initTimelineInteractions } from './interactions.js';
 import { zoomToSlider, sliderToZoom, zoomFit, zoomAt } from './zoom.js';
 import { TH } from '../theme.js';
 import { layoutJunctions, drawJunctions, drawTransitionSpans } from './junction-badge.js';
+import { makeTweener, easeOutCubic, easeInOutCubic } from '../../core/anim.js';
 
 const RULER_H = 30;
 /** Height of the trailing "+ track" row; it has to stay reachable when scrolled. */
@@ -224,6 +225,7 @@ export function initTimeline({ store, cmds, history, playback, comp }) {
   thumb.addEventListener('pointerdown', (e) => {
     thumb.setPointerCapture(e.pointerId);
     thumb.classList.add('is-drag');
+    deferFollow(2400);            // your hand is on the scrollbar
     const x0 = e.clientX, s0 = store.ui.scrollX;
     const track = hbar.clientWidth - thumb.clientWidth;
     const maxScroll = Math.max(0.0001, thumb._span - thumb._visible);
@@ -250,12 +252,60 @@ export function initTimeline({ store, cmds, history, playback, comp }) {
     zoomChip.textContent = store.ui.zoom.toFixed(store.ui.zoom < 1 ? 2 : 1) + '×';
   };
   zoomRange.addEventListener('input', () => {
+    zoomTween.stop();          // the slider is direct manipulation; never fight it
+    deferFollow(1800);         // and neither should the playhead
     const before = store.ui.scrollX + (L.W / 2) / store.pxPerSec;
     store.ui.zoom = sliderToZoom(+zoomRange.value);
     store.ui.scrollX = Math.max(0, before - (L.W / 2) / store.pxPerSec);
     syncZoomUI(); repaint();
   });
-  $('btnZoomFit').addEventListener('click', () => { zoomFit(store, L.W); syncZoomUI(); repaint(); });
+  /**
+   * Zoom that arrives rather than teleports.
+   *
+   * A timeline that changes scale between one frame and the next costs you a
+   * moment working out what you are looking at, every single time. Two hundred
+   * milliseconds of movement and you simply follow it.
+   */
+  const zoomTween = makeTweener();
+  function zoomTo(targetZoom, anchorPx = L.W / 2, ms = 200) {
+    const z0 = store.ui.zoom;
+    const t0 = store.ui.scrollX + anchorPx / store.pxPerSec;
+    const base = store.ui.basePxPerSec;
+    zoomTween.run({
+      from: z0, to: targetZoom, ms, ease: easeInOutCubic,
+      onStep: (z) => {
+        store.ui.zoom = z;
+        store.ui.scrollX = Math.max(0, t0 - anchorPx / (base * z));
+        syncZoomUI(); repaint();
+      },
+    });
+  }
+  $('btnZoomFit').addEventListener('click', () => {
+    deferFollow(1200);
+    /*
+     * `zoomFit` sets both the zoom AND the scroll, so read its answer, put
+     * things back, and travel to it. Reading the zoom and leaving the scroll
+     * where `zoomFit` had already put it — at zero — meant the view teleported
+     * to the start while the scale slid over 220ms: the two halves of one
+     * movement visibly disagreeing, which is worse than no animation at all.
+     */
+    const z0 = store.ui.zoom, s0 = store.ui.scrollX;
+    zoomFit(store, L.W);
+    const z1 = store.ui.zoom, s1 = store.ui.scrollX;
+    store.ui.zoom = z0; store.ui.scrollX = s0;
+    zoomTween.run({
+      from: 0, to: 1, ms: 240, ease: easeInOutCubic,
+      onStep: (p) => {
+        store.ui.zoom = z0 + (z1 - z0) * p;
+        store.ui.scrollX = Math.max(0, s0 + (s1 - s0) * p);
+        syncZoomUI(); repaint();
+      },
+      onDone: () => {
+        store.ui.zoom = z1; store.ui.scrollX = s1;
+        syncZoomUI(); repaint();
+      },
+    });
+  });
 
   $('btnSplit').addEventListener('click', () => cmds.splitAt(store.rt.playhead, store.rt.selection));
   $('btnDelete').addEventListener('click', () => cmds.removeSelected());
@@ -301,8 +351,50 @@ export function initTimeline({ store, cmds, history, playback, comp }) {
     }
   });
 
+  /* ── Keeping the playhead in sight ────────────────────────
+   *
+   * Playback used to walk the playhead off the right-hand edge and leave you
+   * looking at a timeline that had nothing to do with what you were hearing.
+   * Once it crosses into the last fifth of the view, the timeline slides so it
+   * lands a fifth of the way in, giving you the shot you are on and a good look
+   * at what is coming.
+   *
+   * It is a slide rather than a jump, and it is skipped entirely while you are
+   * dragging, scrubbing or holding the scrollbar — an editor that yanks the
+   * view out from under your hand is worse than one that never follows at all.
+   */
+  const follow = makeTweener();
+  let followUntil = 0;
+
+  /** Call to stop the view chasing the playhead for a moment. */
+  const deferFollow = (ms = 900) => {
+    follow.stop();
+    followUntil = performance.now() + ms;
+  };
+
+  function keepPlayheadInView() {
+    if (!store.rt.playing) return;
+    if (performance.now() < followUntil) return;
+    if (!L.W || !store.pxPerSec) return;
+
+    const x = L.t2x(store.rt.playhead);
+    const lead = L.W * 0.2;
+    // Also catches the case where the playhead is behind the view entirely,
+    // which is what a seek backwards during playback leaves you with.
+    if (x <= L.W * 0.82 && x >= 0) return;
+
+    const to = Math.max(0, store.rt.playhead - lead / store.pxPerSec);
+    follow.run({
+      from: store.ui.scrollX, to, ms: 260, ease: easeOutCubic,
+      onStep: (v) => { store.ui.scrollX = v; repaint(); },
+    });
+  }
+
+  store.on('playhead', keepPlayheadInView);
+  store.on('rt', (patch) => { if (patch && 'playing' in patch) follow.stop(); });
+
   /* ── Wiring ───────────────────────────────────────────────── */
-  initTimelineInteractions({ view, store, cmds, history, playback, L, repaint, comp });
+  initTimelineInteractions({ view, store, cmds, history, playback, L, repaint, comp, deferFollow });
 
   store.on('doc', () => { rebuildHeaders(); repaint(); });
   store.on('rt', repaint);
@@ -318,5 +410,5 @@ export function initTimeline({ store, cmds, history, playback, comp }) {
   syncZoomUI();
   repaint();
 
-  return { repaint, L, syncZoomUI };
+  return { repaint, L, syncZoomUI, zoomTo, deferFollow };
 }

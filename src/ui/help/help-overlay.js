@@ -20,7 +20,7 @@ const STEPS = [
   ['Cut it down',
    'Move the playhead to where you want a cut and press S. Drag the ends of a clip to trim it. Select the piece you do not want and press Delete. Turn on Ripple first if you want the gap closed automatically.'],
   ['Make it look right',
-   'Select a clip and use the Inspector on the right: position, scale, speed, fades. Press T for a text layer. Press C to crop a piece out of the picture — you can drag a box or draw any shape freehand.'],
+   'Select a clip and use the Inspector on the right: position, scale, speed, fades. Press T for a text layer. Press C to open the crop room — a big, zoomable view of the frame where you can drag a box or paint the exact shape you want with a brush.'],
   ['Join your shots',
    'Where two clips meet on a track, a small ⋈ button appears on the join. Click it, then pick a tile in the Transitions panel on the left — Dissolve, Dip to black, or a Slide. The transition sits across the cut, half either side, and you can set how long it takes.'],
   ['Export it',
@@ -35,7 +35,7 @@ const GROUPS = [
   { title: 'Playing',  ids: ['btnPlay', 'btnStart', 'btnEnd', 'btnPrevFrame', 'btnNextFrame', 'btnLoop', 'btnMute', 'masterVol'] },
   { title: 'Timeline', ids: ['btnSplit', 'btnDelete', 'btnDuplicate', 'btnAddText', 'btnMarker', 'btnRipple', 'btnMagnet', 'btnZoomFit', 'zoomRange'] },
   { title: 'Music',    ids: ['bpmInput', 'btnTapTempo', 'btnBeatGrid'] },
-  { title: 'Panels',   ids: ['tabMedia', 'tabTrans', 'rightTabs'] },
+  { title: 'Panels',   ids: ['tabMedia', 'tabTrans', 'tabGfx', 'rightTabs'] },
 ];
 
 const KEYS = [
@@ -46,6 +46,7 @@ const KEYS = [
   ['S', 'Split at the playhead'],
   ['T', 'Add a text layer'],
   ['C', 'Crop tool'],
+  ['Enter', 'Type on a selected title, right on the picture'],
   ['M', 'Add a marker'],
   ['I', 'Import media'],
   ['N', 'Snapping on / off'],
@@ -53,7 +54,7 @@ const KEYS = [
   ['L', 'Loop on / off'],
   ['F', 'Fullscreen preview'],
   ['Delete', 'Remove what is selected'],
-  ['Esc', 'Deselect everything / leave the crop tool'],
+  ['Esc', 'Deselect everything / leave the crop room'],
   ['Ctrl + S', 'Save the project now'],
   ['Ctrl + Z', 'Undo'],
   ['Ctrl + Shift + Z', 'Redo'],

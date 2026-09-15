@@ -1,11 +1,13 @@
 {
   "name": "gamecut",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "private": true,
   "type": "module",
   "main": "electron-main.cjs",
   "description": "Desktop video editor for gaming clips \u2014 multi-track timeline, CapCut-style text engine, beat-synced cutting.",
-  "author": "GameCut",
+  "author": {
+    "name": "Frazer's Softwares"
+  },
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder --win --x64",
@@ -16,6 +18,7 @@
     "test:media": "node qa/media-electron.mjs qa/out",
     "test:packaged": "node qa/packaged.mjs ./dist/linux-unpacked/gamecut qa/out",
     "test:export": "node qa/export.mjs qa/out",
+    "test:quality": "node qa/quality.mjs",
     "test:long": "node qa/longform.mjs",
     "diag:chrome": "node qa/chrome-cost.mjs",
     "diag:fps": "node qa/playback-fps.mjs",
@@ -26,7 +29,8 @@
     "test:update": "node qa/update-net.mjs",
     "site:init": "node tools/site-init.mjs",
     "site:preview": "node tools/site-preview.mjs",
-    "test:site": "node qa/site.mjs"
+    "test:site": "node qa/site.mjs",
+    "test:installer": "node qa/installer.mjs"
   },
   "devDependencies": {
     "electron": "^33.2.0",
@@ -35,7 +39,7 @@
   "build": {
     "appId": "com.gamecut.studio",
     "productName": "GameCut",
-    "copyright": "Copyright \u00a9 2026 GameCut",
+    "copyright": "Copyright \u00a9 2026 Frazer's Softwares",
     "directories": {
       "output": "dist",
       "buildResources": "build"

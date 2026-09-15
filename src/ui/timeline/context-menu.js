@@ -152,6 +152,27 @@ export function initContextMenu({ store, cmds, playback }) {
       items.push({ label: 'Crop out a piece…', key: 'C', on: () => bus.emit('crop:start') });
     }
 
+    if ((clip.type === 'video' || clip.type === 'image')
+        && Math.abs((clip.speed || 1) - 1) > 1e-3) {
+      const has = !!cmds.badgeOf?.(clip.id);
+      items.push({
+        label: has ? 'Remove the speed badge' : `Show a ${cmds.speedLabel(clip.speed)} badge`,
+        on: () => {
+          if (has) cmds.removeSpeedBadge(clip.id);
+          else cmds.addSpeedBadge(clip.id);
+          bus.emit('inspector:refresh');
+        },
+      });
+    }
+
+    if (clip.type === 'text') {
+      items.push({
+        label: 'Type on the picture',
+        key: 'Enter',
+        on: () => { store.select([clip.id]); bus.emit('text:edit', { clipId: clip.id }); },
+      });
+    }
+
     if (clip.type === 'video') {
       items.push({
         label: clip.silent ? 'Audio already taken out' : 'Take the audio out onto its own track',

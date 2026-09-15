@@ -106,8 +106,9 @@
 
 /* Frame-exact toggle ------------------------------------------ */
 .xp-exact{
+  flex:none;                       /* see .xp-custom — same reason */
   display:flex;gap:10px;align-items:flex-start;
-  margin:0 var(--modal-pad,18px) 4px;padding:10px 12px;
+  margin:0 16px 4px;padding:10px 12px;
   border:1px solid var(--glass-line);border-radius:var(--r-md);
   background:var(--well);cursor:pointer;
 }
@@ -115,3 +116,68 @@
 .xp-exact > span{display:flex;flex-direction:column;gap:3px}
 .xp-exact b{font-size:12.5px;font-weight:650;color:var(--txt-0)}
 .xp-exact > span > span{font-size:11.5px;line-height:1.45;color:var(--txt-2)}
+
+/* Custom quality ---------------------------------------------- */
+/* Sits directly under the tiles, inside the same gutter, so it reads as
+   "the Custom tile, opened" rather than as a separate section. */
+.xp-custom{
+  /* flex:none, or this is what gets crushed when the dialog runs out of room.
+     .xp-list is flex:1 with a 0 basis, so its shrink weight is 0 and it gives
+     up nothing; everything else in the column is flex:none already. Without
+     this the controls below are squeezed and clipped by the panel's own
+     overflow:hidden while the list that could have scrolled does not. */
+  flex:none;
+  display:flex;flex-direction:column;gap:12px;
+  /* 16px to match .xp-list's gutter exactly — this is meant to read as the
+     Custom tile opened, not as a separate box. (--modal-pad is not defined
+     anywhere, so its 18px fallback was always winning and sitting 2px proud.) */
+  margin:0 16px 10px;padding:12px 14px;
+  border:1px solid var(--glass-line);border-radius:var(--r-md);
+  background:var(--well);
+}
+.xp-row{display:flex;flex-direction:column;gap:7px}
+.xp-row label{display:flex;flex-direction:column;gap:2px}
+.xp-row label b{font-size:12.5px;font-weight:650;color:var(--txt-0)}
+.xp-row label span{font-size:11.5px;line-height:1.4;color:var(--txt-2)}
+
+.xp-rate{display:flex;align-items:center;gap:12px}
+.xp-rate input[type=range]{flex:1;min-width:0;accent-color:var(--acc)}
+
+.xp-num{
+  flex:none;display:flex;align-items:baseline;gap:5px;
+  padding:5px 9px;border:1px solid var(--glass-line);border-radius:var(--r-sm);
+  background:var(--bg-1);
+}
+.xp-num input{
+  width:4ch;border:0;background:none;outline:none;
+  font-family:var(--f-mono);font-size:13px;font-weight:650;color:var(--txt-0);
+  text-align:right;-moz-appearance:textfield;
+}
+.xp-num input::-webkit-outer-spin-button,
+.xp-num input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.xp-num i{font-style:normal;font-size:10.5px;color:var(--txt-3);font-family:var(--f-mono)}
+
+.xp-row--match{flex-direction:row;align-items:center;justify-content:space-between;gap:10px}
+.xp-src{font-size:11.5px;line-height:1.4;color:var(--txt-2)}
+.xp-src b{font-family:var(--f-mono);color:var(--txt-1)}
+
+.xp-row--pair{
+  flex-direction:row;align-items:center;gap:10px;flex-wrap:wrap;
+}
+.xp-row--pair label{flex:none}
+.xp-row--pair select{
+  flex:1;min-width:120px;padding:6px 9px;
+  border:1px solid var(--glass-line);border-radius:var(--r-sm);
+  background:var(--bg-1);color:var(--txt-0);font-size:12px;
+}
+.xp-note{
+  flex:none;margin-left:auto;
+  font-family:var(--f-mono);font-size:11px;color:var(--txt-3);
+}
+
+.btn--sm{padding:5px 10px;font-size:11.5px}
+
+@media (max-width:520px){
+  .xp-rate{flex-wrap:wrap}
+  .xp-row--match{flex-direction:column;align-items:flex-start}
+}

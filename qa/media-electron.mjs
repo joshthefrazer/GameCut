@@ -301,43 +301,138 @@ await step('a cropped layer draws different pixels from the full frame', async (
 });
 
 /**
+ * A painted crop mask actually reaches the screen.
+ *
+ * Everything else about the crop studio can be checked in the DOM, but whether
+ * the brush stroke survives into the compositor can only be answered by looking
+ * at pixels. A mask that silently did nothing would leave the app feeling
+ * exactly as broken as the tool it replaced, with every test still green.
+ */
+await step('a painted mask hides the part it was painted over', async () => {
+  const r = await win.evaluate(async () => {
+    const { store, comp } = window.gc;
+    const t = store.rt.playhead;
+    const clip = store.doc.tracks.flatMap(tr => tr.clips).find(c => c.crop);
+    if (!clip) return { error: 'no cropped clip present' };
+
+    // Fill the frame with this one layer so the sums are about it and nothing
+    // else, and nothing underneath can stand in for what the mask removed.
+    const hidden = [];
+    for (const tr of store.doc.tracks) {
+      if (!tr.clips.some(c => c.id === clip.id) && !tr.hidden) { tr.hidden = true; hidden.push(tr); }
+    }
+    const keep = { ...clip.transform };
+    clip.transform = { ...keep, x: .5, y: .5, scale: 3 };
+
+    const lit = () => {
+      comp.render(t, false);
+      const c = comp.canvas;
+      const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+      let n = 0;
+      for (let i = 0; i < d.length; i += 4 * 11) {
+        if (d[i] + d[i + 1] + d[i + 2] > 40) n++;
+      }
+      return n;
+    };
+
+    const before = lit();
+
+    // Left half opaque, right half clear.
+    const m = document.createElement('canvas');
+    m.width = 200; m.height = 200;
+    const mc = m.getContext('2d');
+    mc.fillStyle = '#fff';
+    mc.fillRect(0, 0, 100, 200);
+    const url = m.toDataURL('image/png');
+
+    clip.crop = { ...clip.crop, mask: url };
+    // The compositor decodes the mask lazily; give it a moment and a couple of
+    // frames rather than asserting against a half-loaded image.
+    await new Promise(res => setTimeout(res, 500));
+    comp.render(t, false);
+    await new Promise(res => setTimeout(res, 120));
+    const masked = lit();
+
+    // And a mask that keeps everything must put the picture back.
+    mc.fillRect(0, 0, 200, 200);
+    clip.crop = { ...clip.crop, mask: m.toDataURL('image/png') };
+    await new Promise(res => setTimeout(res, 500));
+    comp.render(t, false);
+    const full = lit();
+
+    const { mask, ...plain } = clip.crop;
+    void mask;
+    clip.crop = plain;
+    clip.transform = keep;
+    for (const tr of hidden) tr.hidden = false;
+    comp.render(t, false);
+
+    return { before, masked, full };
+  });
+
+  if (r.error) throw new Error(r.error);
+  if (!r.before) throw new Error('the layer was not visible to begin with, so this proves nothing');
+  const ratio = r.masked / r.before;
+  if (ratio > 0.75)
+    throw new Error(`the mask removed almost nothing: ${r.masked} of ${r.before} pixels still lit (${ratio.toFixed(2)}) — the brush is not reaching the screen`);
+  if (ratio < 0.2)
+    throw new Error(`the mask removed far too much: only ${r.masked} of ${r.before} pixels left (${ratio.toFixed(2)})`);
+  if (r.full < r.before * 0.8)
+    throw new Error(`a fully opaque mask still hid the picture: ${r.full} vs ${r.before}`);
+  console.log(`     lit pixels: open ${r.before} · half-masked ${r.masked} · mask-all ${r.full}`);
+
+});
+
+/**
  * The tool as a person uses it: press Crop, drag a box, get a layer.
  *
  * Driving the real pointer rather than calling the command directly is the
- * only way to catch the things that actually break here — the overlay's own
- * click-to-select handler stealing the drag, the rectangle being measured
- * against the wrong element, or the crop landing somewhere other than where
- * the box was drawn.
+ * only way to catch the things that actually break here — the rectangle being
+ * measured against the wrong element, or the crop landing somewhere other than
+ * where it was drawn. It runs against real footage because the conversion from
+ * screen to source is the whole point and a stub has no source to convert to.
  */
-await step('drawing a box on the preview crops that region', async () => {
-  // Identify the new layer by id rather than "the last clip with a crop":
-  // clips are listed track by track, and a new layer goes on a track ABOVE its
-  // source, so it appears near the front of that list, not the end.
+await step('the Crop button opens the studio and a drag crops that region', async () => {
   const ids = await win.evaluate(() =>
     window.gc.store.doc.tracks.flatMap(t => t.clips).map(c => c.id));
   const before = ids.length;
 
   await win.evaluate(async () => {
     const { store, playback } = window.gc;
-    const clip = store.doc.tracks.flatMap(t => t.clips).find(c => c.type === 'video');
+    const clip = store.doc.tracks.flatMap(t => t.clips).find(c => c.type === 'video' && !c.crop);
+    store.select([clip.id]);
     playback.seek(clip.start + Math.min(1, clip.duration / 2));
     await new Promise(r => setTimeout(r, 1200));
   });
 
   await win.click('#btnCrop');
-  const armed = await win.evaluate(() =>
-    document.getElementById('previewOverlay').classList.contains('is-cropping'));
-  if (!armed) throw new Error('Crop button did not arm the tool');
+  await sleep(350);
+  if (!(await win.evaluate(() => !!document.querySelector('.cropst'))))
+    throw new Error('Crop button did not open the studio');
 
-  const box = await win.locator('#previewOverlay').boundingBox();
-  // A rectangle over the top-right quarter, in the overlay's own pixels.
-  const x0 = box.x + box.width * 0.60, y0 = box.y + box.height * 0.10;
-  const x1 = box.x + box.width * 0.90, y1 = box.y + box.height * 0.32;
+  await win.click('.cst[data-tool="box"]');
+  await sleep(120);
+
+  // Where the frame actually is on screen, rather than where the layout
+  // suggests it might be.
+  const f = await win.evaluate(() => {
+    const cv = document.querySelector('.cropst__cv');
+    const b = cv.getBoundingClientRect();
+    const fr = cv.__frame;
+    return fr && { x: b.x + fr.x, y: b.y + fr.y, w: fr.w, h: fr.h };
+  });
+  if (!f) throw new Error('the studio never reported where the frame is');
+
+  const x0 = f.x + f.w * 0.60, y0 = f.y + f.h * 0.10;
+  const x1 = f.x + f.w * 0.90, y1 = f.y + f.h * 0.32;
   await win.mouse.move(x0, y0);
   await win.mouse.down();
   await win.mouse.move((x0 + x1) / 2, (y0 + y1) / 2, { steps: 6 });
   await win.mouse.move(x1, y1, { steps: 6 });
   await win.mouse.up();
+  await sleep(160);
+
+  await win.click('#cstApply');
   await sleep(500);
 
   const r = await win.evaluate((known) => {
@@ -348,15 +443,14 @@ await step('drawing a box on the preview crops that region', async () => {
       total: all.length,
       crop: made?.crop || null,
       tx: made?.transform?.x, ty: made?.transform?.y,
-      stillArmed: document.getElementById('previewOverlay').classList.contains('is-cropping'),
-      overlayHasLayer: !!document.querySelector('#previewOverlay .crop'),
+      stillOpen: !!document.querySelector('.cropst'),
       selected: store.rt.selection.includes(made?.id),
     };
   }, ids);
 
   if (r.total !== before + 1) throw new Error(`expected one new clip, got ${r.total - before}`);
   if (!r.crop) throw new Error('the new clip has no crop rectangle');
-  if (r.stillArmed || r.overlayHasLayer) throw new Error('the tool stayed armed after the drag');
+  if (r.stillOpen) throw new Error('the studio stayed open after Apply');
   if (!r.selected) throw new Error('the new layer was not selected, so it cannot be dragged straight away');
 
   // Drawn over the top-right, so it must have landed there — this is what
@@ -367,20 +461,21 @@ await step('drawing a box on the preview crops that region', async () => {
   if (!(r.tx > 0.5 && r.ty < 0.5)) {
     throw new Error(`layer placed at ${r.tx?.toFixed(2)},${r.ty?.toFixed(2)} — not over the drawn box`);
   }
-  console.log(`     drew top-right → crop ${(r.crop.w * 100).toFixed(0)}%×${(r.crop.h * 100).toFixed(0)}% at ${(r.crop.x * 100).toFixed(0)}%,${(r.crop.y * 100).toFixed(0)}%`);
+  console.log(`     drew top-right \u2192 crop ${(r.crop.w * 100).toFixed(0)}%\u00d7${(r.crop.h * 100).toFixed(0)}% at ${(r.crop.x * 100).toFixed(0)}%,${(r.crop.y * 100).toFixed(0)}%`);
 });
 
-await step('Esc cancels the crop tool without making anything', async () => {
+await step('Esc leaves the studio without making anything', async () => {
   const before = await win.evaluate(() =>
     window.gc.store.doc.tracks.reduce((a, t) => a + t.clips.length, 0));
   await win.click('#btnCrop');
+  await sleep(300);
   await win.keyboard.press('Escape');
-  await sleep(200);
+  await sleep(250);
   const r = await win.evaluate(() => ({
     total: window.gc.store.doc.tracks.reduce((a, t) => a + t.clips.length, 0),
-    armed: document.getElementById('previewOverlay').classList.contains('is-cropping'),
+    open: !!document.querySelector('.cropst'),
   }));
-  if (r.armed) throw new Error('Esc did not disarm the tool');
+  if (r.open) throw new Error('Esc did not close the studio');
   if (r.total !== before) throw new Error('cancelling still created a clip');
 });
 
@@ -872,6 +967,92 @@ await step('a transition tells the renderer about both shots', async () => {
   if (!r.mid.includes(r.b)) throw new Error('the incoming clip is not in the render list');
   if (!r.mid.includes(r.a)) throw new Error('the outgoing clip is missing mid-transition');
   if (r.after.includes(r.a)) throw new Error('the outgoing clip is still asked for after the transition ends');
+});
+
+/**
+ * The transition preview shows your footage, not a diagram.
+ *
+ * Everything about this feature is only worth having if the two pictures in it
+ * are the two shots either side of your own cut. A preview that quietly fell
+ * back to coloured panels would still animate, still look plausible, and tell
+ * you nothing — so this checks the captured frames came from the video and that
+ * the picture genuinely changes across the transition.
+ */
+await step('the transition preview runs on the real frames of the cut', async () => {
+  const setup = await win.evaluate(async () => {
+    const { store, cmds, playback, transitions } = window.gc;
+    const src = store.doc.tracks.flatMap(t => t.clips).find(c => c.type === 'video' && !c.crop);
+    if (!src) return { error: 'no video clip' };
+
+    // Two shots off the same footage, cut flush, taken from far apart in the
+    // file so their frames cannot look the same by accident.
+    const track = store.doc.tracks.find(t => t.clips.includes(src));
+    for (const t of store.doc.tracks) t.clips.length = 0;
+    const mk = (name, start, inPoint) => ({
+      ...JSON.parse(JSON.stringify(src)),
+      id: 'prev_' + name, name, start, duration: 2, inPoint, transIn: null, crop: null,
+    });
+    const a = mk('Shot A', 0, 0);
+    const b = mk('Shot B', 2, Math.max(0, Math.min(4, (src.sourceDuration || 5) - 1.5)));
+    b.transIn = { kind: 'dissolve', dur: 0.6, dir: 'left' };
+    track.clips.push(a, b);
+    store.docChanged('preview test');
+    store.setRT({ junction: b.id });
+    playback.seek(2);
+    // The panel deliberately does not fetch frames while its tab is hidden —
+    // seeking a decoder for a canvas nobody can see is exactly the kind of work
+    // that used to freeze playback. So open it, the way a person would.
+    document.querySelector('#leftTabs [data-tab="trans"]')?.click();
+    transitions.refresh();
+    await new Promise(r => setTimeout(r, 2500));
+    return { ok: true, onScreen: !!document.querySelector('#leftPanel .tabpane[data-pane="trans"]')?.classList.contains('is-active') };
+  });
+  if (setup.error) throw new Error(setup.error);
+  if (!setup.onScreen) throw new Error('the transitions tab did not come forward');
+
+  const r = await win.evaluate(async () => {
+    const cv = document.getElementById('transPreview');
+    if (!cv) return { error: 'no preview canvas' };
+    const has = window.gc.transitions.preview.hasFrames;
+    const captured = window.gc.transitions.preview.captured;
+
+    // Sample the canvas while it is holding the first shot, then again once the
+    // loop has carried it all the way to the second.
+    const grab = () => {
+      const c = document.createElement('canvas');
+      c.width = cv.width; c.height = cv.height;
+      c.getContext('2d').drawImage(cv, 0, 0);
+      const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+      let sum = 0, n = 0, lit = 0;
+      for (let i = 0; i < d.length; i += 4 * 13) {
+        sum += d[i] + d[i + 1] + d[i + 2]; n++;
+        if (d[i] + d[i + 1] + d[i + 2] > 40) lit++;
+      }
+      return { avg: Math.round(sum / n), lit };
+    };
+
+    const shots = [];
+    for (let i = 0; i < 16; i++) {
+      shots.push(grab());
+      await new Promise(res => setTimeout(res, 90));
+    }
+    return { has, captured, shots, w: cv.width, h: cv.height };
+  });
+
+  if (r.error) throw new Error(r.error);
+  if (!r.has) throw new Error('the preview never captured any frames from the cut');
+  if (!r.captured.a) throw new Error('the outgoing shot was never captured — the preview is running on one frame');
+  if (!r.captured.b) throw new Error('the incoming shot was never captured — the preview is running on one frame');
+  if (!r.w || !r.h) throw new Error(`preview canvas is ${r.w}x${r.h}`);
+
+  const lit = r.shots.filter(s => s.lit > 0).length;
+  if (!lit) throw new Error('the preview canvas stayed blank for the whole loop');
+
+  const avgs = r.shots.map(s => s.avg);
+  const spread = Math.max(...avgs) - Math.min(...avgs);
+  if (spread < 3)
+    throw new Error(`the preview never changed across a 1.4s window (brightness ${avgs.join(',')}) — it is not animating`);
+  console.log(`     preview ${r.w}\u00d7${r.h} \u00b7 brightness moved ${Math.min(...avgs)}\u2192${Math.max(...avgs)} over the loop`);
 });
 
 /**

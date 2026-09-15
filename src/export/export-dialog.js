@@ -1,8 +1,13 @@
-import { EXPORT_PRESETS } from '../project/presets.js';
+import { EXPORT_PRESETS, EXPORT_FPS, EXPORT_SCALES } from '../project/presets.js';
 import { renderToMp4, exportSupport } from './render-export.js';
 import { bus } from '../core/events.js';
 import { timecode } from '../core/time.js';
 import { unmixableClips } from '../audio/graph.js';
+import { assets } from '../media/asset-store.js';
+import {
+  sourceBitrate, bitrateForPreset, matchSource, clampBitrate, fmtMbps,
+  MIN_CUSTOM_BITRATE, MAX_CUSTOM_BITRATE,
+} from './quality.js';
 
 /**
  * Export dialog.
@@ -29,11 +34,14 @@ function choicesFor(store) {
     : square ? 'Instagram and feed posts'
     : 'YouTube and most sites';
 
-  const ids = vertical || square ? ['short4k', 'short', 'draft'] : ['yt4k', 'yt1080', 'draft'];
+  const ids = vertical || square
+    ? ['short4k', 'short', 'draft', 'custom']
+    : ['yt4k', 'yt1080', 'draft', 'custom'];
   const labels = {
     0: { title: 'Best quality', note: `Sharpest picture for ${where}. Biggest file, slowest to make.` },
     1: { title: 'Recommended', note: `Great for ${where}. This is the one to pick if unsure.` },
     2: { title: 'Quick draft', note: 'Rough version to check your edit. Much faster, lower quality.' },
+    3: { title: 'Custom', note: 'Set the quality, size and frame rate yourself.' },
   };
   return ids.map((id, i) => ({ id, ...labels[i] })).filter(x => x.id);
 }
@@ -64,17 +72,126 @@ export function initExport({ store, playback }) {
   let busy = false;
   const setBusy = (v) => { busy = v; store.setRT({ exporting: v }); };
 
+  /**
+   * What the custom tile is currently set to.
+   *
+   * Kept on the dialog rather than in the document: it is a preference about
+   * this machine and this upload, not a property of the edit, and a project
+   * opened on a slower computer should not inherit someone else's 4K120.
+   * It does survive closing and reopening the dialog, which is the part that
+   * would actually annoy anyone.
+   */
+  let custom = { vBitrate: 0, aBitrate: 320_000, fps: 0, scale: 1 };
+
   /** Output size for a preset, derived from the project's own aspect. */
   const sizeFor = (p) => {
-    const w = Math.round(store.doc.width * p.scale / 2) * 2;
-    const h = Math.round(store.doc.height * p.scale / 2) * 2;
+    const scale = p.custom ? custom.scale : p.scale;
+    const w = Math.round(store.doc.width * scale / 2) * 2;
+    const h = Math.round(store.doc.height * scale / 2) * 2;
     return { w, h };
   };
 
-  const estimate = (p) => {
-    const secs = Math.max(1, store.rt.duration);
-    return ((p.vBitrate + p.aBitrate) * secs) / 8;
+  /**
+   * Everything the renderer needs, for one preset — the single place the
+   * preset's own numbers, the footage's bitrate and the custom controls are
+   * reconciled. Both the size estimate and the export itself read this, so
+   * what the dialog promises and what it renders cannot drift apart.
+   */
+  const settingsFor = (p) => {
+    const { w, h } = sizeFor(p);
+    const src = sourceBitrate(store, assets);
+    if (p.custom) {
+      return {
+        w, h,
+        fps: custom.fps || store.doc.fps || 60,
+        vBitrate: clampBitrate(custom.vBitrate || bitrateForPreset(p, src)),
+        aBitrate: custom.aBitrate,
+      };
+    }
+    return { w, h, fps: p.fps, vBitrate: bitrateForPreset(p, src), aBitrate: p.aBitrate };
   };
+
+  const estimate = (p) => {
+    const s = settingsFor(p);
+    const secs = Math.max(1, store.rt.duration);
+    return ((s.vBitrate + s.aBitrate) * secs) / 8;
+  };
+
+  /**
+   * The custom controls.
+   *
+   * A number box AND a slider for the same value, on purpose. The slider is for
+   * "a bit more than that", which is how anyone actually chooses a bitrate, and
+   * the box is for "my recorder says 82 and I want 82" — which is the whole
+   * point of this feature, and something a slider can never quite hit.
+   *
+   * Rendered whether or not Custom is selected, and simply hidden otherwise, so
+   * that picking Custom does not rebuild the list under the pointer.
+   */
+  function customPanel() {
+    const p = EXPORT_PRESETS.find(x => x.id === 'custom');
+    const s = settingsFor(p);
+    const src = sourceBitrate(store, assets);
+    const maxSlider = Math.max(120e6, Math.ceil((src * 1.5) / 10e6) * 10e6);
+
+    return `
+      <div class="xp-custom" id="xpCustom" ${chosen === 'custom' ? '' : 'hidden'}>
+        <div class="xp-row">
+          <label for="xpRate"><b>Quality</b>
+            <span>Higher keeps more detail and makes a bigger file.</span></label>
+          <div class="xp-rate">
+            <input type="range" id="xpRateSlide" min="${MIN_CUSTOM_BITRATE}"
+                   max="${maxSlider}" step="500000" value="${s.vBitrate}">
+            <span class="xp-num">
+              <input type="number" id="xpRate" min="1"
+                     max="${Math.round(MAX_CUSTOM_BITRATE / 1e6)}" step="0.5"
+                     value="${mbpsText(s.vBitrate)}">
+              <i>Mbps</i>
+            </span>
+          </div>
+        </div>
+
+        ${src ? `<div class="xp-row xp-row--match">
+          <span class="xp-src">Your footage was recorded at about
+            <b>${fmtMbps(src)}</b>.</span>
+          <button class="btn btn--ghost btn--sm" id="xpMatch">Match my footage</button>
+        </div>` : ''}
+
+        <div class="xp-row xp-row--pair">
+          <label for="xpFps"><b>Frame rate</b></label>
+          <select id="xpFps">
+            ${EXPORT_FPS.map(f => `<option value="${f}" ${f === s.fps ? 'selected' : ''}>${f} fps</option>`).join('')}
+          </select>
+
+          <label for="xpScale"><b>Size</b></label>
+          <select id="xpScale">
+            ${EXPORT_SCALES.map(o => {
+              const w = Math.round(store.doc.width * o.scale / 2) * 2;
+              const h = Math.round(store.doc.height * o.scale / 2) * 2;
+              return `<option value="${o.scale}" ${o.scale === custom.scale ? 'selected' : ''}>${w}×${h} · ${o.label}</option>`;
+            }).join('')}
+          </select>
+        </div>
+
+        <div class="xp-row xp-row--pair">
+          <label for="xpARate"><b>Sound</b></label>
+          <select id="xpARate">
+            ${[128_000, 192_000, 256_000, 320_000].map(b =>
+              `<option value="${b}" ${b === custom.aBitrate ? 'selected' : ''}>${b / 1000} kbps${b === 320_000 ? ' · best' : ''}</option>`).join('')}
+          </select>
+          <span class="xp-note" id="xpCustomSize">~${fmtBytes(estimate(p))}</span>
+        </div>
+      </div>`;
+  }
+
+  /**
+   * The number for the box: "82", or "8.5" when the half matters.
+   *
+   * Rounding to whole Mbps here would quietly change the value — the slider
+   * steps in halves, so dragging to 8.5 and then blurring the box would commit
+   * 9, and there would be no way to type 8.5 back in.
+   */
+  const mbpsText = (bits) => String(Number(((bits || 0) / 1e6).toFixed(1)));
 
   function close() {
     if (busy) return;                       // never vanish mid-render
@@ -87,6 +204,12 @@ export function initExport({ store, playback }) {
   }
 
   function open() {
+    // Ctrl+E reaches here through the application menu, which does not know a
+    // render is running. Without this guard it would clear store.rt.exporting —
+    // the one flag stopping the updater reloading the editor mid-export —
+    // replace the progress view with the form, un-cancel a render the person
+    // had just stopped, and leave Export live for a second, concurrent run.
+    if (busy) return;
     const list = choicesFor(store);
     if (!list.some(c => c.id === chosen)) chosen = (list[1] || list[0]).id;
     const sup = exportSupport();
@@ -139,7 +262,7 @@ export function initExport({ store, playback }) {
           ${choicesFor(store).map(choice => {
             const p = EXPORT_PRESETS.find(x => x.id === choice.id);
             if (!p) return '';
-            const { w, h } = sizeFor(p);
+            const s = settingsFor(p);
             const meta = choice;
             return `<button class="xp ${p.id === chosen ? 'is-on' : ''}" data-preset="${p.id}">
               <span class="xp__radio"></span>
@@ -148,12 +271,14 @@ export function initExport({ store, playback }) {
                 <span>${meta.note}</span>
               </span>
               <span class="xp__meta">
-                <b>${w}×${h}</b>
-                <span>~${fmtBytes(estimate(p))} · ${p.fps}fps</span>
+                <b>${s.w}×${s.h}</b>
+                <span>~${fmtBytes(estimate(p))} · ${s.fps}fps · ${fmtMbps(s.vBitrate)}</span>
               </span>
             </button>`;
           }).join('')}
         </div>
+
+        ${customPanel()}
 
         <label class="xp-exact">
           <input type="checkbox" id="xpExact">
@@ -183,8 +308,80 @@ export function initExport({ store, playback }) {
     root.querySelectorAll('[data-preset]').forEach(el => el.addEventListener('click', () => {
       chosen = el.dataset.preset;
       root.querySelectorAll('.xp').forEach(n => n.classList.toggle('is-on', n === el));
+      const panel = root.querySelector('#xpCustom');
+      if (panel) panel.hidden = chosen !== 'custom';
     }));
+    wireCustom();
     root.querySelector('#xpGo')?.addEventListener('click', run);
+  }
+
+  /**
+   * Keep the custom controls, the tile above them and the size estimate honest.
+   *
+   * Only the tile's own text is rewritten, never the list — repainting the
+   * whole chooser on every slider step would take the slider out from under the
+   * pointer mid-drag, which is the same bug the keyframe strip had.
+   */
+  function wireCustom() {
+    const slide = root.querySelector('#xpRateSlide');
+    const num = root.querySelector('#xpRate');
+    if (!slide || !num) return;
+
+    const refresh = () => {
+      const p = EXPORT_PRESETS.find(x => x.id === 'custom');
+      const s = settingsFor(p);
+      const tile = root.querySelector('[data-preset="custom"] .xp__meta');
+      if (tile) {
+        tile.innerHTML = `<b>${s.w}×${s.h}</b>`
+          + `<span>~${fmtBytes(estimate(p))} · ${s.fps}fps · ${fmtMbps(s.vBitrate)}</span>`;
+      }
+      const size = root.querySelector('#xpCustomSize');
+      if (size) size.textContent = `~${fmtBytes(estimate(p))}`;
+    };
+
+    const setRate = (bits, { slider = true, box = true } = {}) => {
+      custom.vBitrate = clampBitrate(bits);
+      // Write back to whichever control did NOT originate the change, so
+      // typing "82" is not immediately rounded to the slider's nearest step.
+      if (slider) slide.value = String(Math.min(Number(slide.max), custom.vBitrate));
+      if (box) num.value = mbpsText(custom.vBitrate);
+      refresh();
+    };
+
+    slide.addEventListener('input', () => setRate(Number(slide.value), { slider: false }));
+    num.addEventListener('input', () => {
+      // Mid-typing the box can be empty or "8" on the way to "80"; don't fight
+      // the person by clamping every keystroke. Only commit a real number.
+      const m = Number(num.value);
+      if (!Number.isFinite(m) || m <= 0) return;
+      setRate(m * 1e6, { box: false });
+    });
+    num.addEventListener('change', () => {
+      // Same rule as while typing: an empty box (select-all + Delete, or a
+      // paste the number input rejected) is not a request for 1 Mbps. Put the
+      // last committed figure back rather than acting on nothing.
+      const m = Number(num.value);
+      if (!Number.isFinite(m) || m <= 0) { num.value = mbpsText(custom.vBitrate); return; }
+      setRate(m * 1e6);
+    });
+
+    root.querySelector('#xpMatch')?.addEventListener('click', () => {
+      // matchSource, not bitrateForPreset: the latter treats the custom tier's
+      // placeholder 30 Mbps as a floor, which would set 30 for 8 Mbps footage
+      // while the sentence beside the button says 8. Scaled by the size the
+      // person actually chose, not the preset's placeholder.
+      setRate(matchSource(sourceBitrate(store, assets), custom.scale));
+    });
+
+    root.querySelector('#xpFps')?.addEventListener('change', (e) => {
+      custom.fps = Number(e.target.value) || 60; refresh();
+    });
+    root.querySelector('#xpScale')?.addEventListener('change', (e) => {
+      custom.scale = Number(e.target.value) || 1; refresh();
+    });
+    root.querySelector('#xpARate')?.addEventListener('change', (e) => {
+      custom.aBitrate = Number(e.target.value) || 320_000; refresh();
+    });
   }
 
   /* ── Step 2: render ───────────────────────────────────────────────── */
@@ -218,7 +415,8 @@ export function initExport({ store, playback }) {
   async function run() {
     const preset = EXPORT_PRESETS.find(p => p.id === chosen);
     if (!preset) return;
-    const { w, h } = sizeFor(preset);
+    // Resolved once, here: the same object the estimate was calculated from.
+    const set = settingsFor(preset);
     // Read it before the progress view replaces the form.
     const exact = !!root.querySelector('#xpExact')?.checked;
 
@@ -232,11 +430,17 @@ export function initExport({ store, playback }) {
 
     try {
       const bytes = await renderToMp4({
-        store, width: w, height: h, fps: preset.fps,
-        vBitrate: preset.vBitrate, aBitrate: preset.aBitrate,
+        store, width: set.w, height: set.h, fps: set.fps,
+        vBitrate: set.vBitrate, aBitrate: set.aBitrate,
         frameAccuracy: exact ? 'exact' : 'fast',
         shouldCancel: () => cancelled,
-        onProgress: ({ phase, done, total, percent, fps, seeking }) => {
+        onProgress: ({ phase, done, total, percent, fps, seeking, note }) => {
+          // The encoder can report that it would not take the bitrate asked
+          // for. Say so where it will be read, rather than in the console.
+          if (phase === 'encoder') {
+            if (note) bus.emit('toast', { msg: note, kind: 'warn' });
+            return;
+          }
           const f = fill(); if (!f) return;
           f.style.width = percent.toFixed(1) + '%';
           root.querySelector('#xpPct').textContent = Math.floor(percent) + '%';

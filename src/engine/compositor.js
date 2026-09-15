@@ -35,6 +35,17 @@ export class Compositor {
     this.onFrame = null;
     this.pool.onFrame = () => { this.fresh = true; this.onFrame?.(); };
 
+    /**
+     * Clips the canvas must not paint, by id.
+     *
+     * Only ever used by the in-place text editor, which puts a real DOM field
+     * over the picture so you get a caret and a selection. Deliberately a set
+     * on the compositor rather than a flag on the clip: it is a fact about what
+     * is on screen right now, not about the project, so it must never be saved,
+     * undone, or exported.
+     */
+    this.hidden = new Set();
+
     this.resize();
     this._sweepTimer = setInterval(() => this.pool.sweep(), 10_000);
   }
@@ -216,6 +227,10 @@ export class Compositor {
       for (const clip of track.clips) {
         if (tr && (clip === tr.prev || clip === tr.next)) continue;
         if (!(t >= clip.start && t < clip.start + clip.duration)) continue;
+        // Something on top is standing in for this clip — an in-place text
+        // editor, drawn in the DOM so it can carry a real caret. Painting the
+        // canvas copy underneath as well would double every letter.
+        if (this.hidden.size && this.hidden.has(clip.id)) continue;
 
         const alpha = Math.max(0, Math.min(1,
           evalProp(clip, 'transform.opacity', t) * fadeGain(clip, t)));

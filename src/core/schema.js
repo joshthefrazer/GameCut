@@ -99,6 +99,9 @@ export function makeClip(type, patch = {}) {
      */
     transIn: null,
     volume: 1,
+    /** Silenced by hand in the mixer. Distinct from `silent`, which means
+     *  another clip is already playing this media's sound. */
+    muted: false,
     fadeIn: 0,
     fadeOut: 0,
     transform: defaultTransform(),

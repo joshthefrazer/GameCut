@@ -204,3 +204,21 @@
 }
 .crop__modes button:hover{color:#fff}
 .crop__modes button.is-on{background:var(--acc);color:#fff}
+
+/* ── Typing on the picture ────────────────────────────────────
+   A real field laid over the canvas. The canvas copy of this layer
+   is suppressed while it is open, so what you see is this — which is
+   why it has to be styled from the same numbers the renderer uses. */
+.tedit{
+  position:absolute;z-index:6;
+  margin:0;padding:0;border:0;outline:0;resize:none;overflow:hidden;
+  background:transparent;
+  transform-origin:50% 50%;
+  white-space:pre-wrap;word-break:break-word;
+  caret-color:var(--acc-hi);
+  /* A hairline so an empty layer is still findable. */
+  box-shadow:0 0 0 1px rgba(96,165,250,.55), 0 0 22px -6px rgba(59,130,246,.7);
+  border-radius:3px;
+}
+.tedit::selection{background:rgba(59,130,246,.45)}
+.tedit::-webkit-scrollbar{display:none}

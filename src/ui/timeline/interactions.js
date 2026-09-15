@@ -10,7 +10,8 @@ import { junctionAt } from './junction-badge.js';
 
 const EDGE_PX = 7;
 
-export function initTimelineInteractions({ view, store, cmds, history, playback, L, repaint }) {
+export function initTimelineInteractions({ view, store, cmds, history, playback, L, repaint,
+                                           deferFollow = () => {} }) {
   const drop = document.getElementById('tlDrop');
   const local = (e) => {
     const r = view.getBoundingClientRect();
@@ -54,6 +55,8 @@ export function initTimelineInteractions({ view, store, cmds, history, playback,
 
   /* ── Pointer down ─────────────────────────────────────────── */
   view.addEventListener('pointerdown', (e) => {
+    // Your hand is on the timeline: stop it moving by itself until you let go.
+    deferFollow(1600);
     if (e.button === 1) return startPan(e);
     if (e.button !== 0) return;
     const p = local(e);
@@ -328,6 +331,9 @@ export function initTimelineInteractions({ view, store, cmds, history, playback,
   /* ── Wheel ────────────────────────────────────────────────── */
   view.addEventListener('wheel', (e) => {
     e.preventDefault();
+    // Scrolling is you saying where you want to look. Anything that moves the
+    // view on your behalf has to get out of the way for a moment.
+    deferFollow();
     const r = view.getBoundingClientRect();
     if (e.ctrlKey || e.metaKey) {
       zoomAt(store, Math.pow(0.9985, e.deltaY), e.clientX - r.left);

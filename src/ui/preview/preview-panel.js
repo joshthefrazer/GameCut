@@ -2,6 +2,7 @@ import { bus, raf } from '../../core/events.js';
 import { drawGuides } from './safe-guides.js';
 import { Gizmo } from './transform-gizmo.js';
 import { initCropTool } from './crop-tool.js';
+import { initTextEdit } from './text-edit.js';
 import { ASPECTS } from '../../project/presets.js';
 
 export function initPreview({ store, comp, playback, cmds, history }) {
@@ -30,6 +31,7 @@ export function initPreview({ store, comp, playback, cmds, history }) {
     frame.style.width = Math.round(w) + 'px';
     frame.style.height = Math.round(h) + 'px';
     redrawGuides();
+    bus.emit('preview:fit');
   };
 
   const redrawGuides = () => drawGuides(guidesEl, {
@@ -168,9 +170,13 @@ export function initPreview({ store, comp, playback, cmds, history }) {
   // in that does not depend on holding a reference to the preview panel.
   bus.on('crop:start', () => crop.arm());
 
+  /* ── Typing straight onto the picture ─────────────────────── */
+  const textEdit = initTextEdit({ overlay, frame, store, comp, cmds, playback });
+
   /* ── Canvas selection ─────────────────────────────────────── */
   overlay.addEventListener('pointerdown', (e) => {
     if (crop.isArmed()) return;          // the crop tool owns the drag
+    if (textEdit.isEditing()) return;    // so is the text field
     if (e.target !== overlay) return;
     const r = overlay.getBoundingClientRect();
     const nx = (e.clientX - r.left) / r.width;
@@ -274,5 +280,5 @@ export function initPreview({ store, comp, playback, cmds, history }) {
   fit();
   comp.render(0);
 
-  return { fit, gizmo, crop, toggleFullscreen, isFullscreen };
+  return { fit, gizmo, crop, textEdit, toggleFullscreen, isFullscreen };
 }

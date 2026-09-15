@@ -98,6 +98,108 @@ export function createCommands(store, history) {
      * Nothing is copied or re-encoded; both clips point at the same imported
      * asset, exactly as a cropped layer does.
      */
+    /* ── Speed badges ─────────────────────────────────────────
+     * The little "2×" that sits in the corner of a sped-up shot.
+     *
+     * It is a plain text layer, not a new kind of object — which means it can
+     * be dragged, restyled, keyframed, faded and deleted with everything you
+     * already know, and costs the renderer nothing new. The one thing that
+     * makes it a badge is `badgeFor`: the id of the clip it is about. That is
+     * what lets it rewrite itself from 2× to 4× when you change your mind, and
+     * follow the clip when the new speed makes it shorter.
+     */
+
+    /** How a speed reads on screen. 2 is "2×", 1.5 is "1.5×", 0.5 is "0.5×". */
+    speedLabel(speed) {
+      const v = Number(speed) || 1;
+      const n = v >= 10 ? v.toFixed(0) : v.toFixed(2).replace(/\.?0+$/, '');
+      return `${n}\u00d7`;
+    },
+
+    /** The badge belonging to a clip, if it has one. */
+    badgeOf(clipId) {
+      for (const t of store.doc.tracks) {
+        const c = t.clips.find(x => x.badgeFor === clipId);
+        if (c) return c;
+      }
+      return null;
+    },
+
+    /** A text track with room for [start, start+duration), making one if need be. */
+    textTrackFor(start, duration) {
+      const end = start + duration;
+      for (const t of store.doc.tracks) {
+        if (t.kind !== 'text' || t.locked) continue;
+        const clash = t.clips.some(c => c.start < end && c.start + c.duration > start);
+        if (!clash) return t;
+      }
+      return api.addTrack('text');
+    },
+
+    addSpeedBadge(clipId) {
+      const { clip } = findClip(store.doc, clipId);
+      if (!clip) return null;
+      if (clip.type !== 'video' && clip.type !== 'image')
+        return { ok: false, reason: 'Only a clip with footage can have a speed badge.' };
+
+      const existing = api.badgeOf(clipId);
+      if (existing) { store.select([existing.id]); return { ok: true, clip: existing, existed: true }; }
+
+      const track = api.textTrackFor(clip.start, clip.duration);
+      const badge = makeClip('text', {
+        name: 'Speed badge',
+        start: clip.start,
+        duration: clip.duration,
+        badgeFor: clipId,
+      });
+      Object.assign(badge.text, {
+        text: api.speedLabel(clip.speed),
+        font: 'Inter', weight: 900, size: 0.052,
+        fill: 'solid', color: '#ffffff',
+        letterSpacing: 0.01,
+        strokeWidth: 0, glow: 0,
+        shadow: 0.012, shadowColor: '#000000', shadowY: 0.004,
+        // A plate, because a bare number over busy gameplay disappears.
+        bg: 'pill', bgColor: '#1d4ed8e6', bgPad: 0.022, bgRadius: 0.5,
+        anim: 'pop', animDur: 0.28,
+      });
+      // Bottom-right, inside the safe area — out of the way of the action and
+      // of any subtitle running along the bottom middle.
+      badge.transform.x = 0.85;
+      badge.transform.y = 0.87;
+      badge.transform.w = 0.24;
+
+      api.addClip(track.id, badge, { label: 'Add speed badge' });
+      return { ok: true, clip: badge, track };
+    },
+
+    removeSpeedBadge(clipId) {
+      const badge = api.badgeOf(clipId);
+      if (!badge) return false;
+      history.run('Remove speed badge', (doc) => {
+        for (const t of doc.tracks) {
+          const i = t.clips.findIndex(c => c.id === badge.id);
+          if (i >= 0) { t.clips.splice(i, 1); return; }
+        }
+      });
+      return true;
+    },
+
+    /**
+     * Keep a badge telling the truth.
+     *
+     * Called from inside the speed command's own history step, so changing a
+     * clip from 2× to 4× is one undo, not two — and the badge can never be left
+     * announcing a speed the clip no longer runs at.
+     */
+    syncSpeedBadge(clip) {
+      const badge = api.badgeOf(clip.id);
+      if (!badge) return;
+      badge.text.text = api.speedLabel(clip.speed);
+      badge.start = clip.start;
+      badge.duration = clip.duration;
+    },
+
     extractAudio(clipId) {
       const { clip } = findClip(store.doc, clipId);
       if (!clip) return null;
@@ -283,6 +385,7 @@ export function createCommands(store, history) {
 
       clip.speed = to;
       clip.duration = dur;
+      api.syncSpeedBadge(clip);
       history.commit();
       return dur;
     },
@@ -414,6 +517,68 @@ export function createCommands(store, history) {
         else list.push({ t: local, v: value, e: easing });
         list.sort((a, b) => a.t - b.t);
       }, `key:${clipId}:${path}`);
+    },
+
+    /** Take one keyframe off a track, and the track itself if it was the last. */
+    removeKeyAt(clipId, path, localT) {
+      history.run('Remove keyframe', () => {
+        const { clip } = findClip(store.doc, clipId);
+        const list = clip?.keys?.[path];
+        if (!list) return;
+        const i = list.findIndex(k => Math.abs(k.t - localT) < 1e-3);
+        if (i < 0) return;
+        list.splice(i, 1);
+        if (!list.length) delete clip.keys[path];
+      });
+    },
+
+    /**
+     * Slide one keyframe along in time.
+     *
+     * Merged under a per-key label so dragging a diamond across the strip is a
+     * single undo rather than one per frame of the drag.
+     */
+    moveKeyTo(clipId, path, fromT, toT) {
+      history.run('Move keyframe', () => {
+        const { clip } = findClip(store.doc, clipId);
+        const list = clip?.keys?.[path];
+        if (!list) return;
+        const k = list.find(x => Math.abs(x.t - fromT) < 1e-3);
+        if (!k) return;
+        k.t = Math.max(0, Math.min(clip.duration, +toT.toFixed(5)));
+        list.sort((a, b) => a.t - b.t);
+      }, `movekey:${clipId}:${path}`);
+    },
+
+    setKeyEasing(clipId, path, localT, easing) {
+      history.run('Keyframe easing', () => {
+        const { clip } = findClip(store.doc, clipId);
+        const k = clip?.keys?.[path]?.find(x => Math.abs(x.t - localT) < 1e-3);
+        if (k) k.e = easing;
+      });
+    },
+
+    /**
+     * Replace whole key tracks in one step.
+     *
+     * This is how a movement preset is applied: the paths it writes are cleared
+     * and rewritten together, so the result is one undo and there is never a
+     * moment where half of the old animation is still running alongside half of
+     * the new one.
+     */
+    setKeyTracks(clipId, tracks, { clear = [], label = 'Animate' } = {}) {
+      history.run(label, () => {
+        const { clip } = findClip(store.doc, clipId);
+        if (!clip) return;
+        clip.keys ||= {};
+        for (const path of clear) delete clip.keys[path];
+        for (const [path, list] of Object.entries(tracks || {})) {
+          if (!list || !list.length) { delete clip.keys[path]; continue; }
+          clip.keys[path] = list
+            .map(k => ({ t: Math.max(0, +(+k.t).toFixed(5)), v: k.v, e: k.e || 'ease' }))
+            .sort((a, b) => a.t - b.t);
+        }
+      });
     },
 
     /* ── Tracks ──────────────────────────────────────────────── */

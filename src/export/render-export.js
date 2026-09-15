@@ -29,26 +29,87 @@ import { renderTimelineAudio, audibleClips } from '../audio/graph.js';
  * the machine is while rendering.
  */
 
-/** H.264 profile/level candidates, best first. Level must cover the resolution. */
-function codecCandidates(width, height, fps) {
-  const mb = Math.ceil(width / 16) * Math.ceil(height / 16);
-  const mbPerSec = mb * fps;
-  // Level thresholds in macroblocks/sec, coarse but sufficient to pick sanely.
-  const level =
-    mbPerSec > 522240 ? '33' :      // 5.1 — 4K60
-    mbPerSec > 245760 ? '32' :      // 5.0
-    mbPerSec > 245760 / 2 ? '2a' :  // 4.2 — 1080p60
-    '28';                           // 4.0 — 1080p30
-  return [
-    `avc1.6400${level}`,            // High
-    `avc1.4d40${level}`,            // Main
-    `avc1.42e0${level}`,            // Baseline — widest support
-    'avc1.42001f',                  // last resort
-  ];
+/**
+ * The H.264 levels, and what each one is allowed to do.
+ *
+ * A level is not just "how big a picture" — it also caps the BITRATE. That is
+ * what the previous version of this function missed: it picked a level from the
+ * resolution alone, so a 1080p30 export was handed level 4.0, whose ceiling is
+ * 20 Mbps. Ask for 80 Mbps and the encoder is being asked for something its own
+ * codec string forbids. What comes back is not an error — it is a file quietly
+ * encoded at a fraction of what was asked for, which looks like GameCut simply
+ * ignoring the setting. Recordings from Medal and OBS routinely sit at 50-100
+ * Mbps, so every export from that footage was being squeezed through a 20 Mbps
+ * pipe and handed back looking worse than the source.
+ *
+ * MaxMBPS  macroblocks per second   — resolution × frame rate
+ * MaxFS    macroblocks per frame    — resolution alone
+ * MaxBR    kbit/s, for Baseline/Main/Extended. High profile gets 1.25× this,
+ *          which is applied below rather than stored twice.
+ *
+ * Figures are from ITU-T H.264 Table A-1.
+ */
+const H264_LEVELS = [
+  { name: '3.0', idc: '1e', maxMBPS: 40500, maxFS: 1620, maxBR: 10000 },
+  { name: '3.1', idc: '1f', maxMBPS: 108000, maxFS: 3600, maxBR: 14000 },
+  { name: '3.2', idc: '20', maxMBPS: 216000, maxFS: 5120, maxBR: 20000 },
+  { name: '4.0', idc: '28', maxMBPS: 245760, maxFS: 8192, maxBR: 20000 },
+  { name: '4.1', idc: '29', maxMBPS: 245760, maxFS: 8192, maxBR: 50000 },
+  { name: '4.2', idc: '2a', maxMBPS: 522240, maxFS: 8704, maxBR: 50000 },
+  { name: '5.0', idc: '32', maxMBPS: 589824, maxFS: 22080, maxBR: 135000 },
+  { name: '5.1', idc: '33', maxMBPS: 983040, maxFS: 36864, maxBR: 240000 },
+  { name: '5.2', idc: '34', maxMBPS: 2073600, maxFS: 36864, maxBR: 240000 },
+  { name: '6.0', idc: '3c', maxMBPS: 4177920, maxFS: 139264, maxBR: 240000 },
+  { name: '6.1', idc: '3d', maxMBPS: 8355840, maxFS: 139264, maxBR: 480000 },
+  { name: '6.2', idc: '3e', maxMBPS: 16711680, maxFS: 139264, maxBR: 800000 },
+];
+
+/** The highest bitrate any H.264 level can carry, in bits/sec (6.2, High). */
+export const MAX_H264_BITRATE = 800_000 * 1000 * 1.25;
+
+/**
+ * The lowest level that can carry this picture at this bitrate.
+ *
+ * Lowest rather than highest on purpose: a level is a promise to the player
+ * about how much work decoding will be, and overstating it turns away hardware
+ * decoders that could have handled the file perfectly well.
+ *
+ * `highProfile` is separate because High profile's 1.25× bitrate allowance is
+ * the difference between 1080p at 62 Mbps needing level 4.2 and needing 5.0.
+ */
+export function levelFor(width, height, fps, bitrate, highProfile = true) {
+  const fs = Math.ceil(width / 16) * Math.ceil(height / 16);
+  const mbps = fs * fps;
+  const kbit = (bitrate || 0) / 1000;
+  const scale = highProfile ? 1.25 : 1;
+  return H264_LEVELS.find(l =>
+    l.maxFS >= fs && l.maxMBPS >= mbps && l.maxBR * scale >= kbit) || null;
+}
+
+/** H.264 profile/level candidates, best first. Level must cover the whole ask. */
+function codecCandidates(width, height, fps, bitrate) {
+  const high = levelFor(width, height, fps, bitrate, true);
+  const main = levelFor(width, height, fps, bitrate, false);
+  const out = [];
+  // High first: it is both the better compressor and the more generous level.
+  if (high) out.push(`avc1.6400${high.idc}`);
+  if (main) out.push(`avc1.4d40${main.idc}`, `avc1.42e0${main.idc}`);
+  // Only when NOTHING in the table can carry the ask: offer the ceiling, so an
+  // absurd request still produces the best file the format allows. Appending
+  // these unconditionally would be worse than useless — a 720p draft would be
+  // labelled level 6.2 (turning away hardware decoders that could play it), and
+  // a request the encoder refused at the right level would quietly succeed at
+  // the wrong one, which is the very bug this file was rewritten to stop.
+  if (!out.length) {
+    const top = H264_LEVELS[H264_LEVELS.length - 1];
+    out.push(`avc1.6400${top.idc}`, `avc1.4d40${top.idc}`);
+  }
+  return [...new Set(out)];
 }
 
 async function pickVideoCodec(config) {
-  for (const codec of codecCandidates(config.width, config.height, config.framerate)) {
+  for (const codec of codecCandidates(
+    config.width, config.height, config.framerate, config.bitrate)) {
     try {
       const { supported } = await VideoEncoder.isConfigSupported({ ...config, codec });
       if (supported) return codec;
@@ -158,11 +219,44 @@ export async function renderToMp4({
 
   const vConfig = {
     width, height, framerate: fps,
-    bitrate: Math.max(1_000_000, Math.round(vBitrate)),
+    bitrate: Math.min(MAX_H264_BITRATE, Math.max(1_000_000, Math.round(vBitrate))),
     latencyMode: 'quality',
   };
-  const codec = await pickVideoCodec(vConfig);
+
+  /**
+   * Find a codec, dropping the bitrate only if nothing will take it.
+   *
+   * The level table above says what H.264 permits; this machine's encoder is a
+   * second, separate opinion — an older hardware encoder can refuse a rate the
+   * format allows. Rather than failing the export outright, back off in halves
+   * and carry on, then say what happened. A slightly lower bitrate than asked
+   * for is a video; an exception is not.
+   */
+  let codec = await pickVideoCodec(vConfig);
+  let reducedFrom = 0;
+  while (!codec && vConfig.bitrate > 1_000_000) {
+    reducedFrom = reducedFrom || vConfig.bitrate;
+    vConfig.bitrate = Math.max(1_000_000, Math.round(vConfig.bitrate / 2));
+    codec = await pickVideoCodec(vConfig);
+  }
   if (!codec) throw new Error(`No H.264 encoder available for ${width}×${height} at ${fps}fps.`);
+
+  // Always announced, not only when something went wrong: this is the one
+  // moment the abstract request ("80 Mbps") becomes a concrete decision (which
+  // profile, which level, what the encoder was actually configured at), and it
+  // is what both the warning below and the export suite read.
+  onProgress?.({
+    phase: 'encoder',
+    codec,
+    requested: Math.round(vBitrate),
+    bitrate: vConfig.bitrate,
+    note: reducedFrom
+      ? `This machine's encoder would not take ${Math.round(reducedFrom / 1e6)} Mbps at `
+        + `${width}×${height}${fps ? ` ${fps}fps` : ''}. Exporting at `
+        + `${Math.round(vConfig.bitrate / 1e6)} Mbps instead.`
+      : '',
+    done: 0, total: 1, percent: 0,
+  });
 
   let encodeError = null;
   const videoEncoder = new VideoEncoder({

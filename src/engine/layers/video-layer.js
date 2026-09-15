@@ -1,5 +1,6 @@
 import { evalProp } from '../keyframes.js';
 import { roundRect } from './text-layer.js';
+import { fxActive, drawFx } from './fx.js';
 
 /**
  * Draws a video frame / still image with fit-contain framing, then applies the
@@ -26,6 +27,51 @@ export function sourceRect(clip, src) {
     sy: Math.min(fh - sh, Math.max(0, Math.round(c.y * fh))),
     sw, sh,
   };
+}
+
+/**
+ * Painted crop masks, decoded once and kept.
+ *
+ * The mask is a PNG on the clip, so it survives save and reload — but decoding
+ * a data URL on every frame would be absurd. Keyed by the string itself, which
+ * means two clips cut with the same mask share one image, and re-cropping a
+ * clip simply parks a new entry beside the old one.
+ */
+const MASKS = new Map();
+function maskImage(url) {
+  let img = MASKS.get(url);
+  if (img === undefined) {
+    img = new Image();
+    img.decoding = 'sync';
+    img.src = url;
+    MASKS.set(url, img);
+    // A mask that fails to load must not black out the clip forever.
+    img.addEventListener('error', () => MASKS.set(url, null), { once: true });
+  }
+  return img && img.complete && img.naturalWidth ? img : null;
+}
+
+/**
+ * Scratch canvas for masking. One, reused.
+ *
+ * Masking needs an off-screen copy of the piece so the alpha can be punched out
+ * of it before it reaches the frame; allocating that canvas per clip per frame
+ * is the kind of thing that shows up as stutter on a busy timeline rather than
+ * as an error anywhere.
+ */
+let scratch = null, sctx = null;
+function scratchAt(w, h) {
+  if (!scratch) {
+    scratch = document.createElement('canvas');
+    sctx = scratch.getContext('2d');
+  }
+  if (scratch.width < w || scratch.height < h) {
+    scratch.width = Math.max(scratch.width, Math.ceil(w));
+    scratch.height = Math.max(scratch.height, Math.ceil(h));
+  }
+  sctx.setTransform(1, 0, 0, 1, 0, 0);
+  sctx.clearRect(0, 0, scratch.width, scratch.height);
+  return sctx;
 }
 
 export function drawVisualClip(ctx, clip, src, W, H, t, alpha) {
@@ -80,12 +126,71 @@ export function drawVisualClip(ctx, clip, src, W, H, t, alpha) {
     ctx.clip();
   }
 
+  /**
+   * Anything that needs the layer as its own picture first.
+   *
+   * A painted crop mask and a look (glow, outline, tilt) both need the layer
+   * built off to one side before it can be composited — the mask because a soft
+   * edge cannot be had from `clip()`, the effects because they are drawn from
+   * the layer's own silhouette. So they share one path and one scratch canvas
+   * rather than each making their own copy.
+   */
+  const maskUrl = clip.crop?.mask;
+  const mimg = maskUrl ? maskImage(maskUrl) : null;
+  const fx = clip.fx;
+  const wantsFx = fxActive(fx);
+
+  if (mimg || wantsFx) {
+    const cw = Math.max(1, Math.ceil(dw)), ch = Math.max(1, Math.ceil(dh));
+    // Absurd sizes come from a layer scaled up 20×; building a 30k-pixel canvas
+    // would hang the frame, and falling back to the plain picture is a far
+    // better failure than a stall.
+    if (cw <= 8192 && ch <= 8192) {
+      const s = scratchAt(cw, ch);
+      try {
+        s.imageSmoothingQuality = 'high';
+        s.drawImage(src, sx, sy, sw, sh, 0, 0, cw, ch);
+        if (mimg) {
+          s.globalCompositeOperation = 'destination-in';
+          s.drawImage(mimg, 0, 0, cw, ch);
+          s.globalCompositeOperation = 'source-over';
+        }
+        if (wantsFx) {
+          // The piece is exactly cw×ch of a bigger canvas, so hand the effects
+          // a tight copy rather than the whole scratch.
+          drawFx(ctx, cropCanvas(scratch, cw, ch), fx, dw, dh, alpha);
+        } else {
+          ctx.drawImage(scratch, 0, 0, cw, ch, -dw / 2, -dh / 2, dw, dh);
+        }
+        ctx.restore();
+        return;
+      } catch { /* frame not ready — fall through to the plain draw */ }
+    }
+  }
+
   try {
     // Nine-argument form: take only the cropped rectangle out of the source.
     // An uncropped clip passes the whole frame, so there is one code path.
     ctx.drawImage(src, sx, sy, sw, sh, -dw / 2, -dh / 2, dw, dh);
   } catch { /* frame not ready */ }
   ctx.restore();
+}
+
+/**
+ * The top-left w×h of a scratch canvas, as a canvas of exactly that size.
+ *
+ * The effects code measures its input, and a scratch canvas is deliberately
+ * bigger than what is in it — handing that over would put the layer in the
+ * corner of a much larger transparent rectangle and throw every offset out.
+ */
+let tight = null;
+function cropCanvas(from, w, h) {
+  if (!tight) tight = document.createElement('canvas');
+  if (tight.width !== w || tight.height !== h) { tight.width = w; tight.height = h; }
+  const c = tight.getContext('2d');
+  c.clearRect(0, 0, w, h);
+  c.drawImage(from, 0, 0, w, h, 0, 0, w, h);
+  return tight;
 }
 
 /** Solid / gradient shape layer — used for lower thirds, bars, letterboxes. */

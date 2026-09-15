@@ -49,6 +49,13 @@ function firstGap(track, from, dur) {
  *
  * Returns the created clip, or null.
  */
+/**
+ * @param at.patch  extra fields folded into the clip BEFORE it is added.
+ *   Whoever places the clip usually wants it to arrive already configured — a
+ *   graphic with a look and a size, say. Setting those afterwards works but
+ *   costs one undo step each, so undoing "add a graphic" walks backwards
+ *   through four states, three of which nobody ever asked for.
+ */
 export function placeAsset(store, cmds, assetId, at = {}) {
   const asset = assets.get(assetId);
   if (!asset || asset.kind === 'font') return null;
@@ -83,9 +90,11 @@ export function placeAsset(store, cmds, assetId, at = {}) {
     start,
     duration: dur,
     sourceDuration: asset.duration || Infinity,
+    ...(at.patch || {}),
   });
+  if (at.patch?.transform) clip.transform = { ...clip.transform, ...at.patch.transform };
 
-  cmds.addClip(track.id, clip, { label: 'Add media' });
+  cmds.addClip(track.id, clip, { label: at.label || 'Add media' });
   bus.emit('toast', { msg: `${clip.name} → ${track.name}`, kind: 'ok' });
   return clip;
 }

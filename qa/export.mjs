@@ -6,7 +6,7 @@
  */
 import { _electron as electron } from 'playwright';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { rm, writeFile } from 'node:fs/promises';
+import { rm, writeFile, stat } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 
 const ROOT = '/home/claude/gamecut';
@@ -303,6 +303,83 @@ await step('the frame-exact option is offered and reaches the renderer', async (
   await sleep(150);
 });
 
+/**
+ * The custom quality controls.
+ *
+ * Typed into rather than clicked at, because the whole point of the number box
+ * is "my recorder says 82 and I want 82" — a slider can get near it and never
+ * land on it. The tile above has to agree with the box, or the size estimate
+ * the person is shown is a different export from the one they get.
+ */
+await step('custom quality can be typed in and reaches the tile', async () => {
+  await win.evaluate(() => document.getElementById('btnExport').click());
+  await sleep(250);
+
+  const before = await win.evaluate(() => ({
+    hasTile: !!document.querySelector('[data-preset="custom"]'),
+    panelHidden: document.getElementById('xpCustom')?.hidden,
+  }));
+  if (!before.hasTile) throw new Error('no Custom tile in the export dialog');
+  if (before.panelHidden !== true) throw new Error('the custom controls should stay shut until Custom is picked');
+
+  await win.evaluate(() => document.querySelector('[data-preset="custom"]').click());
+  await sleep(120);
+  if (await win.evaluate(() => document.getElementById('xpCustom')?.hidden)) {
+    throw new Error('picking Custom did not open its controls');
+  }
+
+  // Type a number that is on no preset and no slider step.
+  await win.fill('#xpRate', '');
+  await win.type('#xpRate', '82');
+  await sleep(150);
+
+  const r = await win.evaluate(() => ({
+    box: document.getElementById('xpRate').value,
+    slider: Number(document.getElementById('xpRateSlide').value),
+    tile: document.querySelector('[data-preset="custom"] .xp__meta')?.textContent || '',
+  }));
+  if (r.box !== '82') throw new Error(`the box rewrote what was typed: "${r.box}"`);
+  if (Math.abs(r.slider - 82e6) > 1e6) throw new Error(`the slider did not follow the box: ${r.slider}`);
+  if (!/82 Mbps/.test(r.tile)) throw new Error(`the tile says "${r.tile.trim()}", not 82 Mbps`);
+
+  // Half a megabit has to survive, or the slider's own steps cannot be typed
+  // back in: drag to 8.5, blur the box, and it would silently become 9.
+  await win.fill('#xpRate', '');
+  await win.type('#xpRate', '8.5');
+  await win.evaluate(() => document.getElementById('xpRate').blur());
+  await sleep(150);
+  const half = await win.evaluate(() => ({
+    box: document.getElementById('xpRate').value,
+    tile: document.querySelector('[data-preset="custom"] .xp__meta')?.textContent || '',
+  }));
+  if (half.box !== '8.5') throw new Error(`blurring rewrote 8.5 as "${half.box}"`);
+  if (!/8\.5 Mbps/.test(half.tile)) throw new Error(`the tile lost the half: "${half.tile.trim()}"`);
+
+  // Clearing the box is not a request for the minimum bitrate.
+  await win.fill('#xpRate', '');
+  await win.evaluate(() => document.getElementById('xpRate').blur());
+  await sleep(150);
+  const cleared = await win.evaluate(() => document.getElementById('xpRate').value);
+  if (cleared !== '8.5') throw new Error(`an emptied box committed "${cleared}" instead of keeping 8.5`);
+
+  await win.fill('#xpRate', '');
+  await win.type('#xpRate', '82');
+  await sleep(120);
+
+  // Frame rate and size are the other two things a fixed preset cannot give.
+  await win.selectOption('#xpFps', '120');
+  await win.selectOption('#xpScale', '2');
+  await sleep(120);
+  const after = await win.evaluate(() =>
+    document.querySelector('[data-preset="custom"] .xp__meta')?.textContent || '');
+  if (!/120fps/.test(after)) throw new Error(`frame rate did not reach the tile: "${after.trim()}"`);
+  if (!/3840×2160/.test(after)) throw new Error(`size did not reach the tile: "${after.trim()}"`);
+
+  await win.evaluate(() => document.querySelector('#exportModal [data-close]')?.click());
+  await sleep(150);
+  console.log(`     ${after.trim().replace(/\s+/g, ' ')}`);
+});
+
 await step('the finished export offers the YouTube handoff', async () => {
   const r = await win.evaluate(async () => {
     const mod = await import('app://gamecut/src/export/export-dialog.js');
@@ -326,6 +403,81 @@ await step('the finished export offers the YouTube handoff', async () => {
   await win.evaluate(() => document.querySelector('#exportModal [data-close]')?.click());
   await sleep(150);
   console.log(`     "${r.label}" offered alongside Show file`);
+});
+
+/**
+ * A high bitrate is actually delivered.
+ *
+ * This is the bug that made exports of Medal and OBS footage look softer than
+ * the recording: the H.264 LEVEL was chosen from the resolution alone, and a
+ * level caps bitrate as well as picture size. Level 4.0 tops out at 25 Mbps on
+ * High profile, so asking for 80 handed the encoder a codec string that forbade
+ * what was being asked for — no error, no warning, just a worse picture.
+ *
+ * Two assertions, because each covers a different half:
+ *   · the encoder must be CONFIGURED at the rate asked for, on a level that can
+ *     carry it — that is the part GameCut controls;
+ *   · that level must survive into the finished file, which proves the config
+ *     was not quietly rewritten on the way through.
+ *
+ * What the encoder then SPENDS is its own business: how many bits a picture can
+ * absorb depends on the picture. The fixture here is simple synthetic footage
+ * that tops out around 1.7 Mbps however much it is offered, so the bytes on
+ * disk are reported below rather than asserted on — a size test here would pass
+ * or fail on the fixture rather than on the code.
+ */
+const MP4_HI = `${OUT}/export-high-bitrate.mp4`;
+const ASKED = 80_000_000;
+
+await step('a high bitrate is honoured, not silently capped', async () => {
+  const r = await win.evaluate(async (asked) => {
+    const { renderToMp4 } = await import('app://gamecut/src/export/render-export.js');
+    let cfg = null;
+    const bytes = await renderToMp4({
+      store: window.gc.store, width: 640, height: 360, fps: 30,
+      vBitrate: asked, aBitrate: 128_000,
+      shouldCancel: () => false,
+      onProgress: (p) => { if (p.phase === 'encoder') cfg = p; },
+    });
+    if (!bytes) return { cfg, b64: null };
+    let s = ''; const CH = 0x8000;
+    for (let i = 0; i < bytes.length; i += CH) {
+      s += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+    }
+    return { cfg, b64: btoa(s) };
+  }, ASKED, { timeout: 180_000 });
+
+  if (!r.b64) throw new Error('the high-bitrate render produced nothing');
+  if (!r.cfg) throw new Error('the renderer never reported which encoder it configured');
+  if (r.cfg.bitrate !== ASKED) {
+    throw new Error(`asked for ${ASKED / 1e6} Mbps but the encoder was configured at `
+      + `${r.cfg.bitrate / 1e6} Mbps${r.cfg.note ? ` — ${r.cfg.note}` : ''}`);
+  }
+
+  // avc1.PPCCLL — the last two hex digits are level_idc. 0x32 is level 5.0,
+  // the lowest that can carry 80 Mbps.
+  const idc = parseInt(String(r.cfg.codec).slice(-2), 16);
+  if (!(idc >= 0x32)) {
+    throw new Error(`configured codec ${r.cfg.codec} is level ${(idc / 10).toFixed(1)}, `
+      + 'which cannot carry 80 Mbps — the level is being chosen from the resolution alone');
+  }
+
+  const buf = Buffer.from(r.b64, 'base64');
+  await writeFile(MP4_HI, buf);
+  const v = JSON.parse(execFileSync('ffprobe', [
+    '-v', 'error', '-select_streams', 'v:0', '-print_format', 'json',
+    '-show_streams', MP4_HI,
+  ], { encoding: 'utf8' })).streams[0];
+
+  if (Number(v.level) !== idc) {
+    throw new Error(`configured level ${(idc / 10).toFixed(1)} but the file says `
+      + `${(Number(v.level) / 10).toFixed(1)} — the config did not reach the file`);
+  }
+
+  const baseline = (await stat(MP4)).size;
+  console.log(`     configured ${r.cfg.codec} at ${r.cfg.bitrate / 1e6} Mbps · file says level `
+    + `${(Number(v.level) / 10).toFixed(1)} · ${(buf.length / 1024).toFixed(0)} KB `
+    + `vs ${(baseline / 1024).toFixed(0)} KB at 4 Mbps (this fixture cannot absorb more)`);
 });
 
 await step('cancelling mid-render returns nothing', async () => {

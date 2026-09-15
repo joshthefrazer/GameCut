@@ -1,4 +1,5 @@
 import { bus, raf } from '../../core/events.js';
+import { createTransPreview, grabCutFrames } from './trans-preview.js';
 import {
   TRANSITION_PICKS, DEFAULT_TRANS_DUR, pickFor, junctions, maxDurFor,
 } from '../../engine/transitions.js';
@@ -23,6 +24,99 @@ export function initTransitions({ store, cmds, comp, playback }) {
   if (!root) return { refresh() {} };
 
   const rerender = raf(build);
+
+  /* ── The moving preview ───────────────────────────────────────
+     Built once and re-appended on every rebuild rather than recreated, so
+     hovering a tile does not throw away frames that took a seek to capture. */
+  const stage = document.createElement('div');
+  stage.className = 'trs__stage';
+  stage.innerHTML = `<canvas class="trs__cv" id="transPreview"></canvas>
+    <div class="trs__cap" id="transPreviewCap"></div>`;
+  const preview = createTransPreview(stage.querySelector('canvas'));
+  const cap = stage.querySelector('.trs__cap');
+
+  /** Which cut the frames in hand belong to, and which one is being fetched. */
+  let framesKey = null;
+  let grabbing = false;
+  let wanted = null;
+
+  /** Is this panel the one on screen? */
+  const onScreen = () =>
+    !!document.querySelector('#leftPanel .tabpane[data-pane="trans"]')?.classList.contains('is-active');
+
+  const keyOf = (j) => (j ? `${j.prev.id}|${j.next.id}|${j.t.toFixed(3)}` : null);
+
+  /**
+   * Get one frame from either side of the cut, at most once at a time.
+   *
+   * Three things this must not do, each of which it did:
+   *
+   * - Run while the timeline is playing. Grabbing a frame seeks a decoder and
+   *   waits on it, so pressing a clip during playback froze the picture for
+   *   seconds while the sound carried on.
+   * - Run while the tab is not on screen. `build()` is driven by selection and
+   *   document events, which fire whether or not anyone has ever opened this
+   *   panel.
+   * - Forget a request made while another was in flight. Clicking cut A then
+   *   cut B used to leave A's frames on screen for good, because the key had
+   *   already been recorded against the grab that was still running.
+   */
+  async function ensureFrames(j) {
+    wanted = keyOf(j);
+    if (!onScreen() || store.rt.playing) return;
+    if (wanted === framesKey || grabbing) return;
+    if (!j) { framesKey = null; preview.setFrames(null); return; }
+
+    grabbing = true;
+    const key = wanted;
+    stage.classList.add('is-loading');
+    try {
+      preview.setFrames(await grabCutFrames(j, { store, comp }));
+      framesKey = key;
+    } catch {
+      preview.setFrames(null);
+      framesKey = null;      // so the same cut can be tried again
+    } finally {
+      grabbing = false;
+      stage.classList.remove('is-loading');
+      showCurrent();
+      // Somebody picked a different cut while that was running.
+      if (wanted !== framesKey) ensureFrames(target());
+    }
+  }
+
+  /** Park the preview on whatever this cut is actually set to. */
+  function showCurrent() {
+    // A canvas inside a hidden pane redrawing at 60fps is pure waste, and it
+    // competes with the decoder and the compositor for exactly the machine the
+    // person is trying to play their timeline on.
+    if (!onScreen()) { preview.stop(); return; }
+    const j = target();
+    const cur = j ? pickFor(j.next) : null;
+    if (!preview.hasFrames) {
+      cap.textContent = j ? 'This cut has no frames to show yet.' : 'Pick a cut to see it here.';
+      preview.show(null);
+      return;
+    }
+    if (cur) {
+      preview.show(cur, j.next.transIn?.dur ?? DEFAULT_TRANS_DUR);
+      cap.textContent = `${cur.name} \u00b7 on this cut`;
+    } else {
+      preview.show(null);
+      cap.textContent = 'A hard cut \u2014 hover a tile below to try one';
+    }
+  }
+
+  /** Show a transition that is not (yet) set, while the pointer is over it. */
+  function previewPick(pick) {
+    // The caption is worth having even when there are no frames to move \u2014 an
+    // image-only cut, or footage still loading. Describing it beats a silent
+    // black rectangle that looks broken.
+    cap.textContent = `${pick.name} \u2014 ${pick.blurb}`;
+    if (!preview.hasFrames) return;
+    const j = target();
+    preview.show(pick, j?.next.transIn?.dur ?? DEFAULT_TRANS_DUR);
+  }
 
   /* ── Which cut are we pointing at? ─────────────────────────── */
 
@@ -138,6 +232,7 @@ export function initTransitions({ store, cmds, comp, playback }) {
     const j = target();
     const cur = j ? pickFor(j.next) : null;
     root.innerHTML = '';
+    root.appendChild(stage);
 
     /* Which cut, in words. */
     const head = document.createElement('div');
@@ -167,8 +262,13 @@ export function initTransitions({ store, cmds, comp, playback }) {
       b.querySelector('.trs__name').textContent = pick.name;
       b.title = pick.blurb;
       b.addEventListener('click', () => apply(pick));
+      // Hovering shows it running on your own two shots. Focus does the same,
+      // so this is reachable by keyboard rather than being a mouse-only feature.
+      b.addEventListener('pointerenter', () => previewPick(pick));
+      b.addEventListener('focus', () => previewPick(pick));
       grid.appendChild(b);
     }
+    grid.addEventListener('pointerleave', showCurrent);
     root.appendChild(grid);
 
     /* Length + remove, only once there is something to adjust. */
@@ -187,12 +287,21 @@ export function initTransitions({ store, cmds, comp, playback }) {
       rng.max = String(max.toFixed(2));
       rng.value = String(dur);
       val.textContent = dur.toFixed(2) + 's';
+      // Same trap as every other live-dragging control: the slider writes onto
+      // the document as it moves, so by the time the command runs, the snapshot
+      // it takes as "before" is already the "after" and Ctrl+Z does nothing.
+      let durBefore = dur;
+      rng.addEventListener('pointerdown', () => { durBefore = target()?.next.transIn?.dur ?? dur; });
       rng.addEventListener('input', () => {
         val.textContent = (+rng.value).toFixed(2) + 's';
         const t = target();
         if (t?.next.transIn) { t.next.transIn.dur = +rng.value; comp.render(); }
       });
-      rng.addEventListener('change', () => setDur(+rng.value));
+      rng.addEventListener('change', () => {
+        const t = target();
+        if (t?.next.transIn) t.next.transIn.dur = durBefore;
+        setDur(+rng.value);
+      });
       wrap.querySelector('.trs__note').textContent =
         'It sits across the cut — half before, half after — so the shot still '
         + 'changes exactly where you cut it.';
@@ -224,6 +333,9 @@ export function initTransitions({ store, cmds, comp, playback }) {
       });
       root.appendChild(all);
     }
+
+    ensureFrames(j);
+    showCurrent();
   }
 
   /* ── Opening the tab ──────────────────────────────────────── */
@@ -237,6 +349,16 @@ export function initTransitions({ store, cmds, comp, playback }) {
   store.on('doc', rerender);
   store.on('rt', (patch) => { if ('junction' in patch) rerender(); });
 
+  // Coming back to the tab, or stopping playback, is the moment to catch up on
+  // anything that was deliberately skipped while it was hidden or rolling.
+  const catchUp = () => {
+    if (!onScreen()) { preview.stop(); return; }
+    ensureFrames(target());
+    showCurrent();
+  };
+  document.getElementById('leftTabs')?.addEventListener('click', () => setTimeout(catchUp, 0));
+  store.on('rt', (patch) => { if (patch && 'playing' in patch && !patch.playing) catchUp(); });
+
   build();
-  return { refresh: rerender, open, target };
+  return { refresh: rerender, open, target, preview };
 }

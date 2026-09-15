@@ -36,6 +36,17 @@ export function initShortcuts({ store, cmds, history, playback, timeline, previe
     switch (e.key) {
       case ' ':
         e.preventDefault(); playback.toggle(); break;
+      /* Enter on a selected title starts typing on it, the way renaming works
+         in every file manager. `typing()` above means this can never fire while
+         the field it opens has focus. */
+      case 'Enter': {
+        const sel = store.selectedClips;
+        if (sel.length === 1 && sel[0].clip.type === 'text') {
+          e.preventDefault();
+          bus.emit('text:edit', { clipId: sel[0].clip.id });
+        }
+        break;
+      }
       case 'ArrowLeft':
         e.preventDefault(); nudge(e.shiftKey ? -fps : -1); break;
       case 'ArrowRight':

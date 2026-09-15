@@ -29,7 +29,7 @@ export const TIPS = {
   /* Preview */
   tglGuides:    { t: 'Safe guides',     d: 'Faint boxes showing where phone apps put their own buttons over your video. Keep text inside them.' },
   tglGrid:      { t: 'Thirds grid',     d: 'A 3×3 grid. Putting your subject on a line usually looks better than dead centre.' },
-  btnCrop:      { t: 'Crop tool',       d: 'Cut a piece out of the picture. Drag a box, or switch to Draw and trace any shape freehand. The piece becomes its own layer on top that you can move and resize — the original clip is untouched.', k: 'C' },
+  btnCrop:      { t: 'Crop tool',       d: 'Opens the crop room: the frame on its own, as big as the screen, zoom in as far as you like. Drag a box, or paint the exact shape with a brush \u2014 Keep paints what stays, Remove paints what goes. What you cut becomes its own layer on top that you can move and resize; the original clip is untouched.', k: 'C' },
   tglSnap:      { t: 'Snapping',        d: 'Clips jump to line up with each other, the playhead and the beat grid while you drag. Hold Alt to ignore it for one drag.', k: 'N' },
   previewQuality: { t: 'Preview quality', d: 'How sharp the preview window is while you work. Lower it if playback stutters with long or 4K footage. It has no effect on the exported file.' },
   fpsChip:      { t: 'Preview speed',   d: 'Frames per second the preview is managing right now. If it drops a lot, turn the preview quality down.' },
@@ -49,7 +49,7 @@ export const TIPS = {
   btnSplit:     { t: 'Split',           d: 'Cut the selected clip in two at the playhead. With nothing selected it splits every clip the playhead is over.', k: 'S' },
   btnDelete:    { t: 'Delete',          d: 'Remove whatever is selected from the timeline. The file stays in your Media panel.', k: 'Del' },
   btnDuplicate: { t: 'Duplicate',       d: 'Make a copy of the selection right after it.', k: 'Ctrl+D' },
-  btnAddText:   { t: 'Add text',        d: 'Drop a text layer at the playhead, then type and style it in the Inspector on the right.', k: 'T' },
+  btnAddText:   { t: 'Add text',        d: 'Drop a text layer at the playhead. Double-click the words on the preview \u2014 or press Enter with the layer selected \u2014 to type straight onto the picture; the Inspector on the right is for how it looks.', k: 'T' },
   btnMarker:    { t: 'Add marker',      d: 'Pin a coloured flag on the ruler so you can find a moment again later.', k: 'M' },
   btnRipple:    { t: 'Ripple edit',     d: 'When on, deleting or trimming a clip pulls everything after it back so there is no gap left behind.' },
   btnMagnet:    { t: 'Magnet',          d: 'The same snapping as the Snap button above the preview — clips line up to each other and to the beat.', k: 'N' },
@@ -62,6 +62,7 @@ export const TIPS = {
   /* Panels */
   tabMedia:     { t: 'Media',           d: 'Everything you have imported. Hover a tile and press + , or double-click it, to put it on the timeline at the playhead.' },
   tabTrans:     { t: 'Transitions',     d: 'How one shot becomes the next. Click the ⋈ button on any cut in the timeline, then pick a tile here — Dissolve, Dip to black or a Slide.' },
+  tabGfx:       { t: 'Graphics',        d: 'Images that go ON your footage — logos, emotes, cut-outs, screenshots. Pick how it should land (shadow, glow, sticker edge, 3D tilt), then click one to drop it on the picture. Everything about it stays adjustable in the Inspector afterwards.' },
   rightTabs:    { t: 'Inspector',       d: 'Settings for whatever is selected — timing, position, text, transitions. With nothing selected it shows the project settings.' },
 };
 

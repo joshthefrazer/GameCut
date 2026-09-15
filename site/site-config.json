@@ -11,7 +11,7 @@
   "links": [],
   "_lastInstaller": "Filled in by npm run release so the Download button keeps working on releases that did not rebuild the .exe. Leave it alone.",
   "lastInstaller": {
-    "name": "GameCut-1.5.0-x64.exe",
-    "version": "1.5.0"
+    "name": "GameCut-1.6.0-x64.exe",
+    "version": "1.6.0"
   }
 }

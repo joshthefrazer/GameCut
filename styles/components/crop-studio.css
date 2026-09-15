@@ -1,0 +1,80 @@
+/* ── The crop studio ──────────────────────────────────────────
+   A full-window room with one job. It sits above everything because
+   half-measures — a panel, a popover — are how the old crop tool ended
+   up too small to aim with. */
+.cropst{
+  position:fixed;inset:0;z-index:900;
+  display:flex;flex-direction:column;
+  background:rgba(4,8,16,.97);
+  animation:cropst-in .18s var(--ease-out) both;
+}
+@keyframes cropst-in{from{opacity:0}to{opacity:1}}
+
+.cropst__bar{
+  flex:none;display:flex;align-items:center;gap:8px;
+  padding:9px 12px;
+  background:var(--glass-bg);
+  border-bottom:1px solid var(--glass-line);
+  box-shadow:var(--sh-panel);
+}
+.cropst__tools,.cropst__paint{display:flex;gap:4px}
+.cropst__spacer{flex:1}
+.cropst__sep{width:1px;height:22px;background:var(--glass-line);flex:none}
+
+.cst{
+  height:32px;padding:0 12px;border-radius:var(--r-md);
+  display:inline-flex;align-items:center;gap:7px;
+  border:1px solid var(--glass-line);background:var(--surface);
+  color:var(--txt-1);font-size:12.5px;font-weight:600;
+  transition:all var(--dur) var(--ease);
+}
+.cst:hover{color:var(--txt-0);background:var(--surface-hi);border-color:var(--glass-line-2)}
+.cst svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.7;
+  stroke-linecap:round;stroke-linejoin:round}
+.cst.is-on{color:#fff;background:var(--acc);border-color:transparent;box-shadow:var(--glow-acc)}
+.cst--sm{height:30px;padding:0 11px;font-size:12px}
+.cst--ic{width:30px;height:30px;padding:0;justify-content:center;font-size:16px;line-height:1}
+.cst--ghost{background:transparent;border-color:transparent;color:var(--txt-2)}
+.cst--ghost:hover{color:var(--txt-0);background:var(--surface)}
+.cst--go{
+  background:var(--acc);border-color:transparent;color:#fff;
+  padding:0 16px;box-shadow:var(--glow-acc);
+}
+.cst--go:hover{background:var(--acc-hi)}
+
+/* The Keep / Remove pair only means anything with a brush in hand. */
+.cropst__paint,.cropst__slide{opacity:.42;pointer-events:none;transition:opacity var(--dur) var(--ease)}
+.cropst.is-brush .cropst__paint,.cropst.is-brush .cropst__slide{opacity:1;pointer-events:auto}
+.cst[data-paint="remove"].is-on{background:var(--danger);box-shadow:none}
+
+.cropst__slide{display:flex;align-items:center;gap:7px;margin-right:6px;font-size:11.5px;color:var(--txt-2)}
+.cropst__slide span{font-weight:600}
+.cropst__slide b{
+  min-width:26px;text-align:right;color:var(--txt-1);
+  font:600 11.5px/1 var(--f-mono);font-variant-numeric:tabular-nums;
+}
+.cropst__slide input[type=range]{width:92px;accent-color:var(--acc)}
+
+.cropst__zoom{display:flex;align-items:center;gap:6px;margin-right:6px}
+.cropst__zoom b{
+  min-width:46px;text-align:center;color:var(--txt-1);
+  font:600 12px/1 var(--f-mono);font-variant-numeric:tabular-nums;
+}
+
+.cropst__stage{position:relative;flex:1;min-height:0;overflow:hidden}
+.cropst__cv{display:block;width:100%;height:100%;cursor:crosshair;touch-action:none}
+.cropst.is-brush .cropst__cv{cursor:none}
+.cropst.is-panning .cropst__cv{cursor:grab}
+
+.cropst__hint{
+  position:absolute;left:50%;bottom:16px;transform:translateX(-50%);
+  padding:7px 14px;border-radius:999px;
+  background:rgba(8,14,26,.86);border:1px solid var(--glass-line);
+  color:var(--txt-1);font-size:12px;font-weight:550;white-space:nowrap;
+  pointer-events:none;box-shadow:var(--sh-pop);
+}
+
+@media (max-width:1100px){
+  .cropst__slide span{display:none}
+  .cropst__slide input[type=range]{width:64px}
+}

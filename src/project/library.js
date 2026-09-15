@@ -26,6 +26,7 @@ function assetRecord(a) {
   return {
     id: a.id, kind: a.kind, name: a.name, path: a.path || null,
     duration: a.duration || 0,
+    bytes: a.bytes || 0,
     width: a.width || 0, height: a.height || 0,
     thumb: a.thumb || null,
     streamAudio: !!a.streamAudio,

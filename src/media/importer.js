@@ -67,6 +67,10 @@ async function importVideo(file) {
     name: file.name,
     file, url, path,
     duration: el.duration || 0,
+    // Kept so the export dialog can work out what the footage was recorded at
+    // and offer to match it. `file` itself is gone once a project is reopened
+    // from disk, so the size has to be remembered rather than measured again.
+    bytes: file.size || 0,
     width: el.videoWidth, height: el.videoHeight,
     thumb: null,
     peaks: null,
@@ -174,6 +178,7 @@ async function importAudio(file) {
     name: file.name,
     file, url, path,
     duration: seconds,
+    bytes: file.size || 0,
     peaks: null,
   });
 
@@ -202,6 +207,7 @@ async function importImage(file) {
     kind: 'image',
     name: file.name,
     file, url, path,
+    bytes: file.size || 0,
     duration: 5,                  // default still duration
     width: img.naturalWidth, height: img.naturalHeight,
     thumb: url,
