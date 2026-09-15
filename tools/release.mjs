@@ -54,8 +54,46 @@ const SITE = path.isAbsolute(siteCfg.publishDir || '')
   : path.join(ROOT, siteCfg.publishDir || path.join('dist', 'site'));
 const DIRS = ['src', 'styles', 'vendor', 'assets'];
 const FILES = ['index.html'];
-/** Changing any of these means the .exe has to be rebuilt and reinstalled. */
-const NATIVE = ['electron-main.cjs', 'preload.cjs', 'package.json', 'update-config.json', 'updater.cjs'];
+/**
+ * Two different questions, which used to share one answer.
+ *
+ * REBUILD — "does the .exe need building again?" A version bump alone is enough:
+ * the number is baked into the installer's name, its Add/Remove entry and its
+ * version resource. So is the publisher name, and so is anything under "build".
+ *
+ * SHELL — "can an existing install take this release as a file swap?" Only the
+ * main process can answer that, and it is a much shorter list. An update
+ * replaces the editor's files; it cannot replace the code that loads them.
+ *
+ * Conflating the two is what made every release since 1.5.0 report a shell
+ * change on its first pass — because bumping the version edits package.json —
+ * and it would have made the flag useless in the other direction too: an
+ * `needsInstaller: true` on every single release trains people to ignore it.
+ */
+const SHELL = ['electron-main.cjs', 'preload.cjs', 'update-config.json', 'updater.cjs'];
+/**
+ * SHELL, plus everything that changes what the INSTALLER looks like or calls
+ * itself. None of this reaches an existing install — an icon is not code — but
+ * all of it is baked into the .exe, so a release that changes any of it and
+ * does not rebuild ships a download that still wears the old logo and credits
+ * the old publisher, which is exactly what 1.6.0 was for.
+ */
+const REBUILD = [...SHELL,
+  path.join('build', 'installer.nsh'),
+  path.join('build', 'icon.ico'),
+  path.join('build', 'installer-side.bmp')];
+/**
+ * The parts of package.json a file update cannot deliver.
+ *
+ * `main` names the file Electron runs, `dependencies` are what ends up in
+ * node_modules inside the asar, and `build` decides how the app is packaged.
+ * Change any of those and the shell someone already has is the wrong shell.
+ * `version`, `author`, `scripts` and the rest are not in here on purpose: they
+ * matter to the installer, not to whether the editor can be swapped in.
+ */
+const SHELL_PKG_FIELDS = ['main', 'dependencies', 'build'];
+/** What the installer takes from package.json: its name, its publisher, its packaging. */
+const REBUILD_PKG_FIELDS = [...SHELL_PKG_FIELDS, 'author', 'productName', 'description', 'copyright'];
 const NATIVE_STAMP = path.join(ROOT, 'dist', '.native-hash');
 const KEY_FILE = process.env.GAMECUT_KEY
   || path.join(process.env.GAMECUT_KEY_DIR || path.join(homedir(), '.gamecut'), 'signing-key.pem');
@@ -113,14 +151,76 @@ for (const d of DIRS) {
 }
 
 /* ── Did anything that needs a rebuild change? ───────────────── */
-const nh = createHash('sha256');
-for (const n of NATIVE) {
-  try { nh.update(await readFile(path.join(ROOT, n))); } catch { /* absent */ }
+/**
+ * A fingerprint of some files plus some package.json fields.
+ *
+ * `version` is in neither list, deliberately. Bumping it is what a release IS,
+ * so counting it as a change would make every release report that everything
+ * changed — which is how "the app shell changed" came to be printed on every
+ * single publish, and why nobody would have believed it when it mattered.
+ */
+async function fingerprint(list, pkgFields) {
+  const h = createHash('sha256');
+  for (const n of list) {
+    try { h.update(await readFile(path.join(ROOT, n))); } catch { h.update('absent'); }
+  }
+  h.update(JSON.stringify(pkgFields.map(f => pkg[f] ?? null)));
+  return h.digest('hex').slice(0, 16);
 }
-const nativeHash = nh.digest('hex').slice(0, 16);
-let previousNative = null;
-try { previousNative = (await readFile(NATIVE_STAMP, 'utf8')).trim(); } catch { /* first release */ }
-const shellChanged = previousNative !== null && previousNative !== nativeHash;
+const nativeHash = await fingerprint(REBUILD, REBUILD_PKG_FIELDS);
+const shellHash = await fingerprint(SHELL, SHELL_PKG_FIELDS);
+
+/**
+ * Did the shell change since the last RELEASE — not since the last run?
+ *
+ * PUBLISH.bat runs this script twice for a release that needs a new .exe: once
+ * to discover that it does, then again once the installer has been built so it
+ * can be copied in beside the manifest. The stamp is rewritten on every run, so
+ * comparing "since last run" made the second pass compare against the first —
+ * against itself — conclude nothing had changed, and publish a manifest saying
+ * `needsInstaller: false`.
+ *
+ * That is the worst possible answer. It tells every existing install it can
+ * take this release as a file update, when the whole reason the release needed
+ * an installer is that a file update cannot carry a new main process. The
+ * result would be the new editor running on the old shell: no error anyone
+ * could act on, just an app that half works.
+ *
+ * The second pass is not "a new release with an unchanged shell" — it is the
+ * SAME release, run again with the installer now built. The two are told apart
+ * by version and fingerprint together, and the verdict is remembered rather
+ * than recomputed. Editing the main process without bumping the version still
+ * reports a change, and a later version with renderer-only edits still installs
+ * by itself rather than demanding an installer forever after one that needed one.
+ */
+let stamp = null;
+try {
+  const raw = (await readFile(NATIVE_STAMP, 'utf8')).trim();
+  // Stamps written before this fix are a bare fingerprint of the old combined
+  // list. There is nothing useful to carry forward from one, so it is treated
+  // as "no previous release" rather than compared against a different formula.
+  stamp = raw.startsWith('{') ? JSON.parse(raw) : null;
+} catch { /* first release on this machine */ }
+
+const samePublish = !!stamp
+  && stamp.version === version
+  && stamp.hash === nativeHash
+  && stamp.shellHash === shellHash;
+
+const shellChanged = samePublish
+  ? !!stamp.shellChanged
+  : (stamp ? stamp.shellHash !== shellHash : false);
+
+/**
+ * Whether the .exe itself is out of date — a different question. See REBUILD.
+ *
+ * Not true on a first run with no stamp: someone who has simply never built a
+ * Windows binary is in an ordinary state, and the missing-installer clause
+ * further down covers the case that actually matters.
+ */
+const rebuildNeeded = samePublish
+  ? !!stamp.rebuildNeeded
+  : (stamp ? stamp.hash !== nativeHash : false);
 
 /* ── Release notes ───────────────────────────────────────────── */
 
@@ -291,7 +391,11 @@ await writeFile(path.join(SITE, 'update.txt'),
 // The stamp lives in dist/ next to whatever electron-builder made, which may
 // not exist yet on a machine that has never run a build.
 await mkdir(path.dirname(NATIVE_STAMP), { recursive: true });
-await writeFile(NATIVE_STAMP, nativeHash);
+// The verdict is stored, not just the fingerprint: a second pass on the same
+// version with the same shell has to reach the same conclusion as the first.
+await writeFile(NATIVE_STAMP, JSON.stringify({
+  version, hash: nativeHash, shellHash, shellChanged, rebuildNeeded,
+}) + '\n');
 
 /* ── The page ── */
 let siteInfo = null;
@@ -322,7 +426,7 @@ if (shellChanged) {
   console.log('     installs for the new .exe instead. Build it with');
   console.log('     BUILD-WINDOWS.bat (or npm run dist) and re-run this so the');
   console.log('     installer is copied in beside the manifest.');
-} else if (previousNative === null) {
+} else if (!stamp) {
   console.log('\n  (first release — nothing to compare the shell against yet)');
 } else {
   console.log('\n  Nothing in the shell changed: this one installs by itself.');
@@ -336,8 +440,10 @@ console.log(`\n  Download button      ${siteInfo.downloadHref}`);
  * flag so the ordinary command still succeeds when there is simply no Windows
  * build yet — which is a normal state, not a failure.
  */
+// rebuildNeeded, not shellChanged: PUBLISH.bat is asking "is the .exe on disk
+// the right one for this version", which a plain version bump already answers.
 const needsExe = has('require-installer')
-  && (shellChanged || (!installer && !siteCfg.lastInstaller?.name));
+  && (rebuildNeeded || (!installer && !siteCfg.lastInstaller?.name));
 
 const rel = path.relative(ROOT, SITE) || SITE;
 console.log(`\n  Publish it:\n`);

@@ -359,6 +359,88 @@ await step('the built page is valid, self-contained HTML', async () => {
   if (/<script/i.test(page)) throw new Error('the page runs script it does not need');
 });
 
+/**
+ * A release that needs an installer still says so on the second pass.
+ *
+ * PUBLISH.bat runs the release twice when the shell has changed: once to find
+ * out, then again once the .exe exists so it can be copied in beside the
+ * manifest. Both runs have to reach the same verdict. They did not: the stamp
+ * that records the shell's fingerprint was rewritten by the first pass, so the
+ * second compared itself against itself, concluded nothing had changed, and
+ * published `needsInstaller: false` — telling every existing install it could
+ * take a release by file swap that specifically could not be delivered that way.
+ *
+ * Driven through the real script rather than by unit-testing the comparison,
+ * because the bug was not in the comparison. It was in when the stamp is
+ * written, which only a second run can show.
+ */
+await step('a release needing an installer still says so when run twice', async () => {
+  const readManifest = async () => {
+    const raw = JSON.parse(await readFile(path.join(PROJ, 'docs', 'update.json'), 'utf8'));
+    return JSON.parse(Buffer.from(raw.payload, 'base64').toString('utf8'));
+  };
+
+  const pkgPath = path.join(PROJ, 'package.json');
+  const mainPath = path.join(PROJ, 'electron-main.cjs');
+  const changelog = path.join(PROJ, 'CHANGELOG.md');
+  const bump = async () => {
+    const p = JSON.parse(await readFile(pkgPath, 'utf8'));
+    const v = p.version.replace(/(\d+)$/, (n) => String(Number(n) + 1));
+    p.version = v;
+    await writeFile(pkgPath, JSON.stringify(p, null, 2) + '\n');
+    const md = await readFile(changelog, 'utf8');
+    await writeFile(changelog, md.replace(/^# Changelog\n/, `# Changelog\n\n## ${v}\n\n- A change.\n`));
+    return v;
+  };
+
+  // A baseline release with a settled shell, so there is something to differ
+  // from. Earlier steps in this suite leave the shell mid-change, so this moves
+  // to a clean version of its own rather than assuming.
+  await bump();
+  await node('release.mjs');
+  const first = await readManifest();
+  if (first.needsInstaller) throw new Error('the baseline release already wants an installer');
+
+  // Now change the shell and move to the version that carries the change —
+  // a real release that a file swap cannot deliver.
+  await writeFile(mainPath, (await readFile(mainPath, 'utf8')) + '\n// shell change\n');
+  const next = await bump();
+
+  await node('release.mjs');
+  const pass1 = await readManifest();
+  if (!pass1.needsInstaller) {
+    throw new Error('the shell changed but the first pass did not ask for an installer');
+  }
+  if (pass1.minShell !== next) {
+    throw new Error(`minShell is ${pass1.minShell}, expected ${next}`);
+  }
+
+  // The second pass: same version, same files, installer now built.
+  await node('release.mjs');
+  const pass2 = await readManifest();
+  if (!pass2.needsInstaller) {
+    throw new Error('the second pass published needsInstaller:false — old installs would be '
+      + 'told to take a file update that cannot carry a new shell');
+  }
+  if (pass2.minShell !== next) {
+    throw new Error(`the second pass dropped minShell (${pass2.minShell}), expected ${next}`);
+  }
+
+  // And the release AFTER it, with only the editor touched, must go back to
+  // installing by itself — or one release that needed an installer would make
+  // every release after it need one too.
+  await writeFile(path.join(PROJ, 'src', '__probe.js'), '// renderer-only change\n');
+  const after = await bump();
+  await node('release.mjs');
+  const same = await readManifest();
+  if (same.version !== after) throw new Error(`version is ${same.version}, expected ${after}`);
+  if (same.needsInstaller) {
+    throw new Error('a renderer-only release still asked for an installer');
+  }
+  await rm(path.join(PROJ, 'src', '__probe.js'), { force: true });
+  console.log(`     pass 1 and pass 2 on ${next} both ask for the installer`);
+});
+
 await rm(WORK, { recursive: true, force: true });
 
 console.log('\n════════════════════════════════════════');
