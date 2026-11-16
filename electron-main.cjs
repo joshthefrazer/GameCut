@@ -1017,8 +1017,43 @@ const MODELS = {
     ],
     approxBytes: 80_000_000,
   },
+  /*
+   * "Click to outline anything" (Smart crop): SlimSAM-77, quantized. An
+   * object-outlining model, 13.8 MB in two files, Apache-2.0.
+   *
+   * Unlike the speech model, this one is PINNED: `rev` is an exact commit of the
+   * repository, and the two big files carry their expected size and SHA-256, so
+   * a download that was changed, cut short or swapped is thrown away instead of
+   * being used. Values read from the Hugging Face API on 2026-11-16.
+   * (The two small JSON files are covered by the pinned commit.)
+   */
+  'outline-small': {
+    repo: 'Xenova/slimsam-77-uniform',
+    rev: '5850ab45f587c112167512ffef949107115e26a0',
+    files: [
+      'config.json', 'preprocessor_config.json',
+      'onnx/vision_encoder_quantized.onnx', 'onnx/prompt_encoder_mask_decoder_quantized.onnx',
+    ],
+    sizes: {
+      'onnx/vision_encoder_quantized.onnx': 8_882_165,
+      'onnx/prompt_encoder_mask_decoder_quantized.onnx': 4_903_810,
+    },
+    sha256: {
+      'onnx/vision_encoder_quantized.onnx': 'cce23c7b2e5d4f330932738fb67ba518e04b0d99ccdd1cccd22a7da4e01f2971',
+      'onnx/prompt_encoder_mask_decoder_quantized.onnx': 'cb90b279f549d2cab7fd6e20c38522438c65d84bdcca3d2a764cff7d857fdce2',
+    },
+    approxBytes: 13_800_000,
+  },
 };
 const modelPath = (id, file) => path.join(MODEL_DIR, id, ...file.split('/'));
+
+/** SHA-256 of a file, streamed (the model files are tens of MB; never read them whole). */
+function fileSha256(file) {
+  return new Promise((resolve, reject) => {
+    const h = crypto.createHash('sha256');
+    fs.createReadStream(file).on('data', (c) => h.update(c)).on('error', reject).on('end', () => resolve(h.digest('hex')));
+  });
+}
 
 async function serveModel(request) {
   let url;
@@ -1042,7 +1077,8 @@ async function modelStatus(id) {
   if (!m) return { error: 'Unknown model' };
   let have = 0, bytes = 0;
   for (const f of m.files) {
-    try { const st = await fsp.stat(modelPath(id, f)); if (st.size > 0) { have++; bytes += st.size; } } catch { /* missing */ }
+    // A file with a known size only counts if it is exactly that size (a cut-short or swapped file does not).
+    try { const st = await fsp.stat(modelPath(id, f)); if (st.size > 0 && (!m.sizes?.[f] || st.size === m.sizes[f])) { have++; bytes += st.size; } } catch { /* missing */ }
   }
   return { ready: have === m.files.length, have, of: m.files.length, bytes, approxBytes: m.approxBytes };
 }
@@ -1095,17 +1131,27 @@ ipcMain.handle('models:download', async (e, id) => {
     let done = 0;
     for (const f of m.files) {
       const dest = modelPath(id, f);
-      try { if ((await fsp.stat(dest)).size > 0) { done += (await fsp.stat(dest)).size; continue; } } catch { /* fetch it */ }
+      try {
+        const have = (await fsp.stat(dest)).size;
+        if (have > 0 && (!m.sizes?.[f] || have === m.sizes[f])) { done += have; continue; }
+      } catch { /* fetch it */ }
       await fsp.mkdir(path.dirname(dest), { recursive: true });
       const base = done;
-      await download(`${MODEL_HOST}/${m.repo}/resolve/main/${f}`, dest, (got) => {
+      await download(`${MODEL_HOST}/${m.repo}/resolve/${m.rev || 'main'}/${f}`, dest, (got) => {
         if (!wc.isDestroyed()) wc.send('models:progress', { id, file: f, bytes: base + got, approxBytes: m.approxBytes });
       }, signal);
+      // Pinned models: the file must be exactly what we expect, or it is thrown away.
+      const want = m.sha256?.[f];
+      if (want && (await fileSha256(dest)) !== want) {
+        await fsp.rm(dest, { force: true });
+        throw Object.assign(new Error('checksum'), { checksum: true });
+      }
       done += (await fsp.stat(dest)).size;
       if (signal.cancelled) throw new Error('cancelled');
     }
     return { ok: true, ...(await modelStatus(id)) };
   } catch (err) {
+    if (err && err.checksum) return { error: 'The download was damaged, so it was thrown away. Please try again.' };
     return { error: signal.cancelled ? 'cancelled' : plainError(err) };
   } finally {
     modelJobs.delete(id);
