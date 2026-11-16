@@ -1,9 +1,11 @@
 /**
- * Smart crop, through the front door: the HUD finder and click-to-cut-out.
+ * Smart crop, through the front door: "find what stays still" and click-to-cut-out.
+ * Smart crop picks ANYTHING on the screen and never guesses what it is, so this
+ * test checks the pieces are found and numbered, and never named.
  *
- * The test footage is a "game": a busy picture that keeps moving, with two
- * HUD pieces that never move — a minimap in the top-left corner and a long
- * strip in the top-right — and a solid orange badge to click on.
+ * The test footage is a busy picture that keeps moving, with two pieces that
+ * never move — a square in the top-left corner and a long strip in the
+ * top-right — and a solid orange badge to click on.
  *   xvfb-run -a node qa/smart-crop.mjs
  */
 import { execFileSync } from 'node:child_process';
@@ -12,8 +14,8 @@ import { patchClick } from './reveal.mjs';
 
 const OUT = `${ROOT}/qa/out`;
 const GAME = `${OUT}/game-hud.mp4`;
-// Moving world: a scrolling test pattern. HUD: a static rgb pattern (minimap,
-// 200×200 at 30,30) and static bars (kill feed, 360×90 at 890,30). Badge: an
+// Moving world: a scrolling test pattern. Still pieces: a static rgb pattern
+// (200×200 at 30,30) and static bars (360×90 at 890,30). Badge: an
 // orange box (240×120 at 520,520) that also never moves.
 execFileSync('ffmpeg', ['-v', 'error', '-y',
   '-f', 'lavfi', '-i', 'testsrc2=size=1800x1000:rate=30',
@@ -51,21 +53,21 @@ const covers = (b, x, y, w, h, slack = 0.03) => b.x <= x / 1280 + slack && b.y <
 
 console.log('\n── smart crop ─────');
 
-await step('Find the HUD finds the minimap and the kill-feed strip, and names them', async () => {
+await step('Find what stays still finds the corner square and the strip, and only numbers them', async () => {
   await openRoom();
-  await win.click('#cstFindHud');
+  await win.click('#cstFindStill');
   for (let i = 0; i < 60; i++) { await sleep(250); if ((await found()).length) break; }
   const f = await found();
   if (!f.length) throw new Error('found nothing: ' + await ev(() => document.getElementById('cstSmartNote').textContent));
   const mini = f.find(x => covers(x.box, 30, 30, 200, 200));
   const feed = f.find(x => covers(x.box, 890, 30, 360, 90));
-  if (!mini) throw new Error(`no box around the minimap: ${JSON.stringify(f.map(x => x.box))}`);
+  if (!mini) throw new Error(`no box around the corner square: ${JSON.stringify(f.map(x => x.box))}`);
   if (!feed) throw new Error(`no box around the strip: ${JSON.stringify(f.map(x => x.box))}`);
-  if (mini.name !== 'Minimap') throw new Error(`the minimap was called "${mini.name}"`);
-  if (!/Kill feed|Top-right/.test(feed.name)) throw new Error(`the strip was called "${feed.name}"`);
+  // Pieces are numbered, never named: the tool must not guess what a thing is.
+  for (const x of f) if (!/^Piece \d+/.test(x.name)) throw new Error(`a piece was given the guessed name "${x.name}"`);
   // Nothing found in the middle of the moving picture.
   if (f.some(x => x.box.x + x.box.w / 2 > 0.3 && x.box.x + x.box.w / 2 < 0.7 && x.box.y + x.box.h / 2 > 0.3 && x.box.y + x.box.h / 2 < 0.65 && !covers(x.box, 520, 520, 240, 120))) {
-    throw new Error('something moving was taken for HUD');
+    throw new Error('something moving was taken for a still piece');
   }
 });
 
@@ -78,7 +80,7 @@ await step('a joined piece (the strip) can be split, to keep just one part of it
   if (after.length <= before) throw new Error(`${before} pieces before Split, ${after.length} after`);
   if (!after.some(x => / · 1$/.test(x.name))) throw new Error('split parts are not named: ' + after.map(x => x.name).join(', '));
   // Put things back as the next step expects them.
-  await win.click('#cstFindHud');
+  await win.click('#cstFindStill');
   for (let i = 0; i < 60; i++) { await sleep(250); if ((await found()).length === before) break; }
 });
 
@@ -90,12 +92,10 @@ await step('cutting the found pieces makes one layer each, linked to the footage
   const crops = vs.filter(c => c.crop);
   if (vs.length - before !== n || crops.length !== n) throw new Error(`${crops.length} crop layers for ${n} pieces`);
   if (crops.some(c => !c.linkTo)) throw new Error('a crop layer is not linked to its footage');
-  const mini = crops.find(c => c.name === 'Minimap');
-  if (!mini) throw new Error('the minimap layer is not named');
-  // In a 16:9 project the minimap layer's centre is where the minimap is.
-  if (Math.abs(mini.transform.x - (130 / 1280)) > 0.04 || Math.abs(mini.transform.y - (130 / 720)) > 0.05) {
-    throw new Error(`minimap layer sits at ${mini.transform.x.toFixed(3)}, ${mini.transform.y.toFixed(3)}`);
-  }
+  // In a 16:9 project the corner square's layer sits where the square is. (No name is expected: layers are numbered.)
+  const mini = crops.find(c => Math.abs(c.transform.x - (130 / 1280)) <= 0.04 && Math.abs(c.transform.y - (130 / 720)) <= 0.05);
+  if (!mini) throw new Error('no layer sits over the corner square: ' + crops.map(c => `${c.name}@${c.transform.x.toFixed(3)},${c.transform.y.toFixed(3)}`).join(' | '));
+  if (crops.some(c => /Minimap|Kill feed|Scoreboard|HUD/i.test(c.name))) throw new Error('a layer was given a guessed name');
 });
 
 await step('click to cut out: one click on the orange badge selects exactly the badge', async () => {

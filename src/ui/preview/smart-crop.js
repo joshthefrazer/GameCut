@@ -1,17 +1,18 @@
 /**
- * Smart crop: finding what is on screen, so you click the thing instead of
- * tracing it.
+ * Smart crop: picking ANYTHING on the screen, so you click the thing instead of
+ * tracing it. It does not know or care what the thing is — a map, a counter, a
+ * player, a sign, a piece of the interface — and it never guesses a name for it.
  *
- * 1. Find the HUD. A HUD is what stays put while the game moves: the
- *    minimap, the kill feed, the scoreboard, health and ammo. Sampling a
- *    handful of frames from the clip, the parts that are sharp (lots of edges)
- *    AND unchanging are the HUD. They are grouped into pieces, boxed, and
- *    named from where they sit and what shape they are — good guesses, never
- *    certainties, so every name can be changed and every piece unticked.
+ * 1. Find what stays still. Sampling a handful of frames from the clip, the
+ *    parts that are sharp (lots of edges) AND unchanging are grouped into
+ *    pieces and boxed. They are only SUGGESTIONS, numbered "Piece 1, 2, …"
+ *    (no guessed names — it used to call them Minimap, Kill feed and so on,
+ *    which was wrong whenever the thing was anything else). Untick what you do
+ *    not want, or ignore them and pick your own.
  *
  * 2. Click to cut out. Clicking anything selects the connected region of
  *    similar colour around the point, stopping at strong edges: a logo, a
- *    health bar, an emote, a sign. One click, no tracing.
+ *    bar, an emote, a sign. One click, no tracing.
  *
  * Everything here is plain arithmetic on small greyscale/colour copies of the
  * frame, so it runs offline, instantly, on any machine.
@@ -95,31 +96,16 @@ function components(bits, w, h, minN = 6) {
   return out;
 }
 
-/** A name for a HUD piece from where it is and what shape it has. */
-export function nameFor(b) {
-  const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
-  const ar = (b.w * 16 / 9) / Math.max(1e-6, b.h);          // aspect in screen terms
-  const corner = (cx < 0.3 || cx > 0.7) && (cy < 0.35 || cy > 0.65);
-  if (corner && ar > 0.6 && ar < 1.6 && b.h > 0.12) return 'Minimap';
-  if (cy < 0.2 && cx > 0.35 && cx < 0.65) return 'Scoreboard';
-  if (cy < 0.45 && cx > 0.6) return ar > 1.6 ? 'Kill feed' : 'Top-right HUD';
-  if (cy < 0.45 && cx < 0.4) return ar > 2.2 ? 'Top-left info' : 'Minimap';
-  if (cy > 0.75 && cx > 0.3 && cx < 0.7) return 'Health & ammo';
-  if (cy > 0.65 && cx >= 0.7) return 'Ammo & abilities';
-  if (cy > 0.65 && cx <= 0.3) return ar > 1.8 ? 'Chat' : 'Health';
-  if (cx < 0.25) return 'Chat';
-  return 'HUD piece';
-}
-
 /**
- * Find the HUD.
+ * Find what stays still.
  *
  * `still` is the frame on screen ({data, w, h} RGBA at analysis size);
  * `frames` are greyscale samples from across the clip at the same size.
  * Returns pieces in 0..1 of the frame, biggest first, each with its own pixel
- * map (`bits`, analysis size) for an exact cut-out.
+ * map (`bits`, analysis size) for an exact cut-out. Pieces are numbered, never
+ * named: this tool has no idea what they are.
  */
-export function findHud(still, frames) {
+export function findStill(still, frames) {
   const { w, h } = still;
   const g = toGrey(still.data, w, h);
   const e = edges(g, w, h);
@@ -136,7 +122,7 @@ export function findHud(still, frames) {
     if (sd[i] > 10) movingPx++;
   }
   if (movingPx < sd.length * 0.25) {
-    return { items: [], reason: 'The picture hardly moves in this clip, so the HUD cannot be told apart from the game. Try a clip where you are moving around.' };
+    return { items: [], reason: 'The picture hardly moves in this clip, so what stays still cannot be told apart from the rest. Click what you want instead, or draw a box around it.' };
   }
   // Sharp and still.
   const bits = new Uint8Array(w * h);
@@ -172,7 +158,6 @@ export function findHud(still, frames) {
     }
   }
   boxes = boxes.filter(b => b.w * b.h < 0.35).sort((a, b) => b.w * b.h - a.w * a.h).slice(0, 8);
-  const used = new Map();
   const make = (b, id, name) => {
     const m = new Uint8Array(w * h);
     for (const p of b.members) m[p] = 1;
@@ -183,10 +168,8 @@ export function findHud(still, frames) {
     return { id, name, box, bits: morph(m, w, h, 1), mw: w, mh: h, on: true };
   };
   const items = boxes.map((b, k) => {
-    let name = nameFor(b);
-    const c = (used.get(name) || 0) + 1; used.set(name, c);
-    if (c > 1) name = `${name} ${c}`;
-    const item = make(b, 'hud' + k, name);
+    const name = `Piece ${k + 1}`;
+    const item = make(b, 'still' + k, name);
     /*
      * Pieces that sat close together were joined into one (a kill feed is
      * several lines). Keep what it was joined from, so one bar of a stack of
@@ -194,11 +177,11 @@ export function findHud(still, frames) {
      */
     if (b.parts.length > 1) {
       item.parts = b.parts.slice().sort((p, q) => p.y - q.y || p.x - q.x)
-        .map((p, i) => make(p, `hud${k}p${i}`, `${name} · ${i + 1}`));
+        .map((p, i) => make(p, `still${k}p${i}`, `${name} · ${i + 1}`));
     }
     return item;
   });
-  return { items, reason: items.length ? '' : 'Nothing on screen stayed still and sharp — this footage may have no HUD.' };
+  return { items, reason: items.length ? '' : 'Nothing on screen stayed still and sharp in this clip. Click what you want instead, or draw a box around it.' };
 }
 
 /**

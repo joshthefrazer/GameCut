@@ -265,23 +265,10 @@ html[data-theme="day"] .achip.is-on{background:var(--acc);border-color:var(--acc
 .acust__txt{width:100%;height:30px;border-radius:8px;border:1px solid var(--glass-line);background:var(--field);color:var(--txt-0);padding:0 8px;font:inherit;font-size:12.5px;box-sizing:border-box}
 .acust__txt:focus{outline:0;border-color:var(--volt-line)}
 
-/* ── Smart Zoom ───────────────────────────────────────────────── */
-.szoom__cta{display:flex;align-items:center;gap:12px;width:100%;padding:12px;margin-bottom:10px;border-radius:12px;border:1px solid var(--volt-line);
-  background:linear-gradient(135deg,var(--volt-soft),transparent);color:var(--txt-0);text-align:left}
-.szoom__cta:hover{background:linear-gradient(135deg,rgba(198,255,61,.24),transparent)}
-.szoom__cta svg{width:28px;height:28px;flex:none;fill:none;stroke:var(--volt);stroke-width:2;stroke-linecap:round}
-html[data-theme="day"] .szoom__cta svg{stroke:var(--acc)}
-.szoom__cta span{display:flex;flex-direction:column;gap:2px}
-.szoom__cta b{font-family:var(--f-display);font-size:13px;font-weight:800}
-.szoom__cta i{font-style:normal;font-size:11.5px;color:var(--txt-2)}
+/* ── Option rows shared by the Make-vertical and Thumbnail windows ──
+   (the class names say "szoom" from when Smart Zoom was the first user of
+   them; Smart Zoom is gone, the rows stay.) */
 .szoom{width:min(560px,92vw)}
-.szoom__list{display:flex;flex-direction:column;gap:2px;max-height:280px;overflow:auto;margin:8px 0}
-.szoom__row{display:grid;grid-template-columns:20px 56px 1fr 90px;align-items:center;gap:10px;height:36px;padding:0 10px;border-radius:9px;cursor:pointer;color:var(--txt-1);font-size:13px}
-.szoom__row:hover{background:var(--surface)}
-.szoom__row input{accent-color:var(--volt)}
-.szoom__t{font-family:var(--f-mono);font-size:12px;color:var(--txt-2)}
-.szoom__bar{display:block;height:6px;border-radius:3px;background:var(--surface)}
-.szoom__bar i{display:block;height:100%;border-radius:3px;background:var(--volt)}
 .szoom__opts{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:12px;background:var(--well)}
 .szoom__lbl{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--txt-2);display:flex;justify-content:space-between}
 .szoom__lbl output{font-family:var(--f-mono);color:var(--txt-0);letter-spacing:0}
@@ -389,7 +376,7 @@ html[data-theme="day"] .tgl--volt{color:var(--acc)!important}
 .thm__small{width:168px;border-radius:6px;border:1px solid var(--glass-line);align-self:flex-start}
 @media (max-width:900px){ .thm__body{grid-template-columns:1fr} }
 
-/* Find the HUD: split a joined piece */
+/* Find what stays still: split a joined piece */
 .cropst__split{margin-left:6px;height:22px;padding:0 8px;border-radius:7px;border:1px solid var(--volt-line);background:transparent;color:var(--volt);font-size:11px;font-weight:700;cursor:pointer;flex:none}
 .cropst__split:hover{background:var(--volt-soft)}
 

@@ -20,16 +20,6 @@ export function initMediaPool({ store, cmds }) {
       <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
       <input type="search" placeholder="Search media…" id="poolQuery">
     </label>
-    <div class="smart" id="smartStrip">
-      <button class="smart__b" id="btnHighlights" title="Listens to the game sound and marks the loud moments in red">
-        <svg viewBox="0 0 24 24"><path d="M3 12h3l3-8 4 16 3-8h5"/></svg>Find highlights</button>
-      <button class="smart__b" id="btnReel" title="Takes the loudest moments of every recording here and lays them out as a first cut">
-        <svg viewBox="0 0 24 24"><rect x="3" y="6" width="5" height="12" rx="1"/><rect x="10" y="6" width="4" height="12" rx="1"/><rect x="16" y="6" width="5" height="12" rx="1"/></svg>Highlight reel</button>
-      <button class="smart__b" id="btnBeatSong" title="Finds the tempo of your song so cuts snap to the beat">
-        <svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>Find the beat</button>
-      <button class="smart__b" id="btnCutBeat" title="Makes every shot on the main lane a whole number of beats long">
-        <svg viewBox="0 0 24 24"><path d="M12 3v18"/><path d="m7 8 5 4-5 4"/><path d="m17 8-5 4 5 4"/></svg>Cut to the beat</button>
-    </div>
     <div class="bins" id="binList"></div>
     <div class="pool__title"><span id="poolLabel">All media</span><span id="poolCount"></span></div>
     <div class="assets" id="assetGrid"></div>`;

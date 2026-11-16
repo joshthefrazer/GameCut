@@ -730,9 +730,12 @@ export function initInspector({ store, cmds, comp, playback }) {
     root.appendChild(g);
   }
 
-  /* ── Smart framing: auto-vertical and stabilize ─────────────── */
+  /* ── Smart crop: follow what is inside the crop box ─────────────
+     (Auto-vertical and Stabilize used to live here; they were removed in 3.0.
+     Only a cropped video clip gets this group.) */
   function buildFraming(clip) {
-    const g = group('Smart framing');
+    if (!(clip.crop && clip.type === 'video')) return;
+    const g = group('Smart crop');
     const mk = (id, label, help, run) => {
       const b = document.createElement('button');
       b.className = 'fontdrop';
@@ -750,27 +753,18 @@ export function initInspector({ store, cmds, comp, playback }) {
       });
       g.body.appendChild(b);
     };
-    const narrow = (store.doc.width / store.doc.height) < 1.2;
-    mk('btnAutoVertical', narrow ? 'Auto-vertical: follow the action' : 'Auto-vertical (switch to 9:16 first)',
-      'Watches the clip and keeps the narrow frame on whatever is moving, instead of a dead-centre crop',
-      async () => { const { autoReframe } = await import('../../edit/frame-analysis.js'); return autoReframe({ store, cmds, clipId: clip.id }); });
-    mk('btnStabilize', 'Stabilize: take the shake out',
-      'Measures the camera shake and moves the picture against it, zoomed in a touch so no edge shows',
-      async () => { const { stabilizeClip } = await import('../../edit/frame-analysis.js'); return stabilizeClip({ store, cmds, clipId: clip.id }); });
-    if (clip.crop && clip.type === 'video') {
-      if (clip.crop.path?.length) {
-        mk('btnFollowCrop', 'Stop following (keep the box still)',
-          'The crop box stops moving and stays where it was drawn',
-          async () => { cmds.setClipProp(clip.id, 'crop.path', null, { merge: false, label: 'Stop following' }); return { ok: true }; });
-      } else {
-        mk('btnFollowCrop', 'Follow it as it moves',
-          'Keeps this crop box on whatever is inside it at the playhead, for the whole clip — a player, a car, a face',
-          async () => { const { followCrop } = await import('../../edit/follow.js'); return followCrop({ store, cmds, comp }, clip.id); });
-      }
+    if (clip.crop.path?.length) {
+      mk('btnFollowCrop', 'Stop following (keep the box still)',
+        'The crop box stops moving and stays where it was drawn',
+        async () => { cmds.setClipProp(clip.id, 'crop.path', null, { merge: false, label: 'Stop following' }); return { ok: true }; });
+    } else {
+      mk('btnFollowCrop', 'Follow it as it moves',
+        'Keeps this crop box on whatever is inside it at the playhead, for the whole clip — a player, a car, a face',
+        async () => { const { followCrop } = await import('../../edit/follow.js'); return followCrop({ store, cmds, comp }, clip.id); });
     }
     const help = document.createElement('p');
     help.className = 'insp__help';
-    help.textContent = 'These write ordinary keyframes or a path you can undo — open Motion › Keyframes to fine-tune.';
+    help.textContent = 'This writes a path you can undo; the crop box can still be nudged by hand.';
     g.body.appendChild(help);
     root.appendChild(g);
   }

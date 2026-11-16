@@ -79,10 +79,6 @@ export const TIPS = {
   tabMedia:     { t: 'Media',           d: 'Everything you have imported. Hover a tile and press + , or double-click it, to put it on the timeline at the playhead.' },
   tabText:      { t: 'Text',            d: 'Add text in one click, start from a look, reuse the words you saved, and set up your brand kit (logo, colours, font).' },
   tabFx:        { t: 'Effects',         d: 'Punch-in zoom, shake, flash, glitch, vignette and more. Each is a clip you drop at the playhead; it changes the picture under it and leaves your titles alone.', k: 'Z = zoom' },
-  btnHighlights:{ t: 'Find highlights', d: 'Listens to the game sound and marks the loud moments in red, so you start from the best parts instead of scrubbing. [ and ] jump between them.' },
-  btnReel:      { t: 'Highlight reel',  d: 'Takes the loudest moments from every recording in Media and lays them end to end on the main lane as a first cut.' },
-  btnBeatSong:  { t: 'Find the beat',   d: 'Works out the tempo of your song and turns on the beat grid, so cuts snap to the beat.' },
-  btnCutBeat:   { t: 'Cut to the beat', d: 'Makes every shot on the main lane a whole number of beats long, starting on a beat.' },
   tabTrans:     { t: 'Transitions',     d: 'How one shot becomes the next. Click the ⋈ button on any cut in the timeline, then pick a tile here — Dissolve, Dip to black or a Slide.' },
   tabGfx:       { t: 'Graphics',        d: 'Images that go ON your footage — logos, emotes, cut-outs, screenshots. Pick how it should land (shadow, glow, sticker edge, 3D tilt), then click one to drop it on the picture. Everything about it stays adjustable in the Inspector afterwards.' },
 };

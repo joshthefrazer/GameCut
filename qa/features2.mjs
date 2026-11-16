@@ -1,5 +1,5 @@
 /**
- * Version history, brand kit, auto-vertical and stabilize, through the front door.
+ * Version history, brand kit and the smooth-preview copy, through the front door.
  *   xvfb-run -a node qa/features2.mjs
  */
 import { execFileSync } from 'node:child_process';
@@ -10,17 +10,6 @@ const T = await launch({ name: 'features2' });
 const { win, ev, frame, step, fresh, importFiles, byStart, sleep } = T;
 const CLIP = FIX('test-clip.mp4');
 
-// A white square crossing a dark 16:9 frame from left to right over 4 s.
-const MOVER = `${OUT}/mover.mp4`;
-execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=0x101418:size=1280x720:rate=30',
-  '-f', 'lavfi', '-i', 'color=c=white:size=120x120:rate=30',
-  '-filter_complex', "[0][1]overlay=x='40+t*270':y=300:shortest=1", '-t', '4',
-  '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', MOVER]);
-// A detailed picture shaken left and right: x offset 24 + 14·sin(9t).
-const SHAKY = `${OUT}/shaky.mp4`;
-execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=size=1400x800:rate=30',
-  '-vf', "crop=1280:720:'24+14*sin(9*t)':40", '-t', '3',
-  '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', SHAKY]);
 const LOGO = FIX('test-logo.png');
 
 const clipNow = (id) => ev((id) => window.gc.store.doc.tracks.flatMap(t => t.clips).find(c => c.id === id), id);
@@ -72,42 +61,6 @@ await step('Brand kit: new text uses your font and colour; your logo goes in the
   if (Math.abs(logo.start) > 1e-6 || logo.duration < dur - 0.05) throw new Error(`logo spans ${logo.start}–${logo.start + logo.duration}, edit is ${dur}`);
   if (!(logo.transform.x > 0.8 && logo.transform.y < 0.2)) throw new Error('logo is not in the corner');
   await ev(() => localStorage.removeItem('gamecut.brand'));
-});
-
-await step('Auto-vertical: in 9:16 the frame follows a square moving left to right', async () => {
-  await fresh();
-  await win.click('#aspectSeg [data-ar="9:16"]'); await frame();
-  await importFiles([MOVER]);
-  const [v] = await byStart('video');
-  await ev((id) => window.gc.store.select([id]), v.id); await sleep(200);
-  await win.click('#inspectorRoot [data-itab="picture"]'); await frame();
-  await win.click('#btnAutoVertical');
-  for (let i = 0; i < 80; i++) { await sleep(250); if ((await clipNow(v.id)).keys?.['transform.x']?.length) break; }
-  const keys = (await clipNow(v.id)).keys['transform.x'];
-  if (!keys?.length) throw new Error('no keyframes written');
-  const early = keys.find(k => k.t >= 0.3).v, late = [...keys].reverse().find(k => k.t <= 3.7).v;
-  if (!(early > 0.5 + 0.2 && late < 0.5 - 0.2)) throw new Error(`frame went ${early.toFixed(2)} → ${late.toFixed(2)}`);
-});
-
-await step('Stabilize: the correction follows the shake, zoomed in so no edge shows', async () => {
-  await fresh(); await importFiles([SHAKY]);
-  const [v] = await byStart('video');
-  await ev((id) => window.gc.store.select([id]), v.id); await sleep(200);
-  await win.click('#inspectorRoot [data-itab="picture"]'); await frame();
-  await win.click('#btnStabilize');
-  for (let i = 0; i < 120; i++) { await sleep(250); if ((await clipNow(v.id)).keys?.['transform.x']?.length) break; }
-  const c = await clipNow(v.id);
-  const keys = c.keys['transform.x'];
-  if (!keys?.length) throw new Error('no keyframes written');
-  if (!(c.transform.scale > 1.05)) throw new Error('not zoomed in');
-  // The shake moves the picture by −14·sin(9t) px (crop moves right); the fix moves it back.
-  const xs = keys.map(k => k.v), ss = keys.map(k => Math.sin(9 * k.t));
-  const mx = xs.reduce((a, b) => a + b) / xs.length, ms = ss.reduce((a, b) => a + b) / ss.length;
-  let num = 0, dx = 0, ds = 0;
-  for (let i = 0; i < xs.length; i++) { num += (xs[i] - mx) * (ss[i] - ms); dx += (xs[i] - mx) ** 2; ds += (ss[i] - ms) ** 2; }
-  const r = num / Math.sqrt(dx * ds || 1);
-  if (!(Math.abs(r) > 0.6)) throw new Error(`correction does not track the shake (r = ${r.toFixed(2)})`);
-  if (!(r > 0)) throw new Error(`correction goes the wrong way (r = ${r.toFixed(2)})`);
 });
 
 await step('Smooth 4K preview: a 1440p clip gets a light copy the preview plays, the export keeps the original', async () => {

@@ -322,7 +322,7 @@ export function initContextMenu({ store, cmds, playback }) {
   }
 
   /** The ready-made lanes, as menu items. */
-  // The Zoom lane is made by Smart Zoom, not picked from a menu.
+  // The Zoom lane preset is kept so older projects that have one still read well; it is not offered in the menu.
   const MENU_PRESETS = () => Object.entries(LANE_PRESETS).filter(([, p]) => !p.patch?.zoomLane);
   const laneItems = (aboveId = null) => MENU_PRESETS().map(([k, p]) => ({
     label: `${p.name} — ${p.note}`, id: 'lane-' + k,

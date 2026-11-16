@@ -45,7 +45,7 @@ const noOverlaps = async () => {
 
 console.log('\n── timeline: links, no-overlap, tools ─────');
 
-await step('a cropped HUD layer stays on its footage when a shot before it is deleted (Ripple)', async () => {
+await step('a cropped layer stays on its footage when a shot before it is deleted (Ripple)', async () => {
   const [a, b, c] = await three();
   const crop = await cropOf(c.id);
   await setRipple(true);

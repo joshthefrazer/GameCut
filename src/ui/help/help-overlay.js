@@ -34,8 +34,8 @@ const GROUPS = [
   { title: 'Preview',  ids: ['btnCrop', 'tglGuides', 'tglGrid', 'tglSnap', 'btnCompare', 'aspectSeg', 'previewQuality', 'fpsChip', 'btnSnapshot', 'btnFullscreen'] },
   { title: 'Playing',  ids: ['btnPlay', 'btnStart', 'btnEnd', 'btnPrevFrame', 'btnNextFrame', 'btnLoop', 'btnMute', 'masterVol'] },
   { title: 'Timeline', ids: ['btnToolSelect', 'btnToolRazor', 'btnToolHand', 'btnSplit', 'btnDelete', 'btnDuplicate', 'btnAddText', 'btnMarker', 'btnAddLane', 'btnRipple', 'btnMagnet', 'btnCloseGaps', 'btnTrackSize', 'btnZoomFit', 'zoomRange', 'tlOverview'] },
-  { title: 'Music',    ids: ['btnBeatGrid', 'bpmInput', 'btnTapTempo', 'btnBeatSong', 'btnCutBeat'] },
-  { title: 'Panels',   ids: ['tabMedia', 'tabText', 'tabGfx', 'tabTrans', 'tabFx', 'btnHighlights', 'btnReel'] },
+  { title: 'Music',    ids: ['btnBeatGrid', 'bpmInput', 'btnTapTempo'] },
+  { title: 'Panels',   ids: ['tabMedia', 'tabText', 'tabGfx', 'tabTrans', 'tabFx'] },
 ];
 
 const KEYS = [

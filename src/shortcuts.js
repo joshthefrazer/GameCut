@@ -165,12 +165,11 @@ export function initShortcuts({ store, cmds, history, playback, timeline, previe
         else if (k === 'v') { bus.emit('timeline:tool', 'select'); }
         else if (k === 'h') { bus.emit('timeline:tool', store.ui.tool === 'hand' ? 'select' : 'hand'); }
         else if (k === 'i') { e.preventDefault(); document.getElementById('filePicker').click(); }
-        else if (e.key === ']') { window.gc?.smart?.jumpMarker(1); }
-        else if (e.key === '[') { window.gc?.smart?.jumpMarker(-1); }
+        else if (e.key === ']') { window.gc?.markerNav?.jumpMarker(1); }
+        else if (e.key === '[') { window.gc?.markerNav?.jumpMarker(-1); }
         else if (k === 'q') { e.preventDefault(); bus.emit('quicklook'); }
         else if (k === 'a' && e.shiftKey) { e.preventDefault(); window.gc?.animLib?.setMode(window.gc.animLib.mode === 'library' ? 'edit' : 'library'); }
-        else if (k === 'z' && e.altKey) { e.preventDefault(); bus.emit('smartzoom:open'); }
-        else if (k === 'z' && !e.shiftKey) { e.preventDefault(); const c = cmds.addEffect('zoom', store.rt.playhead); if (c) store.select([c.id]); }
+        else if (k === 'z' && !e.shiftKey && !e.altKey) { e.preventDefault(); const c = cmds.addEffect('zoom', store.rt.playhead); if (c) store.select([c.id]); }
         else if (k === 'z' && e.shiftKey) { zoomFit(store, timeline.L.W); timeline.syncZoomUI(); timeline.repaint(); }
         // F is fullscreen everywhere else; it used to force a redundant repaint.
         else if (k === 'f' && e.shiftKey) { e.preventDefault(); freezeFrame({ store, cmds }); }

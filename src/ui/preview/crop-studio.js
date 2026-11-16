@@ -1,5 +1,5 @@
 import { bus } from '../../core/events.js';
-import { findHud, magicSelect, maskPng } from './smart-crop.js';
+import { findStill, magicSelect, maskPng } from './smart-crop.js';
 import { sampleFrames } from '../../edit/frame-analysis.js';
 import { assets } from '../../media/asset-store.js';
 import { askText } from '../widgets/ask.js';
@@ -150,7 +150,7 @@ export function openCropStudio({ clip, source, store, cmds, comp, onApply }) {
         <button class="cst${tool === 'brush' ? ' is-on' : ''}" data-tool="brush" title="Paint the exact shape you want (B)">
           <svg viewBox="0 0 24 24"><path d="M4 20s1-3 3-4c2-1 3 .5 3 .5S8 20 4 20Z"/><path d="M10.5 15.5 19 7a2.1 2.1 0 0 0-3-3l-8.5 8.5"/></svg><span>Brush</span>
         </button>
-        <button class="cst${tool === 'smart' ? ' is-on' : ''}" data-tool="smart" title="Smart: find the HUD, or click anything on the picture to select it (S)">
+        <button class="cst${tool === 'smart' ? ' is-on' : ''}" data-tool="smart" title="Smart: click anything on the picture to select it — a map, a counter, a player, any part of the screen (S)">
           <svg viewBox="0 0 24 24"><path d="M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z"/></svg><span>Smart</span>
         </button>
       </div>
@@ -207,15 +207,15 @@ export function openCropStudio({ clip, source, store, cmds, comp, onApply }) {
       <canvas class="cropst__cv"></canvas>
       <div class="cropst__hint" id="cstHint"></div>
       <aside class="cropst__smart" id="cstSmart">
-        <button class="cst cst--go cropst__find" id="cstFindHud">Find the HUD</button>
-        <p class="cropst__note" id="cstSmartNote">Finds what stays still while the game moves — minimap, kill feed, scoreboard. Or click anything on the picture to select it.</p>
+        <button class="cst cst--go cropst__find" id="cstFindStill">Find what stays still</button>
+        <p class="cropst__note" id="cstSmartNote">Click anything on the picture to select it — a map, a counter, a player, any part of the screen. Or press the button for suggestions of what stays put; they are only numbered, never named.</p>
         <div class="cropst__found" id="cstFound"></div>
         <div class="cropst__out" id="cstOut2">
           <b>How to cut it</b>
           <label><input type="radio" name="cstOut" value="box" checked> Neat box</label>
           <label><input type="radio" name="cstOut" value="shape"> Exact shape</label>
           <label class="cropst__each"><input type="checkbox" id="cstEach" checked> Each on its own layer</label>
-          <label class="cropst__each" title="For things that move — a player, a car. HUD never moves, so leave this off for it."><input type="checkbox" id="cstFollow"> Follow it as it moves</label>
+          <label class="cropst__each" title="For things that move around the screen — a player, a car, a marker. Leave it off for things that stay in one place."><input type="checkbox" id="cstFollow"> Follow it as it moves</label>
         </div>
       </aside>
     </div>`;
@@ -589,7 +589,7 @@ export function openCropStudio({ clip, source, store, cmds, comp, onApply }) {
     cv.__visible = visible;    // likewise: lets a test read the box
     cv.__found = found.map(f => ({ name: f.name, on: f.on, box: { ...f.box } }));
     hint.textContent = tool === 'smart'
-      ? (found.length ? 'Click a piece to tick or untick it · Shift+click to keep just one part of it · click anything else to select it too · Enter to cut' : 'Press Find the HUD, or click anything on the picture to select it')
+      ? (found.length ? 'Click a piece to tick or untick it · Shift+click to keep just one part of it · click anything else to select it too · Enter to cut' : 'Click anything on the picture to select it, or press Find what stays still')
       : tool === 'box'
       ? (rect
         ? 'Drag the box to move it, the handles to resize · Shift keeps it square · Enter to crop · scroll to zoom'
@@ -830,10 +830,10 @@ export function openCropStudio({ clip, source, store, cmds, comp, onApply }) {
   for (const r of el.querySelectorAll('input[name="cstOut"]')) r.addEventListener('change', () => setOut(r.value));
   el.querySelector('#cstEach').addEventListener('change', (e) => { eachLayer = e.target.checked; });
 
-  async function findTheHud() {
+  async function findWhatStaysStill() {
     const asset = assets.get(clip.assetId);
-    const btn = el.querySelector('#cstFindHud');
-    if (!asset?.url || clip.type !== 'video') { noteEl.textContent = 'The HUD finder needs a video clip. Click anything on the picture to select it instead.'; return; }
+    const btn = el.querySelector('#cstFindStill');
+    if (!asset?.url || clip.type !== 'video') { noteEl.textContent = 'Finding what stays still needs a video clip. Click anything on the picture to select it instead.'; return; }
     btn.disabled = true;
     noteEl.textContent = 'Looking at frames from across the clip…';
     try {
@@ -843,17 +843,17 @@ export function openCropStudio({ clip, source, store, cmds, comp, onApply }) {
       const times = Array.from({ length: n }, (_, i) => a + (b - a) * (i + 0.5) / n);
       const img = analysisImage();
       const frames = await sampleFrames(asset, times, (p) => { noteEl.textContent = `Looking at frames from across the clip… ${Math.round(p * 100)}%`; }, img.w);
-      const r = findHud(img, frames);
-      found = found.filter(f => !f.id.startsWith('hud')).concat(r.items);
+      const r = findStill(img, frames);
+      found = found.filter(f => !f.id.startsWith('still')).concat(r.items);
       noteEl.textContent = r.items.length
-        ? `Found ${r.items.length} piece${r.items.length === 1 ? '' : 's'}. The names are best guesses — double-click one to rename it, untick what you do not want.`
+        ? `Found ${r.items.length} piece${r.items.length === 1 ? '' : 's'} that stay${r.items.length === 1 ? 's' : ''} still. They are only numbered — double-click one to give it a name, untick what you do not want.`
         : r.reason;
       paintFound(); paint();
     } catch (err) {
       noteEl.textContent = `Could not look at the clip: ${err.message}`;
     } finally { btn.disabled = false; }
   }
-  el.querySelector('#cstFindHud').addEventListener('click', findTheHud);
+  el.querySelector('#cstFindStill').addEventListener('click', findWhatStaysStill);
 
   el.addEventListener('click', (e) => {
     const b = e.target.closest('button');
@@ -1042,7 +1042,7 @@ export function openCropStudio({ clip, source, store, cmds, comp, onApply }) {
         if (smartOut === 'shape') crop.mask = maskPng(g, box, 1);
         const { transform } = placeFor(crop);
         const c = cmds.cropClip(clip.id, { crop, transform }, { label: 'Smart crop' });
-        if (c) { c.name = g.length === 1 ? g[0].name : 'HUD pieces'; made.push(c); }
+        if (c) { c.name = g.length === 1 ? g[0].name : 'Crop pieces'; made.push(c); }
       }
     });
     const follow = el.querySelector('#cstFollow')?.checked;

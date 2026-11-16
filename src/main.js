@@ -27,13 +27,12 @@ import { initHelp } from './ui/help/help-overlay.js';
 import { initPalette } from './ui/palette.js';
 import { initEffects } from './ui/effects/effects-panel.js';
 import { initAnimLibrary } from './ui/anim/anim-library.js';
-import { initSmartZoom } from './ui/zoom/smart-zoom-panel.js';
 import { initTour } from './ui/tour.js';
 import { initPads } from './ui/pads/pads-panel.js';
 import { initLayouts } from './ui/layouts/layouts-panel.js';
 import { initInbox } from './ui/inbox/inbox.js';
 import { initThumbnails } from './ui/thumbs/thumbnail-maker.js';
-import { initSmartEdit } from './edit/smart-edit.js';
+import { initMarkerNav } from './edit/marker-nav.js';
 import { initVersions } from './ui/versions.js';
 import { initProxies } from './media/proxies.js';
 import { initCaptions } from './captions/captions.js';
@@ -78,11 +77,10 @@ const help = initHelp();
 initShortcuts({ store, cmds, history, playback, timeline, preview, help });
 const palette = initPalette({ store, cmds, history, playback, timeline, preview, help });
 const animLib = initAnimLibrary({ store, cmds, comp });
-const smartZoom = initSmartZoom({ store, cmds, playback, comp });
 const tour = initTour();
 const pads = initPads({ store, cmds, playback });
 const layouts = initLayouts({ store, cmds, comp });
-const smart = initSmartEdit({ store, cmds, history, playback });
+const markerNav = initMarkerNav({ store, playback });
 const proxies = initProxies({ store, comp });
 const desktop = initDesktop({ history });
 const updates = initUpdates({ store });
@@ -315,4 +313,4 @@ home.show();
 // over "What are you making?". The first-run tour covers the keys instead.
 
 /* Expose for console poking during development. */
-Object.assign(window, { gc: { store, history, cmds, comp, playback, timeline, preview, transport, desktop, library, home, help, transitions, updates, assets, graphics, palette, smart, versions, proxies, captions, qol, animLib, smartZoom, tour, pads, layouts, inbox, thumbs } });
+Object.assign(window, { gc: { store, history, cmds, comp, playback, timeline, preview, transport, desktop, library, home, help, transitions, updates, assets, graphics, palette, markerNav, versions, proxies, captions, qol, animLib, tour, pads, layouts, inbox, thumbs } });

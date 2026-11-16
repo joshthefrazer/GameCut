@@ -312,7 +312,6 @@ export function initQol({ store, cmds, history, playback, comp, timeline }) {
     { t: '61 animations, each with its own sound', d: 'Kill counters that count by themselves, headshots, ACE, rank ups, scoreboards, polls, subscribe buttons… Click one to drop it in, or drag it onto a lane.', show: mode('library') },
     { t: 'History', d: 'Every change you made, in a list. Click any step to go back to it (Ctrl+H).', show: openHistory },
     { t: 'Customize, not keyframes', d: 'Select an animation and its Customize tab has its words, colours, speed and sound. Swap it for another one and it keeps its place.' },
-    { t: 'Smart Zoom', d: 'Finds the loud hits and the kills, and punches in on every one in one click — Smooth, Snap, Bounce or Impact shake, with a whoosh if you like (Alt+Z).', show: () => bus.emit('smartzoom:open') },
     { t: 'Quick look', d: 'Press Q to see the frame under the playhead at full export quality, as big as your screen.' },
     { t: 'Closing never saves nothing', d: 'Opening Strike and closing it again no longer leaves an empty "edited video" behind. Old empty ones can be cleared from the home screen.' },
     { t: 'Cut flash', d: 'S flashes the cut on the timeline, so a split made by key is seen to happen.' },
@@ -344,7 +343,7 @@ export function initQol({ store, cmds, history, playback, comp, timeline }) {
   try { hadProjects = !!localStorage.getItem('gamecut.layout.v2') || !!localStorage.getItem('gamecut.drawer'); } catch { /* private */ }
   // A toast, not a box over your work: it never stands between you and the editor.
   if (seen !== VERSION_TOUR && hadProjects) {
-    setTimeout(() => bus.emit('toast', { msg: `GameCut is now Strike ${VERSION_TOUR} — 61 animations, Smart Zoom and a new look`, ms: 9000, action: { label: "What's new", run: openTour } }), 1500);
+    setTimeout(() => bus.emit('toast', { msg: `GameCut is now Strike ${VERSION_TOUR} — 61 animations and a new look`, ms: 9000, action: { label: "What's new", run: openTour } }), 1500);
   }
 
   bus.emit('palette:add', [

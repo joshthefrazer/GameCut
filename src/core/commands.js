@@ -19,7 +19,7 @@ export const LANE_PRESETS = {
   voice:   { kind: 'audio', name: 'Voice',   note: 'Mic or voice-over — cleaned up automatically', patch: { voice: true, color: '#22c55e' } },
   music:   { kind: 'audio', name: 'Music',   note: 'Dips by itself when someone talks', patch: { duck: { on: true, depth: 0.7 }, color: '#a855f7' } },
   sfx:     { kind: 'audio', name: 'SFX',     note: 'Hits, whooshes, sound effects', patch: { color: '#f59e0b' } },
-  zoom:    { kind: 'video', name: 'Zoom',    note: 'Smart Zoom: punch-ins on the big moments', patch: { color: '#C6FF3D', zoomLane: true } },
+  zoom:    { kind: 'video', name: 'Zoom',    note: 'Zoom effects: punch-ins on the big moments', patch: { color: '#C6FF3D', zoomLane: true } },
 };
 
 /**

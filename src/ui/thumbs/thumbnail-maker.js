@@ -1,6 +1,5 @@
 import { bus } from '../../core/events.js';
 import { text as bigText, rr, FONT_DISPLAY } from '../../anim/kit.js';
-import { findHighlights } from '../../edit/analysis.js';
 
 /**
  * Thumbnail maker: your best frame, big words, done.
@@ -46,7 +45,6 @@ export function initThumbnails({ store, qol }) {
   function candidates() {
     const d = store.rt.duration || 0;
     const ts = [];
-    try { for (const h of findHighlights(store, { max: 4 })) ts.push(h.t); } catch { /* no sound */ }
     for (const m of store.doc.markers || []) ts.push(m.t);
     ts.push(store.rt.playhead);
     for (let i = 1; i <= 4; i++) ts.push((d * i) / 5);

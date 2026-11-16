@@ -163,8 +163,9 @@ await step('Ctrl+K finds animations', async () => {
   if (!/health bar/i.test(hit)) throw new Error(hit);
 });
 
-/* ── Stage 3: Smart Zoom, cut flash, Quick look ─────────────── */
-await step('Smart Zoom finds the three loud hits and a kill, and puts zooms on a Zoom lane in one undo', async () => {
+/* ── Stage 3: cut flash, Quick look ─────────────────────────── */
+// (Smart Zoom's steps used to sit here; the next steps need the recording it set up.)
+await step('a recording with loud hits is on the timeline at 20 s (the next steps use it)', async () => {
   await h.importFiles([`${ROOT}/qa/fixtures/hits-clip.mp4`]);
   await ev(async () => {
     const { placeAsset } = await import('app://gamecut/src/ui/timeline/place-asset.js');
@@ -173,58 +174,6 @@ await step('Smart Zoom finds the three loud hits and a kill, and puts zooms on a
     placeAsset(store, cmds, a.id, { start: 20 });
   });
   await waitFor(win, () => window.gc.assets.all().find(x => x.name?.startsWith('hits-clip'))?.peaks?.rms, null, { timeout: 15000 });
-  await ev(() => window.gc.smartZoom.open()); await sleep(250);
-  const rows = await ev(() => [...document.querySelectorAll('#smartZoom .szoom__row')].map(r => r.textContent.replace(/\s+/g, ' ').trim()));
-  const at = (sec) => rows.some(r => r.includes(`0:${String(sec).padStart(2, '0')}`));
-  if (!(at(22) && at(24) && at(26))) throw new Error('rows: ' + rows.join(' | '));
-  if (!rows.some(r => /Kill counter|Headshot|ACE/.test(r))) throw new Error('no kill moment: ' + rows.join(' | '));
-  await win.click('#smartZoom [data-style="bounce"]');
-  await win.click('#szAdd'); await sleep(300);
-  const r = await ev(() => {
-    const { store, history } = window.gc;
-    const lane = store.doc.tracks.find(t => t.zoomLane);
-    const sfx = store.doc.tracks.find(t => t.kind === 'audio' && /sfx/i.test(t.name));
-    return { lane: lane && { name: lane.name, n: lane.clips.length, styles: [...new Set(lane.clips.map(c => c.effect.style))], kinds: [...new Set(lane.clips.map(c => c.effect.kind))] },
-      all: store.doc.tracks.flatMap(t => t.clips.filter(c => c.effect?.kind === 'zoom').map(c => `${t.name}@${c.start.toFixed(2)}+${c.duration.toFixed(2)}`)),
-      whooshes: sfx ? sfx.clips.filter(c => c.name === 'Whoosh').length : 0, steps: history.steps().filter(x => x.done).slice(-2).map(x => x.label) };
-  });
-  if (!r.lane || r.lane.n !== rows.length || r.lane.styles.join() !== 'bounce' || r.lane.kinds.join() !== 'zoom') throw new Error(JSON.stringify(r));
-  if (r.whooshes !== rows.length) throw new Error('whooshes: ' + r.whooshes);
-  if (!/^Smart Zoom: \d+ zooms$/.test(r.steps[1]) || /lane|zoom/i.test(r.steps[0])) throw new Error('undo steps: ' + r.steps.join(' / '));
-});
-
-await step('a Smart Zoom really zooms the picture, and the moments are not offered twice', async () => {
-  const d = await ev(async () => {
-    const { store, qol } = window.gc;
-    const z = store.doc.tracks.find(t => t.zoomLane).clips.find(c => c.start > 21 && c.start < 23);
-    const grab = async (t) => {
-      const bmp = await createImageBitmap(await qol.fullFrame(t));
-      const c = new OffscreenCanvas(320, 180), x = c.getContext('2d');
-      x.drawImage(bmp, 0, 0, 320, 180);
-      return x.getImageData(0, 0, 320, 180).data;
-    };
-    // Same picture underneath (the test clip's pattern barely moves in 0.1 s); only the zoom differs.
-    const a = await grab(z.start + 0.6), b = await grab(z.start + 0.6 + 0.0);
-    const { store: st } = window.gc;
-    const lane = st.doc.tracks.find(t => t.zoomLane); lane.hidden = true;
-    const c0 = await grab(z.start + 0.6); lane.hidden = false;
-    void b;
-    let diff = 0; for (let i = 0; i < a.length; i += 4 * 37) diff += Math.abs(a[i] - c0[i]);
-    return diff;
-  });
-  if (d < 2000) throw new Error('picture barely changed: ' + d);
-  await ev(() => window.gc.smartZoom.open()); await sleep(200);
-  const left = await ev(() => document.querySelectorAll('#smartZoom .szoom__row').length);
-  await win.keyboard.press('Escape');
-  if (left !== 0) throw new Error(left + ' offered again');
-});
-
-await step('every zoom comes out in one go, and undo puts them back', async () => {
-  const n = await ev(async () => (await import('app://gamecut/src/edit/smart-zoom.js')).clearZooms({ store: window.gc.store, cmds: window.gc.cmds }));
-  const after = await ev(() => window.gc.store.doc.tracks.filter(t => t.zoomLane).reduce((k, t) => k + t.clips.length, 0));
-  await ev(() => window.gc.cmds.undo());
-  const back = await ev(() => window.gc.store.doc.tracks.filter(t => t.zoomLane).reduce((k, t) => k + t.clips.length, 0));
-  if (!n || after !== 0 || back !== n) throw new Error(JSON.stringify({ n, after, back }));
 });
 
 await step('S flashes the cut on the timeline', async () => {

@@ -171,60 +171,24 @@ await step('Speed ramp "Hit & release": slow pieces around the playhead, nothing
   if (d1 - d0 !== 1) throw new Error(`${d1 - d0} undo steps`);
 });
 
-await step('Find highlights marks the loud moments', async () => {
-  await fresh(); await importFiles([BURSTS]);
-  await sleep(1500);
-  await win.click('#leftTabs [data-tab="media"]');
-  await win.click('#btnHighlights'); await frame();
-  const ms = await ev(() => window.gc.store.doc.markers.map(m => m.t));
-  const near = (t) => ms.some(m => Math.abs(m - t) < 0.5);
-  if (!near(1.6) || !near(4.1)) throw new Error(`markers at ${ms.map(m => m.toFixed(2)).join(', ')}`);
+await step('[ and ] jump between the markers you made', async () => {
+  await fresh(); await importFiles([CLIP]);
+  await sleep(800);
+  await ev(() => { window.gc.cmds.addMarker(1.0); window.gc.cmds.addMarker(2.5); });
   await ev(() => window.gc.playback.seek(0));
   await win.keyboard.press(']'); await frame();
-  const ph = await ev(() => window.gc.store.rt.playhead);
-  if (Math.abs(ph - ms[0]) > 0.02) throw new Error('] did not jump to the first marker');
-});
-
-await step('Find the beat reads 120 BPM off a click track and turns the beat grid on', async () => {
-  await fresh(); await importFiles([CLIP, CLICKS]);
-  await sleep(1500);
-  await win.click('#btnBeatSong'); await frame();
-  const r = await ev(() => ({ bpm: window.gc.store.doc.bpm, off: window.gc.store.doc.beatOffset, grid: window.gc.store.ui.beatGrid }));
-  if (Math.abs(r.bpm - 120) > 1) throw new Error(`found ${r.bpm} BPM`);
-  if (!r.grid) throw new Error('the beat grid is off');
-  const ph = ((r.off - 0.25) % 0.5 + 0.5) % 0.5;
-  if (Math.min(ph, 0.5 - ph) > 0.06) throw new Error(`beats are off the clicks by ${ph.toFixed(3)}s`);
-});
-
-await step('Cut to the beat makes every main-lane shot a whole number of beats', async () => {
-  await fresh(); await importFiles([CLIP]);
-  await ev(() => { window.gc.cmds.setBPM(120); window.gc.store.doc.beatOffset = 0; });
-  await playheadTo(1.3); await win.keyboard.press('s'); await frame();
-  await ev(() => window.gc.store.select([]));
-  await playheadTo(3.1); await win.keyboard.press('s'); await frame();
-  await win.click('#btnCutBeat'); await frame();
-  for (const c of await clipsOf('video')) {
-    const k = c.duration / 0.5;
-    if (Math.abs(k - Math.round(k)) > 0.04 && c !== (await clipsOf('video')).at(-1)) throw new Error(`a shot is ${c.duration}s, not whole beats`);
-    const s = c.start / 0.5;
-    if (Math.abs(s - Math.round(s)) > 0.04) throw new Error(`a shot starts off the beat at ${c.start}`);
-  }
+  let ph = await ev(() => window.gc.store.rt.playhead);
+  if (Math.abs(ph - 1.0) > 0.05) throw new Error(`] went to ${ph}, not the first marker`);
+  await win.keyboard.press(']'); await frame();
+  ph = await ev(() => window.gc.store.rt.playhead);
+  if (Math.abs(ph - 2.5) > 0.05) throw new Error(`] went to ${ph}, not the second marker`);
+  await win.keyboard.press('['); await frame();
+  ph = await ev(() => window.gc.store.rt.playhead);
+  if (Math.abs(ph - 1.0) > 0.05) throw new Error(`[ went to ${ph}, not back to the first marker`);
 });
 
 const soundReady = () => T.ev(() => window.gc.assets.all().every(a => a.kind !== 'video' || a.peaks?.rms));
 const waitSound = async () => { for (let i = 0; i < 60 && !(await soundReady()); i++) await sleep(250); };
-await step('Highlight reel: the loud moments of a recording become a first cut', async () => {
-  await fresh(); await importFiles([BURSTS]);
-  await sleep(1500);
-  await ev(() => window.gc.cmds.removeSelected());
-  await ev(() => { const g = window.gc; g.store.select(g.cmds.selectableIds()); g.cmds.removeSelected(); });
-  await win.click('#btnReel'); await frame();
-  const vs = await clipsOf('video');
-  if (vs.length < 1) throw new Error(`${vs.length} shots`);
-  const covers = (t) => vs.some(c => t >= c.inPoint && t <= c.inPoint + c.duration);
-  if (!covers(1.6) || !covers(4.1)) throw new Error('the reel misses a loud moment');
-});
-
 await step('Auto-duck: the music dips while the game is loud and comes back after', async () => {
   await fresh(); await importFiles([BURSTS, CLICKS]);
   await sleep(1500);
