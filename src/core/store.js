@@ -1,5 +1,5 @@
 import { Emitter } from './events.js';
-import { projectDuration } from './schema.js';
+import { projectDuration, normalizeDoc } from './schema.js';
 
 /**
  * Single application state container.
@@ -25,14 +25,14 @@ export class Store extends Emitter {
       beatGrid: false,
       guides: true,
       grid: false,
-      // Preview render scale. Half is the default because the preview pane is
-      // rarely wider than ~800px, so a half-size canvas is close to 1:1 on
-      // screen while costing a quarter of the pixels — which is what makes
-      // long or high-resolution footage play smoothly.
-      previewScale: 0.5,
+      // Preview render scale. 0 is Auto: the canvas is sized to the pixels the
+      // panel really shows (width x display scaling), snapped up to Full / Half
+      // / Quarter, so it is never stretched soft and never wastes pixels.
+      // Full, Half and Quarter stay available as explicit choices.
+      previewScale: 0,                 // 0 = Auto: as sharp as the panel shows
       activeBin: 'all',
-      leftW: 268,
-      rightW: 296,
+      leftW: 280,
+      rightW: 330,
       timelineH: 306,
     }, ui);
     this.rt = {
@@ -103,6 +103,9 @@ export class Store extends Emitter {
    * because they point at clips that no longer exist.
    */
   replaceDoc(doc) {
+    // Heal anything a past bug left out before a single view reads it. See
+    // normalizeDoc — a graphic placed before 1.7 has no position saved.
+    normalizeDoc(doc);
     this.doc = doc;
     this.rt.selection = [];
     this.rt.playhead = 0;

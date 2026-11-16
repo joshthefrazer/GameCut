@@ -48,10 +48,13 @@ export function layoutJunctions(store, L) {
     if (room < SIZE * 2.2) continue;
 
     const s = Math.min(SIZE, row.h - 8);
+    // On a short lane the badge sits low, leaving the top of the seam free to
+    // grab the two trim handles.
+    const by = row.h < 60 ? row.y + row.h - s - 4 : row.y + (row.h - s) / 2;
     out.push({
       ...j,
       x: x - s / 2,
-      y: row.y + (row.h - s) / 2,
+      y: by,
       w: s, h: s,
       on: !!(j.next.transIn && j.next.transIn.kind && j.next.transIn.kind !== 'none'),
     });

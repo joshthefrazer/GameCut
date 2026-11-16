@@ -98,16 +98,144 @@ export const TEXT_PRESETS = [
       bg: 'none', letterSpacing: 0.03, anim: 'rise',
     },
   },
+  {
+    id: 'kinetic',
+    name: 'Kinetic',
+    note: 'Each letter pops in one after another',
+    style: {
+      font: 'Inter', weight: 900, fill: 'solid', color: '#ffffff',
+      strokeWidth: 0.03, strokeColor: '#0b1220', glow: 0, shadow: 0.016, shadowColor: '#000000', shadowY: 0.008,
+      bg: 'none', letterSpacing: 0.006,
+      anim: 'pop', animDur: 0.3, animUnit: 'letter', animSpread: 0.5,
+      animOut: 'fade', animOutDur: 0.25,
+    },
+  },
+  {
+    id: 'bounce',
+    name: 'Bounce',
+    note: 'Words drop in and bounce',
+    style: {
+      font: 'Inter', weight: 900, fill: 'solid', color: '#fbbf24',
+      strokeWidth: 0.04, strokeColor: '#0b1220', glow: 0, shadow: 0.02, shadowColor: '#000000', shadowY: 0.012,
+      bg: 'none', letterSpacing: 0.004,
+      anim: 'drop', animDur: 0.55, animUnit: 'word', animSpread: 0.45,
+      animOut: 'fade', animOutDur: 0.25,
+    },
+  },
+  {
+    id: 'glitch',
+    name: 'Glitch',
+    note: 'Jitters in, flickers while it is up',
+    style: {
+      font: 'Inter', weight: 900, fill: 'solid', color: '#e6faff',
+      strokeWidth: 0.01, strokeColor: '#22d3ee', glow: 0.03, glowColor: '#f43f5e', shadow: 0,
+      bg: 'none', letterSpacing: 0.02,
+      anim: 'glitch', animDur: 0.6, animLoop: 'flicker', animOut: 'glitch', animOutDur: 0.4,
+    },
+  },
+  {
+    id: 'wave',
+    name: 'Wave',
+    note: 'Letters ripple up and down',
+    style: {
+      font: 'Inter', weight: 900, fill: 'gradient', color: '#38bdf8', color2: '#a855f7', gradAngle: 0,
+      strokeWidth: 0.02, strokeColor: '#0b1220', glow: 0.015, glowColor: '#6366f1', shadow: 0,
+      bg: 'none', letterSpacing: 0.012,
+      anim: 'rise', animDur: 0.35, animUnit: 'letter', animSpread: 0.4, animLoop: 'wave',
+    },
+  },
+  {
+    id: 'hype',
+    name: 'Hype',
+    note: 'Slams in, rainbow colours, shakes',
+    style: {
+      font: 'Impact', weight: 900, fill: 'solid', color: '#ffffff',
+      strokeWidth: 0.05, strokeColor: '#0b1220', glow: 0.02, glowColor: '#f43f5e', shadow: 0.02, shadowColor: '#000000', shadowY: 0.012,
+      bg: 'none', letterSpacing: 0.006,
+      anim: 'slam', animDur: 0.3, animLoop: 'rainbow', animOut: 'slam', animOutDur: 0.2,
+    },
+  },
+  {
+    id: 'lower',
+    name: 'Lower third',
+    note: 'Slides in on a plate, slides out',
+    style: {
+      font: 'Inter', weight: 700, fill: 'solid', color: '#ffffff',
+      strokeWidth: 0, glow: 0, shadow: 0,
+      bg: 'box', bgColor: '#2563ebf2', bgPad: 0.018, bgRadius: 0.12, letterSpacing: 0.004,
+      anim: 'slideL', animDur: 0.45, animOut: 'slideL', animOutDur: 0.35,
+    },
+  },
+  {
+    id: 'terminal',
+    name: 'Terminal',
+    note: 'Typed with a blinking cursor',
+    style: {
+      font: 'Consolas', weight: 600, fill: 'solid', color: '#34d399',
+      strokeWidth: 0, glow: 0.018, glowColor: '#34d399', shadow: 0,
+      bg: 'box', bgColor: '#0b1220e6', bgPad: 0.02, bgRadius: 0.12, letterSpacing: 0.004,
+      anim: 'type', animDur: 1.4, animOut: 'type', animOutDur: 0.5, typeCursor: true,
+    },
+  },
 ];
 
-/** The entrance choices, in the order they are offered. */
-export const TEXT_ANIMS = [
-  { id: 'none', name: 'None' },
-  { id: 'fade', name: 'Fade' },
-  { id: 'pop',  name: 'Pop' },
-  { id: 'rise', name: 'Rise' },
-  { id: 'slam', name: 'Slam' },
-  { id: 'type', name: 'Type' },
+/** How text can arrive, in the order offered. Leaving plays the same moves backwards. */
+export const TEXT_IN = [
+  { id: 'none',   name: 'None' },
+  { id: 'fade',   name: 'Fade' },
+  { id: 'pop',    name: 'Pop' },
+  { id: 'rise',   name: 'Rise up' },
+  { id: 'fall',   name: 'Settle down' },
+  { id: 'drop',   name: 'Drop & bounce' },
+  { id: 'slam',   name: 'Slam' },
+  { id: 'grow',   name: 'Grow' },
+  { id: 'slideL', name: 'Slide from left' },
+  { id: 'slideR', name: 'Slide from right' },
+  { id: 'spin',   name: 'Spin in' },
+  { id: 'flip',   name: 'Flip' },
+  { id: 'wipe',   name: 'Wipe' },
+  { id: 'glitch', name: 'Glitch' },
+  { id: 'type',   name: 'Typewriter' },
+];
+/** Kept so anything that still asks for the old name gets the full list. */
+export const TEXT_ANIMS = TEXT_IN;
+
+/** How text can leave. The same moves as arriving, named for what you see. */
+export const TEXT_OUT = [
+  { id: 'none',   name: 'None' },
+  { id: 'fade',   name: 'Fade' },
+  { id: 'pop',    name: 'Shrink' },
+  { id: 'rise',   name: 'Sink' },
+  { id: 'fall',   name: 'Lift away' },
+  { id: 'drop',   name: 'Bounce up' },
+  { id: 'slam',   name: 'Zoom away' },
+  { id: 'grow',   name: 'Shrink out' },
+  { id: 'slideL', name: 'Slide left' },
+  { id: 'slideR', name: 'Slide right' },
+  { id: 'spin',   name: 'Spin out' },
+  { id: 'flip',   name: 'Flip' },
+  { id: 'wipe',   name: 'Wipe' },
+  { id: 'glitch', name: 'Glitch' },
+  { id: 'type',   name: 'Erase' },
+];
+
+/** What text can keep doing while it is on screen. */
+export const TEXT_LOOPS = [
+  { id: 'none',    name: 'Still' },
+  { id: 'pulse',   name: 'Pulse' },
+  { id: 'float',   name: 'Float' },
+  { id: 'wave',    name: 'Wave' },
+  { id: 'wobble',  name: 'Wobble' },
+  { id: 'shake',   name: 'Shake' },
+  { id: 'flicker', name: 'Flicker' },
+  { id: 'rainbow', name: 'Rainbow' },
+];
+
+/** What moves as one piece. */
+export const TEXT_UNITS = [
+  { id: 'all',    name: 'All at once' },
+  { id: 'word',   name: 'Word by word' },
+  { id: 'letter', name: 'Letter by letter' },
 ];
 
 /** Colours offered as one-click swatches. Blue-family plus the neutrals. */
@@ -153,11 +281,43 @@ export const LOOK_FIELDS = [
   'font', 'weight', 'italic', 'fill', 'color', 'color2', 'gradAngle',
   'letterSpacing', 'lineHeight', 'strokeWidth', 'strokeColor',
   'glow', 'glowColor', 'shadow', 'shadowColor', 'shadowX', 'shadowY',
-  'bg', 'bgColor', 'bgPad', 'bgRadius', 'anim', 'animDur',
+  'bg', 'bgColor', 'bgPad', 'bgRadius',
+  'anim', 'animDur', 'animOut', 'animOutDur', 'animLoop', 'animUnit', 'animSpread', 'typeCursor',
 ];
 
 export function lookFrom(style) {
   const out = {};
   for (const k of LOOK_FIELDS) if (style[k] !== undefined) out[k] = style[k];
   return out;
+}
+
+/* ── Your saved texts ─────────────────────────────────────────────
+   Words and the look they were in, kept together: a channel name, a
+   "follow for more", a catchphrase. One click puts it on the picture
+   exactly as it was. Kept beside the saved looks, for the same reason. */
+
+const TEXT_KEY = 'gamecut.textLibrary';
+
+export function savedTexts() {
+  try {
+    const raw = localStorage.getItem(TEXT_KEY);
+    const list = raw ? JSON.parse(raw) : [];
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveTextEntry(name, text, style) {
+  const list = savedTexts();
+  const id = 'txt_' + Date.now().toString(36);
+  list.unshift({ id, name: String(name || text || 'My text').slice(0, 40), text: String(text || ''), style });
+  try { localStorage.setItem(TEXT_KEY, JSON.stringify(list.slice(0, 60))); } catch { /* not fatal */ }
+  return id;
+}
+
+export function deleteTextEntry(id) {
+  try {
+    localStorage.setItem(TEXT_KEY, JSON.stringify(savedTexts().filter(l => l.id !== id)));
+  } catch { /* not fatal */ }
 }

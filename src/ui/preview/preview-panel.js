@@ -19,17 +19,100 @@ export function initPreview({ store, comp, playback, cmds, history }) {
     onChange: () => { comp.render(); bus.emit('inspector:refresh'); },
   });
 
+  /* ── Punch-in zoom point: a + you drag onto the crosshair ───── */
+  const fxPoint = document.createElement('div');
+  fxPoint.className = 'fxpoint';
+  fxPoint.id = 'fxPoint';
+  fxPoint.title = 'Drag onto what the zoom should punch in on';
+  fxPoint.hidden = true;
+  frame.appendChild(fxPoint);
+  const zoomSel = () => {
+    const s = store.selectedClips;
+    return s.length === 1 && s[0].clip.type === 'effect' && s[0].clip.effect?.kind === 'zoom' ? s[0].clip : null;
+  };
+  const syncPoint = () => {
+    const c = zoomSel();
+    fxPoint.hidden = !c;
+    if (!c) return;
+    fxPoint.style.left = ((c.effect.x ?? 0.5) * 100) + '%';
+    fxPoint.style.top = ((c.effect.y ?? 0.5) * 100) + '%';
+  };
+  fxPoint.addEventListener('pointerdown', (e) => {
+    const c = zoomSel();
+    if (!c) return;
+    e.preventDefault(); e.stopPropagation();
+    fxPoint.setPointerCapture(e.pointerId);
+    const before = { ...c.effect };
+    const r = frame.getBoundingClientRect();
+    const move = (ev) => {
+      c.effect.x = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width));
+      c.effect.y = Math.max(0, Math.min(1, (ev.clientY - r.top) / r.height));
+      syncPoint();
+      comp.render();
+    };
+    const up = () => {
+      fxPoint.removeEventListener('pointermove', move);
+      fxPoint.removeEventListener('pointerup', up);
+      const now = { ...c.effect };
+      Object.assign(c.effect, before);
+      cmds.setClipProp(c.id, 'effect', now, { merge: false, label: 'Zoom point' });
+    };
+    fxPoint.addEventListener('pointermove', move);
+    fxPoint.addEventListener('pointerup', up);
+  });
+  store.on('selection', syncPoint);
+  store.on('doc', syncPoint);
+
+  /* ── Compare: a divider between before and after ──────────── */
+  const cmpBtn = document.getElementById('btnCompare');
+  const cmp = document.createElement('div');
+  cmp.className = 'cmp';
+  cmp.id = 'compareDivider';
+  cmp.hidden = true;
+  cmp.innerHTML = '<span class="cmp__tag cmp__tag--l">Before</span><span class="cmp__tag cmp__tag--r">After</span><i class="cmp__knob"></i>';
+  frame.appendChild(cmp);
+  comp.compare = { on: false, x: 0.5 };
+  const paintCmp = () => {
+    cmp.hidden = !comp.compare.on;
+    cmp.style.left = (comp.compare.x * 100) + '%';
+    cmpBtn?.classList.toggle('is-active', comp.compare.on);
+  };
+  cmpBtn?.addEventListener('click', () => {
+    comp.compare.on = !comp.compare.on;
+    paintCmp(); comp.render();
+    bus.emit('toast', { msg: comp.compare.on ? 'Left: without effects, looks and motion. Right: finished. Drag the line.' : 'Compare off', ms: 2600, key: 'compare' });
+  });
+  cmp.addEventListener('pointerdown', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    cmp.setPointerCapture(e.pointerId);
+    const r = frame.getBoundingClientRect();
+    const move = (ev) => {
+      comp.compare.x = Math.max(0.02, Math.min(0.98, (ev.clientX - r.left) / r.width));
+      paintCmp(); comp.render();
+    };
+    const up = () => { cmp.removeEventListener('pointermove', move); cmp.removeEventListener('pointerup', up); };
+    cmp.addEventListener('pointermove', move);
+    cmp.addEventListener('pointerup', up);
+  });
+  paintCmp();
+
   /* ── Frame sizing: contain the project aspect in the viewport ─ */
   const fit = () => {
     const vr = viewport.getBoundingClientRect();
-    const pad = 36;
-    const availW = Math.max(80, vr.width - pad);
-    const availH = Math.max(60, vr.height - pad);
+    // Room for the floating tool clusters above and below the picture.
+    const availW = Math.max(80, vr.width - 28);
+    const availH = Math.max(60, vr.height - 112);
     const ar = store.doc.width / store.doc.height;
     let w = availW, h = w / ar;
     if (h > availH) { h = availH; w = h * ar; }
     frame.style.width = Math.round(w) + 'px';
     frame.style.height = Math.round(h) + 'px';
+    // What Auto preview quality sizes the canvas to: real screen pixels.
+    const px = Math.round(w * (window.devicePixelRatio || 1));
+    if (px !== comp.displayPx) {
+      comp.displayPx = px;
+      if (!store.ui.previewScale) { comp.resize(); comp.render(); }
+    }
     redrawGuides();
     bus.emit('preview:fit');
   };
@@ -78,7 +161,7 @@ export function initPreview({ store, comp, playback, cmds, history }) {
     paintAvg = paintAvg ? paintAvg * 0.85 + paintMs * 0.15 : paintMs;
     if (++sampled < 25) return;
 
-    const chosen = store.ui.previewScale || 1;
+    const chosen = comp.chosenQuality();
     const current = store.rt.renderScale || chosen;
     const idx = STEPS.indexOf(current);
     if (idx < 0) return;
@@ -134,7 +217,7 @@ export function initPreview({ store, comp, playback, cmds, history }) {
    */
   let frames = 0, decoded0 = 0, last = performance.now();
   const meter = (painted) => {
-    const q = store.rt.renderScale || store.ui.previewScale || 1;
+    const q = store.rt.renderScale || comp.chosenQuality();
     const suffix = q < 1 ? ` · ${label(q)}` : '';
     if (!store.rt.playing) {
       fpsChip.textContent = `${store.doc.fps} fps${suffix}`;
@@ -202,9 +285,9 @@ export function initPreview({ store, comp, playback, cmds, history }) {
   /* ── Preview quality ──────────────────────────────────────── */
   const qSel = document.getElementById('previewQuality');
   if (qSel) {
-    qSel.value = String(store.ui.previewScale ?? 0.5);
+    qSel.value = String(store.ui.previewScale ?? 0);
     qSel.addEventListener('change', () => {
-      store.ui.previewScale = parseFloat(qSel.value) || 1;
+      store.ui.previewScale = parseFloat(qSel.value) || 0;
       store.rt.renderScale = null;         // an explicit choice overrides the governor
       comp.resize();
       comp.render();

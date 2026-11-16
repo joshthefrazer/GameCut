@@ -10,8 +10,11 @@
 import { _electron as electron } from 'playwright';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { rm } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { waitFor } from './wait.mjs';
+import { patchClick } from './reveal.mjs';
 
-const ROOT = '/home/claude/gamecut';
+const ROOT = (await import('node:path')).resolve(import.meta.dirname, '..');
 const OUT = process.argv[2] || '.';
 const F = `${ROOT}/qa/fixtures`;
 
@@ -32,6 +35,7 @@ await rm(PROFILE, { recursive: true, force: true });
 
 const app = await electron.launch({ args: ['.', '--no-sandbox', '--disable-gpu', `--user-data-dir=${PROFILE}`], cwd: ROOT, timeout: 60000 });
 const win = await app.firstWindow();
+patchClick(win);
 win.on('pageerror', (e) => log('pageerror', e.message));
 win.on('console', (m) => { if (m.type() === 'error') log('console.error', m.text()); });
 await win.waitForLoadState('domcontentloaded');
@@ -47,7 +51,7 @@ await sleep(2200);
 async function enterEditor(page) {
   await page.waitForSelector('#homeNew', { timeout: 20000 });
   await page.click('#homeNew');
-  await page.waitForFunction(() =>
+  await waitFor(page, () =>
     !document.getElementById('app').classList.contains('is-home'), null, { timeout: 20000 });
   await new Promise(r => setTimeout(r, 500));
 }
@@ -77,7 +81,9 @@ await step('import mp4 / webm / mp3', async () => {
   if (!mp4) throw new Error('mp4 produced no asset: ' + JSON.stringify(a));
   if (mp4.kind !== 'video') throw new Error('mp4 imported as ' + mp4.kind);
   if (!(mp4.dur > 4)) throw new Error('mp4 duration wrong: ' + mp4.dur);
-  if (mp4.w !== 640) throw new Error('mp4 dimensions wrong: ' + mp4.w);
+  // The fixture's real size, as ffprobe reads it (it has been 640 and 1280 wide).
+  const realW = Number(execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width', '-of', 'csv=p=0', `${F}/test-clip.mp4`]).toString().trim());
+  if (mp4.w !== realW) throw new Error(`mp4 dimensions wrong: ${mp4.w}, the file is ${realW} wide`);
   if (!mp4.thumb) throw new Error('no thumbnail generated');
   if (!mp4.buf) throw new Error('video audio never decoded — it will be silent');
 });
@@ -764,8 +770,8 @@ await step('preview shows fresh frames while playing', async () => {
 await step('video track exposes a mute button', async () => {
   const n = await win.evaluate(() => {
     const rows = [...document.querySelectorAll('#trackHeaders .th')];
-    return rows.filter(r => /video/i.test(r.querySelector('.th__kind')?.textContent || '')
-                         && r.querySelector('[data-flag="muted"]')).length;
+    const kind = (r) => window.gc.store.doc.tracks.find(t => t.id === r.dataset.track)?.kind;
+    return rows.filter(r => kind(r) === 'video' && r.querySelector('[data-flag="muted"]')).length;
   });
   if (!n) throw new Error('no mute control on any video track');
 });

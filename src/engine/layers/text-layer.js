@@ -1,5 +1,6 @@
 import { fontShorthand } from '../../media/fonts.js';
 import { evalProp } from '../keyframes.js';
+import { clamp01, easeOut, rad, REST, move, loopMove, combine } from '../motion.js';
 
 /**
  * Canvas2D text renderer.
@@ -12,39 +13,38 @@ import { evalProp } from '../keyframes.js';
  * Type is sized against the frame's SHORT edge, so a title composed at 1080p
  * lands identically at 4K and keeps its optical size when the project is
  * reframed 16:9 -> 9:16, instead of ballooning past the safe area.
+ *
+ * ── Motion ──────────────────────────────────────────────────────
+ * Text can move three ways, all named rather than keyframed so each is one
+ * click to change or remove:
+ *   in    how it arrives (`anim`, over `animDur`)
+ *   out   how it leaves, over the last `animOutDur` of the clip
+ *   loop  what it does the whole time it is on screen
+ * The first two can run on the whole block, word by word, or letter by letter
+ * (`animUnit`), spread out by `animSpread`. Hand keyframes still layer on top.
  */
 export const shortEdge = (W, H) => Math.min(W, H);
 
 /**
- * How far into its entrance a clip is, 0..1.
- *
- * Entrances are a named move rather than keyframes on purpose. A person picking
- * "Pop" wants the look, not five keyframes to later discover and unpick; and
- * because it is only a name, changing or removing it is one click. Anyone who
- * wants to hand-animate still can — the keyframe system is untouched and layers
- * on top of this.
+ * How long a clip's arrival takes in all, once words or letters are staggered.
+ * The editor reads this to park the playhead somewhere the text has settled.
  */
-function entrance(clip, t) {
-  const s = clip.text;
-  const kind = s.anim || 'none';
-  if (kind === 'none') return null;
+export function entranceSpan(clip) {
+  const s = clip.text || {};
+  if (!s.anim || s.anim === 'none') return 0;
   const dur = Math.max(0.05, s.animDur || 0.35);
-  const p = Math.max(0, Math.min(1, (t - clip.start) / dur));
-  return { kind, p, done: p >= 1 };
+  return dur + ((s.animUnit && s.animUnit !== 'all') ? (s.animSpread ?? 0.35) * dur * 2 : 0);
 }
-
-const easeOut = (p) => 1 - Math.pow(1 - p, 3);
-const easeBack = (p) => {
-  const c = 1.70158 + 1;
-  return 1 + (c + 1) * Math.pow(p - 1, 3) + c * Math.pow(p - 1, 2);
-};
 
 export function measureText(ctx, clip, W, H, t = clip.start) {
   const s = clip.text;
   const px = Math.max(4, evalProp(clip, 'text.size', t) * shortEdge(W, H));
   ctx.font = fontShorthand(s, px);
   const maxW = Math.max(0.05, clip.transform.w) * W;
-  const lines = wrap(ctx, visibleText(clip, t), maxW, s.letterSpacing * px);
+  /* The whole text is measured, always. Typed text used to measure only what
+     had been typed so far, which re-centred and re-wrapped the line with every
+     letter — the words jumped about as they arrived. */
+  const lines = wrap(ctx, String(s.text ?? ''), maxW, s.letterSpacing * px);
   const lineH = px * (s.lineHeight || 1.15);
   let widest = 0;
   for (const l of lines) widest = Math.max(widest, lineWidth(ctx, l, s.letterSpacing * px));
@@ -52,18 +52,55 @@ export function measureText(ctx, clip, W, H, t = clip.start) {
 }
 
 /**
- * The characters on screen at time `t`.
+ * Break the text into the pieces that move on their own.
  *
- * Only the typewriter entrance changes this. It slices the string rather than
- * fading letters, because a half-faded letter reads as a rendering fault while
- * a missing one reads as typing.
+ * `letter` gives one piece per letter, `word` one per word. Every piece keeps
+ * the position its letters have in the whole block, measured the same way the
+ * block is drawn, so a flying word lands exactly where the still word would.
+ * Spaces take room and are counted (the typewriter types them) but are never
+ * pieces themselves.
  */
-function visibleText(clip, t) {
-  const full = String(clip.text.text ?? '');
-  const e = entrance(clip, t);
-  if (!e || e.kind !== 'type' || e.done) return full;
-  const n = Math.ceil(full.length * e.p);
-  return full.slice(0, n);
+function layout(ctx, m, s, unit, wordGap = 0) {
+  const sp = (s.letterSpacing || 0) * m.px;
+  const top = -m.height / 2 + m.lineH / 2;
+  const pieces = [], glyphs = [];
+  let n = 0;
+
+  m.lines.forEach((line, li) => {
+    const cy = top + li * m.lineH;
+    const gaps = wordGap ? (line.match(/ /g) || []).length : 0;
+    const lw = lineWidth(ctx, line, sp) + gaps * wordGap;
+    const left = alignOffset(s.align, m, lw) - lw / 2;
+    let prefix = '', acc = 0, spaces = 0;
+    const row = Array.from(line).map((ch) => {
+      const w = ctx.measureText(ch).width;
+      // Kerned position from the real prefix when there is no letter gap; summed otherwise.
+      const x = (sp ? acc : ctx.measureText(prefix).width) + spaces * wordGap;
+      if (ch === ' ') spaces++;
+      prefix += ch; acc += w + sp;
+      const g = { ch, x: left + x, w, cy, gi: glyphs.length };
+      glyphs.push(g);
+      return g;
+    });
+
+    if (unit === 'word') {
+      let cur = null;
+      for (const g of row) {
+        if (g.ch === ' ') { cur = null; continue; }
+        if (!cur) { cur = { chars: [], idx: n++, cy }; pieces.push(cur); }
+        cur.chars.push(g);
+      }
+    } else {
+      for (const g of row) if (g.ch !== ' ') pieces.push({ chars: [g], idx: n++, cy });
+    }
+  });
+
+  for (const p of pieces) {
+    const a = p.chars[0], b = p.chars[p.chars.length - 1];
+    p.cx = (a.x + b.x + b.w) / 2;
+    p.w = b.x + b.w - a.x;
+  }
+  return { pieces, glyphs, count: n };
 }
 
 export function drawTextClip(ctx, clip, W, H, t, alpha) {
@@ -74,53 +111,162 @@ export function drawTextClip(ctx, clip, W, H, t, alpha) {
 
   const x = evalProp(clip, 'transform.x', t) * W;
   const y = evalProp(clip, 'transform.y', t) * H;
-  let scale = evalProp(clip, 'transform.scale', t);
+  const scale = evalProp(clip, 'transform.scale', t);
   const rot = evalProp(clip, 'transform.rotation', t) * Math.PI / 180;
 
-  // Apply the entrance on top of whatever the transform already says, so a
-  // hand-keyframed move and a named entrance compose instead of fighting.
-  let dy = 0;
-  const e = entrance(clip, t);
-  if (e && !e.done) {
-    if (e.kind === 'pop')   { scale *= 0.6 + 0.4 * easeBack(e.p); alpha *= Math.min(1, e.p * 3); }
-    if (e.kind === 'rise')  { dy = (1 - easeOut(e.p)) * m.lineH * 1.1; alpha *= easeOut(e.p); }
-    if (e.kind === 'fade')  { alpha *= easeOut(e.p); }
-    if (e.kind === 'slam')  { scale *= 1 + (1 - easeOut(e.p)) * 1.6; alpha *= Math.min(1, e.p * 4); }
+  const inKind = s.anim || 'none';
+  const outKind = s.animOut || 'none';
+  const loopKind = s.animLoop || 'none';
+  const unit = s.animUnit === 'word' || s.animUnit === 'letter' ? s.animUnit : 'all';
+  const typing = inKind === 'type' || outKind === 'type';
+  const inDur = Math.max(0.05, s.animDur || 0.35);
+  const outDur = Math.max(0.05, s.animOutDur || 0.35);
+  const spread = clamp01(s.animSpread ?? 0.35);
+  const end = clip.start + clip.duration;
+  const tt = Math.max(0, t - clip.start);
+
+  const gIn = inKind === 'none' ? 1 : clamp01((t - clip.start) / inDur);
+  const gOut = outKind === 'none' ? 1 : clamp01((end - t) / outDur);
+
+  /* Auto-captions: each word knows when it is said (seconds into the clip),
+     and the one being said right now lights up and pops. */
+  const spoken = Array.isArray(s.words) && s.words.length > 0 && !typing;
+  const live = spoken ? s.words.findIndex(w => tt >= w.s && tt < w.e) : -1;
+  /* Keywords ("kill", "clutch", numbers…) marked by the captioner: bigger and coloured. */
+  const keys = spoken && Array.isArray(s.keys) && s.keys.length ? new Set(s.keys) : null;
+  const perPiece = unit !== 'all' || typing || spoken;
+  // Spoken captions get a little more room between words: the said word pops
+  // and keywords are coloured, and a thick outline eats into a plain space.
+  const lay = perPiece ? layout(ctx, m, s, typing ? 'letter' : spoken ? 'word' : unit, spoken ? (s.wordGap ?? 0.14) * m.px : 0) : null;
+
+  /** What the block, or one piece of it, is doing right now. */
+  const motionOf = (idx, count, whole) => {
+    let mv = { ...REST };
+    const seed = idx * 13 + 1;
+    const w = whole ? m.width : (lay?.pieces[idx]?.w ?? m.width);
+    if (inKind !== 'none' && inKind !== 'type') {
+      const step = count > 1 ? (spread * 2 * inDur) / (count - 1) : 0;
+      const p = clamp01((t - clip.start - idx * step) / inDur);
+      if (p < 1) mv = combine(mv, move(inKind, p, m.lineH, w, seed));
+    }
+    if (outKind !== 'none' && outKind !== 'type') {
+      const step = count > 1 ? (spread * 2 * outDur) / (count - 1) : 0;
+      const p = clamp01((end - t - (count - 1 - idx) * step) / outDur);
+      if (p < 1) mv = combine(mv, move(outKind, p, m.lineH, w, seed + 5));
+    }
+    if (loopKind !== 'none') mv = combine(mv, loopMove(loopKind, tt, perPiece && !whole ? idx : 0, m.lineH));
+    return mv;
+  };
+
+  /* One move for the whole block, plate included — or none, when the pieces carry their own. */
+  const group = perPiece ? { ...REST } : motionOf(0, 1, true);
+  let plateA = 1;
+  if (perPiece) {
+    plateA = (inKind === 'none' ? 1 : easeOut(gIn)) * (outKind === 'none' ? 1 : easeOut(gOut));
+    if (loopKind === 'flicker') plateA *= loopMove('flicker', tt, 0, m.lineH).a;
   }
+
+  alpha *= group.a;
   if (alpha <= 0.002) return;
 
   ctx.save();
   ctx.globalAlpha = alpha;
-  ctx.translate(x, y + dy);
-  ctx.rotate(rot);
-  ctx.scale(scale, scale);
+  ctx.translate(x + group.dx, y + group.dy);
+  ctx.rotate(rot + rad(group.rot));
+  ctx.scale(scale * group.s * group.sx, scale * group.s);
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'center';
 
+  if (!perPiece && group.wipe < 1) {           // a wipe uncovers the block left to right
+    ctx.beginPath();
+    ctx.rect(-m.width / 2 - m.px, -m.height / 2 - m.px, (m.width + m.px * 2) * group.wipe, m.height + m.px * 2);
+    ctx.clip();
+  }
+
   /* ── Plate ─────────────────────────────────────────────────── */
   const bg = plateKind(s);
-  if (bg !== 'none' && m.lines.some(l => l.length)) {
+  if (bg !== 'none' && m.lines.some(l => l.length) && plateA > 0.002) {
     const pad = (s.bgPad || 0) * S;
     const bw = m.width + pad * 2;
     const bh = m.height + pad * 1.4;
     const r = bg === 'pill' ? bh / 2 : Math.min(bh / 2, (s.bgRadius ?? 0.25) * bh);
+    ctx.save();
+    ctx.globalAlpha = alpha * plateA;
     ctx.fillStyle = s.bgColor || '#000000cc';
     roundRect(ctx, -bw / 2, -bh / 2, bw, bh, r);
     ctx.fill();
+    ctx.restore();
   }
 
   const top = -m.height / 2 + m.lineH / 2;
+  const sp = (s.letterSpacing || 0) * m.px;
   const strokeW = evalProp(clip, 'text.strokeWidth', t) * m.px;
   ctx.lineJoin = 'round';
   ctx.miterLimit = 2;
 
+  const typed = typing ? typedCount(clip, t, lay, inKind, outKind, inDur, outDur, end) : Infinity;
+
+  /**
+   * Run `fn(str, x, y, info)` once for everything on screen.
+   *
+   * With no pieces that is the lines, drawn whole. With pieces it is each in
+   * turn, wrapped in its own move — so glow, shadow, outline and fill all
+   * follow a flying letter without any of them knowing it is flying.
+   */
   const paint = (fn) => {
-    m.lines.forEach((line, i) => {
-      const ly = top + i * m.lineH;
-      const lx = alignOffset(s.align, m, lineWidth(ctx, line, s.letterSpacing * m.px));
-      fn(line, lx, ly);
-    });
+    if (!lay) {
+      m.lines.forEach((line, i) => fn(line, alignOffset(s.align, m, lineWidth(ctx, line, sp)), top + i * m.lineH, null));
+      return;
+    }
+    for (const piece of lay.pieces) {
+      if (typing && piece.chars[0].gi >= typed) continue;
+      let mv = motionOf(piece.idx, Math.max(1, lay.count), false);
+      if (piece.idx === live) mv = { ...mv, s: mv.s * (s.hiPop ?? 1.12) };
+      if (keys && keys.has(piece.idx)) mv = { ...mv, s: mv.s * (s.keyPop ?? 1) };
+      if (mv.a * alpha <= 0.002) continue;
+      ctx.save();
+      ctx.globalAlpha = alpha * mv.a;
+      ctx.translate(piece.cx + mv.dx, piece.cy + mv.dy);
+      ctx.rotate(rad(mv.rot));
+      ctx.scale(mv.s * mv.sx, mv.s);
+      if (mv.wipe < 1) {
+        ctx.beginPath();
+        ctx.rect(-piece.w / 2 - m.px * 0.2, -m.lineH, (piece.w + m.px * 0.4) * mv.wipe, m.lineH * 2);
+        ctx.clip();
+      }
+      for (const g of piece.chars) {
+        if (typing && g.gi >= typed) continue;
+        fn(g.ch, g.x + g.w / 2 - piece.cx, 0, { piece, mv });
+      }
+      ctx.restore();
+    }
   };
+
+  const drawOne = (str, gx, gy, mode, info) => {
+    if (info) {
+      ctx.textAlign = 'center';
+      mode === 'fill' ? ctx.fillText(str, gx, gy) : ctx.strokeText(str, gx, gy);
+    } else {
+      drawLine(ctx, str, gx, gy, sp, mode);
+    }
+  };
+
+  /* ── Highlight box: a plate behind the word being said, sliding
+     from the word before to this one in a few frames. ─────────── */
+  if (spoken && lay && live >= 0 && s.hiBox) {
+    const cur = lay.pieces[live], prev = lay.pieces[live - 1];
+    const w0 = s.words[live];
+    const k = prev ? easeOut(clamp01((tt - w0.s) / 0.09)) : 1;
+    const bx = prev ? prev.cx + (cur.cx - prev.cx) * k : cur.cx;
+    const by = prev ? prev.cy + (cur.cy - prev.cy) * k : cur.cy;
+    const bw = (prev ? prev.w + (cur.w - prev.w) * k : cur.w) * (s.hiPop ?? 1) + m.px * 0.36;
+    const bh = m.lineH * 0.92;
+    ctx.save();
+    ctx.fillStyle = s.hiBox;
+    roundRect(ctx, bx - bw / 2, by - bh / 2, bw, bh, bh * 0.22);
+    ctx.fill();
+    ctx.restore();
+  }
 
   /* ── Glow ──────────────────────────────────────────────────────
      Its own pass, drawn beneath everything. Canvas shadows are cheap
@@ -132,9 +278,7 @@ export function drawTextClip(ctx, clip, W, H, t, alpha) {
     ctx.shadowColor = s.glowColor || '#38bdf8';
     ctx.shadowBlur = glow * S;
     ctx.fillStyle = s.glowColor || '#38bdf8';
-    for (let pass = 0; pass < 3; pass++) {
-      paint((line, lx, ly) => drawLine(ctx, line, lx, ly, s.letterSpacing * m.px, 'fill'));
-    }
+    for (let pass = 0; pass < 3; pass++) paint((str, gx, gy, info) => drawOne(str, gx, gy, 'fill', info));
     ctx.restore();
   }
 
@@ -150,18 +294,55 @@ export function drawTextClip(ctx, clip, W, H, t, alpha) {
   if (strokeW > 0) {
     ctx.lineWidth = strokeW * 2;         // half sits inside the glyph
     ctx.strokeStyle = s.strokeColor || '#000';
-    paint((line, lx, ly) => drawLine(ctx, line, lx, ly, s.letterSpacing * m.px, 'stroke'));
+    paint((str, gx, gy, info) => drawOne(str, gx, gy, 'stroke', info));
     ctx.shadowBlur = 0;                  // the outline already cast it
     ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
   }
 
-  ctx.fillStyle = fillStyle(ctx, s, m);
-  paint((line, lx, ly) => drawLine(ctx, line, lx, ly, s.letterSpacing * m.px, 'fill'));
+  const baseFill = fillStyle(ctx, s, m);
+  const rainbow = loopKind === 'rainbow' && s.fill !== 'gradient';
+  ctx.fillStyle = rainbow && !lay ? `hsl(${(tt * 120) % 360} 90% 62%)` : baseFill;
+  paint((str, gx, gy, info) => {
+    if (info && keys && keys.has(info.piece.idx) && (s.keyWins || info.piece.idx !== live)) ctx.fillStyle = s.keyColor || s.hiColor || '#facc15';
+    else if (info && info.piece.idx === live) ctx.fillStyle = s.hiColor || '#facc15';
+    else if (info && spoken && !rainbow && s.fill !== 'gradient') ctx.fillStyle = baseFill;
+    else if (info && rainbow) ctx.fillStyle = `hsl(${info.mv.hue ?? 0} 90% 62%)`;
+    else if (info && s.fill === 'gradient') ctx.fillStyle = gradientAt(ctx, s, m, info.piece.cx, info.piece.cy);
+    drawOne(str, gx, gy, 'fill', info);
+  });
+
+  /* ── Typewriter cursor ─────────────────────────────────────────
+     Blinks while the typing is happening and for a moment after, so a
+     typed line reads as typed rather than as a slow fade. */
+  if (typing && lay && s.typeCursor !== false) {
+    const typingNow = (inKind === 'type' && gIn < 1) || (outKind === 'type' && gOut < 1);
+    const lingering = inKind === 'type' && gIn >= 1 && tt < inDur + 0.8;
+    if ((typingNow || lingering) && Math.floor(tt * 2.5) % 2 === 0) {
+      const idx = Math.min(typed, lay.glyphs.length);
+      const prev = lay.glyphs[idx - 1], next = lay.glyphs[idx];
+      const cx = prev ? prev.x + prev.w : (next ? next.x : 0);
+      const cy = prev ? prev.cy : (next ? next.cy : top);
+      ctx.save();
+      ctx.shadowColor = 'transparent';
+      ctx.fillStyle = typeof baseFill === 'string' ? baseFill : (s.color || '#fff');
+      ctx.fillRect(cx + m.px * 0.04, cy - m.lineH * 0.38, Math.max(2, m.px * 0.07), m.lineH * 0.76);
+      ctx.restore();
+    }
+  }
 
   ctx.restore();
 }
 
 /* ── helpers ──────────────────────────────────────────────────── */
+
+/** How many characters of a typed line are showing — spaces count, they take a keystroke too. */
+function typedCount(clip, t, lay, inKind, outKind, inDur, outDur, end) {
+  const total = lay.glyphs.length;
+  let n = total;
+  if (inKind === 'type') n = Math.min(n, Math.ceil(total * clamp01((t - clip.start) / inDur)));
+  if (outKind === 'type') n = Math.min(n, Math.ceil(total * clamp01((end - t) / outDur)));
+  return n;
+}
 
 /**
  * Older clips said "no plate" by giving bgColor a fully transparent value.
@@ -174,17 +355,21 @@ function plateKind(s) {
   return /^#[0-9a-f]{6}00$/i.test(c) || !c ? 'none' : 'box';
 }
 
-function fillStyle(ctx, s, m) {
-  if (s.fill !== 'gradient') return s.color || '#fff';
+/** The gradient across the text's own box; `ox, oy` shift it for a piece that has moved its origin. */
+function gradientAt(ctx, s, m, ox = 0, oy = 0) {
   const a = ((s.gradAngle ?? 90) * Math.PI) / 180;
   // Span the gradient across the text's own box, so it looks the same whatever
   // the words are — not across the whole frame, where short text gets a sliver.
   const r = Math.max(m.width, m.height) / 2;
   const g = ctx.createLinearGradient(
-    -Math.cos(a) * r, -Math.sin(a) * r, Math.cos(a) * r, Math.sin(a) * r);
+    -Math.cos(a) * r - ox, -Math.sin(a) * r - oy, Math.cos(a) * r - ox, Math.sin(a) * r - oy);
   g.addColorStop(0, s.color || '#ffffff');
   g.addColorStop(1, s.color2 || '#38bdf8');
   return g;
+}
+
+function fillStyle(ctx, s, m) {
+  return s.fill !== 'gradient' ? (s.color || '#fff') : gradientAt(ctx, s, m);
 }
 
 function alignOffset(align, m, w) {

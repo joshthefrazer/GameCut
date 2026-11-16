@@ -38,6 +38,8 @@ const IDLE_EVICT_MS = 20_000;
 
 /* Export streaming (see DecoderPool.streamTo). */
 const STREAM_JUMP = 2;          // seconds ahead beyond which a seek is cheaper
+/** How far past a frame the stream may land and still count as that frame (two 60 fps frames, one 30 fps frame). */
+const STREAM_SLACK = 0.034;
 const STREAM_RATE_MIN = 2;
 const STREAM_RATE_MAX = 16;     // the element refuses anything faster
 const STREAM_RATE_START = 8;
@@ -130,7 +132,15 @@ export class DecoderPool {
     let rec = this.#els.get(key);
     if (!rec) {
       const el = document.createElement('video');
-      el.src = asset.url;
+      // Electron 44 treats gcmedia:// as a foreign origin for canvas purposes:
+      // without asking for CORS, one frame drawn from it taints the canvas, and
+      // export (VideoFrame from that canvas) and every pixel read-back throw.
+      // The protocol answers with Access-Control-Allow-Origin: *, so asking is enough.
+      el.crossOrigin = 'anonymous';
+      // The preview plays a light copy of heavy footage when there is one
+      // (media/proxies.js); export never sets useProxies. A clip whose sound
+      // plays off this element keeps the original, which has the sound.
+      el.src = (this.useProxies && asset.proxyUrl && !asset.streamAudio) ? asset.proxyUrl : asset.url;
       el.preload = 'auto';
       // Long clips have no decoded AudioBuffer, so their sound comes straight
       // off this element; AudioGraph unmutes and mixes it. Short clips are
@@ -181,6 +191,19 @@ export class DecoderPool {
         rec.rvfc = el.requestVideoFrameCallback(pump);
       }
 
+      /*
+       * A seek that lands while parked, and the very first frame of a new
+       * element, are both new pictures — but a frame callback is not
+       * guaranteed for either: a paused element that has only just been
+       * created can finish its first seek without ever presenting through
+       * requestVideoFrameCallback. The render that asked for that frame has
+       * already given up, so say so here, the same way a presented frame does,
+       * or the preview sits on a black or out-of-date picture after an edit.
+       */
+      const landed = () => this.onFrame?.();
+      el.addEventListener('loadeddata', landed);
+      el.addEventListener('seeked', landed);
+
       this.#els.set(key, rec);
       this.#trim(key);
     }
@@ -216,7 +239,15 @@ export class DecoderPool {
   }
 
   /** Returns a drawable source for `clip` at timeline time `t`, or null. */
+  /**
+   * Pictures handed in from outside for a clip (the export's own WebCodecs
+   * decoder, see export/frame-reader.js). While one is set, it is that clip's
+   * picture; the <video> element is not touched.
+   */
+  overrides = new Map();
+
   frameFor(clip, t, playing) {
+    if (this.overrides.has(clip.id)) return this.overrides.get(clip.id);
     const asset = assets.get(clip.assetId);
     if (!asset) return null;
 
@@ -224,6 +255,11 @@ export class DecoderPool {
       let img = this.#imgs.get(asset.id);
       if (!img) {
         img = new Image();
+        img.crossOrigin = 'anonymous';
+        // A still has no frame callback, so say so when it has decoded: the
+        // render that asked for it found nothing and gave up, and without this
+        // nothing would ask again until something unrelated repainted.
+        img.addEventListener('load', () => this.onFrame?.(), { once: true });
         img.src = asset.url;
         this.#imgs.set(asset.id, img);
       }
@@ -312,6 +348,7 @@ export class DecoderPool {
    * second, which looked like a decoder running at 3fps.
    */
   peek(clip) {
+    if (this.overrides.has(clip.id)) return this.overrides.get(clip.id);
     const asset = assets.get(clip.assetId);
     if (!asset) return null;
     if (asset.kind === 'image') {
@@ -334,6 +371,41 @@ export class DecoderPool {
     const asset = assets.get(clip.assetId);
     if (asset?.kind !== 'video') return null;
     return this.#el(clip, asset).el;
+  }
+
+  /**
+   * The source time a clip wants at timeline time `t`, kept inside the file.
+   *
+   * A transition deliberately asks the OUTGOING clip for a little past its own
+   * end (see engine/transitions.js) — and gaming clips are usually used whole,
+   * with no spare footage after the out-point. A <video> can never reach a time
+   * beyond its duration, so asking for one used to burn the full five-second
+   * wait on every frame of the transition and then a corrective seek: about
+   * 5 s per frame, which is what made exports with a transition look frozen.
+   * Past the end means "hold the last frame", and the last frame is one frame
+   * short of the duration (seeking to exactly the end can show nothing).
+   */
+  #sourceTime(clip, asset, el, t) {
+    const raw = Math.max(0, clip.inPoint + (t - clip.start) * (clip.speed || 1));
+    const dur = Number.isFinite(el.duration) && el.duration > 0
+      ? el.duration
+      : (Number.isFinite(asset?.duration) && asset.duration > 0 ? asset.duration : Infinity);
+    return Math.min(raw, Math.max(0, dur - 1 / 60));
+  }
+
+  /**
+   * A source that will never produce a frame: moved or deleted on disk, or one
+   * the decoder already gave up on. Waiting on it cost ~10 s per exported frame
+   * (a seek that never fires `seeked`, then a five-second deadline, then a
+   * corrective seek that times out too). It is skipped at once instead; the
+   * export dialog names offline clips before the render starts.
+   *
+   * Not networkState === NETWORK_NO_SOURCE: a freshly created element reports
+   * that for a moment while it starts loading, so it would skip healthy footage
+   * (black opening frames). A file that really failed sets `error`.
+   */
+  #dead(asset, el) {
+    return !!(asset?.missing || el.error);
   }
 
   /**
@@ -383,9 +455,22 @@ export class DecoderPool {
 
       const rec = this.#el(clip, asset);
       const el = rec.el;
-      const speed = clip.speed || 1;
-      const target = Math.max(0, clip.inPoint + (t - clip.start) * speed);
+      if (this.#dead(asset, el)) continue;
+      const target = this.#sourceTime(clip, asset, el, t);
       const here = el.currentTime;
+
+      // Holding the last frame through the tail of a transition: nothing to do.
+      if (Math.abs(here - target) <= tolerance && el.paused) continue;
+
+      /*
+       * Already there, give or take a frame: what is showing is the picture
+       * for this moment (or the one a frame after it). Seeking back for that
+       * re-decoded from the last keyframe every time; on an OBS recording
+       * (keyframes seconds apart, 1080p60) that was nearly all of an export's
+       * time, for a difference nobody can see.
+       */
+      const slack = Math.max(tolerance, STREAM_SLACK);
+      if (here >= target && here - target <= slack) continue;
 
       // Backwards, or so far ahead that playing through would cost more than a
       // seek. Either way this is a discontinuity, not a step.
@@ -404,14 +489,18 @@ export class DecoderPool {
           rec.starting = false;
         }
         const deadline = performance.now() + 5000;
-        while (el.currentTime < target && performance.now() < deadline) {
+        while (el.currentTime < target && !el.ended && !el.error && performance.now() < deadline) {
           await new Promise(r => setTimeout(r, 1));
         }
+        // Hold it here while this frame is drawn and encoded, so it does not
+        // run on ahead and have to be dragged back.
+        if (!el.paused) el.pause();
       }
 
       // Did it stop somewhere that would show a different picture than an exact
       // seek would? Then take the slow path for this one frame.
-      if (Math.abs(el.currentTime - target) > tolerance) {
+      const off = el.currentTime - target;
+      if (off < -tolerance || off > Math.max(tolerance, STREAM_SLACK)) {
         if (!el.paused) el.pause();
         await this.seekExact([clip], t);
         corrections++;
@@ -495,7 +584,8 @@ export class DecoderPool {
 
       const rec = this.#el(clip, asset);
       const el = rec.el;
-      const target = Math.max(0, clip.inPoint + (t - clip.start) * (clip.speed || 1));
+      if (this.#dead(asset, el)) continue;
+      const target = this.#sourceTime(clip, asset, el, t);
       if (!el.paused) el.pause();
       rec.starting = false;
 

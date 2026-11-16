@@ -9,7 +9,17 @@
  * offer, because every entry calls the same command the rest of the app does.
  */
 import { bus } from '../../core/events.js';
+import { freezeFrame } from '../../edit/freeze-frame.js';
 import { TRANSITION_PICKS, DEFAULT_TRANS_DUR, pickFor, outgoingFor } from '../../engine/transitions.js';
+import { askText } from '../widgets/ask.js';
+import { LANE_PRESETS } from '../../core/commands.js';
+
+/** Colour labels for clips and lanes. */
+export const LABELS = [
+  { c: '#ef4444', n: 'Red' }, { c: '#f97316', n: 'Orange' }, { c: '#eab308', n: 'Yellow' },
+  { c: '#22c55e', n: 'Green' }, { c: '#06b6d4', n: 'Cyan' }, { c: '#3b82f6', n: 'Blue' },
+  { c: '#a855f7', n: 'Purple' }, { c: '#ec4899', n: 'Pink' },
+];
 
 const SPEEDS = [
   { v: 0.25, n: '0.25× — quarter speed' },
@@ -73,6 +83,13 @@ export function initContextMenu({ store, cmds, playback }) {
       b.disabled = !!it.disabled;
       b.innerHTML = `<span></span>`;
       b.firstChild.textContent = it.label;
+      if (it.dot) {
+        const d = document.createElement('i');
+        d.className = 'ctx__dot';
+        d.style.background = it.dot;
+        b.prepend(d);
+      }
+      if (it.id) b.dataset.item = it.id;
       if (it.key) {
         const k = document.createElement('kbd');
         k.textContent = it.key;
@@ -99,6 +116,29 @@ export function initContextMenu({ store, cmds, playback }) {
     // silently operating on a different clip than the one under the pointer is
     // the classic way this feature goes wrong.
     if (!store.rt.selection.includes(clip.id)) store.select([clip.id]);
+
+    /**
+     * A clip that is locked — or on a locked track — gets a menu that says so
+     * and offers the way out, instead of a Delete and a Speed that the lock is
+     * supposed to forbid.
+     */
+    if (clip.locked || track.locked) {
+      const items = [
+        { head: `${clip.name || clip.type} · locked` },
+        { label: 'Play from here', on: () => { playback.seek(clip.start); playback.play(); } },
+        { sep: true },
+      ];
+      if (track.locked) {
+        items.push({ label: `Unlock the track "${track.name}"`,
+          on: () => cmds.setTrackFlag(track.id, 'locked', false) });
+      }
+      if (clip.locked) {
+        items.push({ label: 'Unlock this clip',
+          on: () => cmds.setClipProp(clip.id, 'locked', false, { merge: false, label: 'Lock clip' }) });
+      }
+      show(x, y, items);
+      return;
+    }
     const many = store.rt.selection.length > 1;
     const visual = clip.type === 'video' || clip.type === 'image';
     const timed = clip.type !== 'text' && clip.type !== 'shape';
@@ -109,10 +149,26 @@ export function initContextMenu({ store, cmds, playback }) {
         on: () => cmds.splitAt(store.rt.playhead, store.rt.selection) },
       { label: 'Duplicate', key: 'Ctrl+D', on: () => cmds.duplicateSelected() },
       { label: 'Delete', key: 'Del', on: () => cmds.removeSelected() },
+      { label: 'Delete and close the gap', key: 'Shift+Del', id: 'rippleDelete', on: () => cmds.removeSelected({ ripple: true }) },
+      { sep: true },
+      { label: 'Rename…', id: 'rename', disabled: many, on: () => renameClip(clip) },
+      { label: 'Colour label', id: 'label', sub: [
+        ...LABELS.map(l => ({ label: l.n, dot: l.c, id: 'label-' + l.n.toLowerCase(), on_: clip.label === l.c,
+          on: () => cmds.labelClips(store.rt.selection.includes(clip.id) ? store.rt.selection : [clip.id], l.c) })),
+        { sep: true },
+        { label: 'No label', id: 'label-none', on: () => cmds.labelClips(store.rt.selection.includes(clip.id) ? store.rt.selection : [clip.id], null) },
+      ] },
+      { label: 'Select this and everything after it', id: 'selectFrom', on: () => cmds.selectFrom(clip.id) },
       { sep: true },
       { label: 'Play from here',
         on: () => { playback.seek(clip.start); playback.play(); } },
+      { sep: true },
+      { label: 'Copy look', key: 'Ctrl+Alt+C', on: () => cmds.copyLook(clip.id) },
     ];
+    if (cmds.copiedLook) {
+      items.push({ label: many ? `Paste look onto ${store.rt.selection.length} clips` : 'Paste look', key: 'Ctrl+Alt+V',
+        on: () => cmds.pasteLook(store.rt.selection.includes(clip.id) ? store.rt.selection : [clip.id]) });
+    }
 
     if (visual) {
       items.push({ sep: true });
@@ -150,6 +206,20 @@ export function initContextMenu({ store, cmds, playback }) {
         ] : undefined,
       });
       items.push({ label: 'Crop out a piece…', key: 'C', on: () => bus.emit('crop:start') });
+    }
+    if (clip.type === 'video' && !many) {
+      // Pause the picture on the frame under the playhead (or the clip's first
+      // frame if the playhead is somewhere else), then carry on.
+      const ph = store.rt.playhead;
+      const at = ph >= clip.start && ph < clip.start + clip.duration ? ph : clip.start;
+      items.push({
+        label: 'Freeze frame (pause the video here)',
+        sub: [1, 2, 3, 5].map(n => ({
+          label: `Pause for ${n} second${n === 1 ? '' : 's'}`,
+          key: n === 2 ? 'Shift+F' : undefined,
+          on: () => freezeFrame({ store, cmds, t: at, hold: n }),
+        })),
+      });
     }
 
     if ((clip.type === 'video' || clip.type === 'image')
@@ -216,15 +286,126 @@ export function initContextMenu({ store, cmds, playback }) {
 
   /* ── The menu for empty space ─────────────────────────────── */
   function forLane(track, t, x, y) {
-    show(x, y, [
-      { head: track ? track.name : 'Timeline' },
-      { label: 'Add a text layer here', key: 'T', on: () => cmds.addTextClip(t, track?.id) },
-      { label: 'Add a marker here', key: 'M', on: () => cmds.addMarker(t) },
+    const items = [{ head: track ? track.name : 'Timeline' }];
+    /**
+     * Right-clicking the hole between two clips is the natural way to ask for
+     * it to go away, so that comes first when there is one.
+     */
+    const gap = track && !track.locked ? cmds.gapAt(track.id, t) : null;
+    if (gap) {
+      items.push({
+        label: `Close this gap (${gap.dur < 10 ? gap.dur.toFixed(1) : Math.round(gap.dur)}s)`,
+        on: () => cmds.closeGap(track.id, t),
+      });
+      items.push({ sep: true });
+    }
+    // Only where a title can actually show. On a sound lane this used to make
+    // a text clip on the audio track, which nothing ever draws.
+    if (!track || track.kind !== 'audio') {
+      items.push({ label: 'Add a text layer here', key: 'T',
+        on: () => cmds.addTextClip(t, track?.kind === 'text' ? track.id : null) });
+    }
+    items.push({ label: 'Add a marker here', key: 'M', on: () => cmds.addMarker(t) });
+    items.push({ sep: true });
+    items.push({ label: 'Import media…', key: 'I', on: () => document.getElementById('filePicker').click() });
+    items.push({ label: 'Select every clip', key: 'Ctrl+A', on: () => store.select(cmds.selectableIds()) });
+    show(x, y, items);
+  }
+
+  async function renameClip(clip) {
+    const v = await askText({ title: 'Rename clip', label: 'A name you will recognise on the timeline', value: clip.name || '', ok: 'Rename', maxLength: 80 });
+    if (v) cmds.renameClip(clip.id, v);
+  }
+  async function renameTrack(track) {
+    const v = await askText({ title: 'Rename lane', value: track.name || '', ok: 'Rename', maxLength: 40 });
+    if (v) cmds.renameTrack(track.id, v);
+  }
+
+  /** The ready-made lanes, as menu items. */
+  // The Zoom lane is made by Smart Zoom, not picked from a menu.
+  const MENU_PRESETS = () => Object.entries(LANE_PRESETS).filter(([, p]) => !p.patch?.zoomLane);
+  const laneItems = (aboveId = null) => MENU_PRESETS().map(([k, p]) => ({
+    label: `${p.name} — ${p.note}`, id: 'lane-' + k,
+    on: () => {
+      const t = cmds.addLane(k, aboveId);
+      if (t) {
+        bus.emit('timeline:reveal', { trackId: t.id });
+        bus.emit('toast', { msg: `Added a ${p.name} lane — ${p.note.toLowerCase()}`, kind: 'ok', key: 'lane' });
+      }
+    },
+  }));
+  function forAddLane(x, y, kind = null) {
+    const all = laneItems();
+    const keys = MENU_PRESETS().map(([k]) => k);
+    const pick = kind ? all.filter((_, i) => LANE_PRESETS[keys[i]].kind === kind) : all;
+    show(x, y, [{ head: kind ? `Add a ${kind === 'audio' ? 'sound' : kind} lane` : 'Add a lane' }, ...pick]);
+  }
+
+  /* ── The menu for a track header ──────────────────────────── */
+  function forTrack(track, x, y) {
+    const same = store.doc.tracks.filter(t => t.kind === track.kind);
+    const pos = same.indexOf(track);
+    const items = [
+      { head: `${track.name} · ${track.kind} track` },
+      { label: 'Rename…', id: 'renameLane', on: () => renameTrack(track) },
+      { label: 'Lane colour', id: 'laneColour', sub: [
+        ...LABELS.map(l => ({ label: l.n, dot: l.c, id: 'lanecol-' + l.n.toLowerCase(), on_: track.color === l.c, on: () => cmds.setTrackColor(track.id, l.c) })),
+        { sep: true },
+        { label: 'No colour', id: 'lanecol-none', on: () => cmds.setTrackColor(track.id, null) },
+      ] },
+      { label: track.kind === 'audio' ? 'Move up' : 'Move up (in front)', id: 'laneUp', disabled: pos <= 0, on: () => cmds.moveTrack(track.id, -1) },
+      { label: track.kind === 'audio' ? 'Move down' : 'Move down (behind)', id: 'laneDown', disabled: pos >= same.length - 1, on: () => cmds.moveTrack(track.id, 1) },
+      { label: 'Duplicate this lane', id: 'laneDup', on: () => { const t = cmds.duplicateTrack(track.id); if (t) bus.emit('toast', { msg: `Made "${t.name}"`, kind: 'ok', key: 'lane' }); } },
+      { label: 'Add a lane', id: 'laneAdd', sub: laneItems() },
       { sep: true },
-      { label: 'Import media…', key: 'I', on: () => document.getElementById('filePicker').click() },
-      { label: 'Select every clip', key: 'Ctrl+A',
-        on: () => store.select(store.doc.tracks.flatMap(tr => tr.clips.map(c => c.id))) },
-    ]);
+      ...(track.kind === 'audio' ? [
+        { label: track.voice ? 'Voice clean-up: on' : 'Voice clean-up: off', id: 'laneVoice', on_: !!track.voice,
+          on: () => cmds.setTrackFlag(track.id, 'voice', !track.voice) },
+        { label: track.duck?.on ? 'Dip under talking: on' : 'Dip under talking: off', id: 'laneDuck', on_: !!track.duck?.on,
+          on: () => cmds.setTrackFlag(track.id, 'duck', { on: !track.duck?.on, depth: track.duck?.depth ?? 0.7 }) },
+        { sep: true },
+      ] : []),
+      { label: track.locked ? 'Unlock this track' : 'Lock this track',
+        on: () => cmds.setTrackFlag(track.id, 'locked', !track.locked) },
+      { sep: true },
+      { label: track.clips.length
+          ? `Delete this track and its ${track.clips.length} clip${track.clips.length === 1 ? '' : 's'}…`
+          : 'Delete this track',
+        disabled: store.doc.tracks.length <= 1,
+        on: () => deleteTrack(track, x, y) },
+    ];
+    show(x, y, items);
+  }
+
+  /**
+   * Delete a track, asking first if there is anything on it.
+   *
+   * An empty lane just goes (with Undo on the toast). One with clips on it asks
+   * — in a menu at the same spot rather than a system dialog, so the answer is
+   * where your pointer already is.
+   */
+  function deleteTrack(track, x, y, confirmed = false) {
+    const n = track.clips.length;
+    if (store.doc.tracks.length <= 1) {
+      bus.emit('toast', { msg: 'A project needs at least one track.' });
+      return;
+    }
+    if (n && !confirmed) {
+      show(x, y, [
+        { head: `Delete "${track.name}"?` },
+        { label: `Delete it, and the ${n} clip${n === 1 ? '' : 's'} on it`,
+          on: () => deleteTrack(track, x, y, true) },
+        { label: 'Keep it', on: () => {} },
+      ]);
+      menu?.classList.add('ctx--confirm');
+      return;
+    }
+    if (cmds.removeTrack(track.id)) {
+      bus.emit('toast', {
+        msg: `Deleted the track "${track.name}"`, key: 'edit', ms: 4500,
+        action: { label: 'Undo', run: () => cmds.undo() },
+      });
+    }
   }
 
   /* ── The menu for a cut ───────────────────────────────────── */
@@ -281,5 +462,6 @@ export function initContextMenu({ store, cmds, playback }) {
     show(x, y, items);
   }
 
-  return { forClip, forLane, forRuler, forJunction, close };
+  bus.on('lanes:add', ({ x, y } = {}) => forAddLane(x ?? window.innerWidth / 2, y ?? window.innerHeight / 2));
+  return { forClip, forLane, forRuler, forJunction, forTrack, forAddLane, deleteTrack, close, show };
 }

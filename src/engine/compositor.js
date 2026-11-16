@@ -3,9 +3,15 @@ import { drawVisualClip, drawShapeClip, sourceRect } from './layers/video-layer.
 import { drawTextClip, measureText } from './layers/text-layer.js';
 import { evalProp, fadeGain } from './keyframes.js';
 import { transitionAt, transitionPlan } from './transitions.js';
+import { visualMotion, rad } from './motion.js';
+import { applyEffect } from './layers/effects.js';
+import { drawAnimClip, animBox } from './layers/anim-layer.js';
 
 /** Preview renders at most this wide; export re-runs the same code at full res. */
-const PREVIEW_MAX_W = 1600;
+const PREVIEW_MAX_W = 2560;
+
+/** How long a paused preview keeps retrying a frame it could not finish. */
+const RETRY_MS = 4000;
 
 export class Compositor {
   /**
@@ -58,12 +64,30 @@ export class Compositor {
    * makes long or high-resolution footage playable. It only affects what you
    * look at — export always renders at full size through `fixedSize`.
    */
+  /**
+   * The quality the person picked, as a step (1, 0.5 or 0.25).
+   *
+   * "Auto" (0, the default) picks the smallest step that is still at least as
+   * sharp as the preview is on screen — panel width times the display's pixel
+   * ratio — so a laptop at 150% scaling never gets a canvas stretched soft,
+   * and a small panel never pays for pixels it cannot show.
+   */
+  chosenQuality() {
+    const q = this.store.ui.previewScale;
+    if (q) return q;
+    const pw = this.store.doc.width;
+    const shown = this.displayPx || 0;            // set by the preview panel's fit()
+    if (!shown) return 1;
+    const need = shown / Math.min(pw, PREVIEW_MAX_W);
+    return need > 0.52 ? 1 : need > 0.26 ? 0.5 : 0.25;   // a little slack so 960px of panel gets Half, not Full
+  }
+
   resize() {
     const { width: pw, height: ph } = this.store.doc;
     // rt.renderScale is the quality governor's temporary override during
     // playback; ui.previewScale is what the person actually chose.
     const quality = this.fixedSize ? 1
-      : (this.store.rt.renderScale || this.store.ui.previewScale || 1);
+      : (this.store.rt.renderScale || this.chosenQuality());
     const cap = Math.min(1, PREVIEW_MAX_W / pw) * quality;
     const w = this.fixedSize ? this.fixedSize.w : Math.max(2, Math.round(pw * cap));
     const h = this.fixedSize ? this.fixedSize.h : Math.max(2, Math.round(ph * cap));
@@ -72,6 +96,9 @@ export class Compositor {
       this.canvas.width = w;
       this.canvas.height = h;
       this._painted = false;          // nothing worth holding onto at a new size
+      // Resizing wipes the canvas. During playback the transport only paints
+      // when something is new, so say that something is: the wiped canvas.
+      this.fresh = true;
     }
   }
 
@@ -79,16 +106,46 @@ export class Compositor {
    * Is there anything new to draw?
    *
    * True when a decoder produced a frame since the last paint, or when the
-   * moment contains something that animates on its own — text keyframes and
-   * shapes have no decoder to wait for. Without a video source at all we must
-   * keep painting normally.
+   * moment contains something that changes on its own — text and shapes have
+   * no decoder to wait for, and neither does a still that is moving.
+   *
+   * Stills used to be lumped in with footage here, and that was wrong in a way
+   * that only shows on a timeline with no footage at all: nothing ever set
+   * `fresh`, so once play was pressed the canvas was never painted again. A
+   * graphic's keyframes, fades and motion presets, and a dissolve between two
+   * stills, all sat frozen on their first frame for as long as it played. A
+   * still that is NOT moving is still exempt — repainting a static logo over
+   * playing footage at display rate is exactly the waste this method exists to
+   * stop — but one that is moving is no different from a title.
+   *
+   * The set of layers changing counts as new as well: a cut from footage to a
+   * still has no decoder frame to announce it, and the still would otherwise
+   * wait for whatever happened to paint next.
    */
   needsPaint(t = this.store.rt.playhead) {
     if (this.fresh) return true;
-    for (const { clip } of this.activeClips(t)) {
-      if (clip.type !== 'video' && clip.type !== 'image') return true;
+    const active = this.activeClips(t);
+    if (this.#sceneKey(active) !== this._scene) return true;
+    for (const { clip } of active) {
+      if (this.motionPreview?.clipId === clip.id) return true;
+      if (clip.type === 'video') { if (motionLive(clip, t)) return true; continue; }
+      if (clip.type !== 'image') return true;
+      if (stillMoves(clip, t)) return true;
+    }
+    // A transition is a blend that changes every tick, whatever its two sides
+    // are made of.
+    for (const track of this.store.doc.tracks) {
+      if (track.kind === 'audio' || track.hidden) continue;
+      if (transitionAt(track, t)) return true;
     }
     return false;
+  }
+
+  /** Which layers are on screen, as one comparable string. */
+  #sceneKey(active) {
+    let k = '';
+    for (const { clip } of active) k += clip.id + ',';
+    return k;
   }
 
   /**
@@ -107,8 +164,28 @@ export class Compositor {
     for (const clip of this.clipsNeededAt(t)) this.pool.frameFor(clip, t, playing);
   }
 
+  /**
+   * Paint again on the next display frame, for a few seconds at most.
+   *
+   * Bounded because a source that will never arrive (a file that failed to
+   * open) must not keep a loop running forever; anything that arrives later
+   * than this is announced by the decoder pool's own events.
+   */
+  #retryPaint() {
+    if (this._retry) return;
+    const now = performance.now();
+    if (!this._retryUntil) this._retryUntil = now + RETRY_MS;
+    if (now > this._retryUntil) return;
+    this._retry = requestAnimationFrame(() => {
+      this._retry = 0;
+      if (this.store.rt.playing) { this._retryUntil = 0; return; }
+      this.render(this.store.rt.playhead, false);
+    });
+  }
+
   /** Release decoders and timers. Export compositors are short-lived. */
   dispose() {
+    if (this._retry) cancelAnimationFrame(this._retry);
     clearInterval(this._sweepTimer);
     this.pool.disposeAll();
   }
@@ -236,7 +313,7 @@ export class Compositor {
           evalProp(clip, 'transform.opacity', t) * fadeGain(clip, t)));
         if (alpha <= 0.001) continue;
 
-        if (clip.type === 'text' || clip.type === 'shape') {
+        if (clip.type === 'text' || clip.type === 'shape' || clip.type === 'effect' || clip.type === 'anim') {
           layers.push({ clip, alpha, src: null });
           continue;
         }
@@ -252,23 +329,130 @@ export class Compositor {
     // which is precisely the wasted repainting this flag exists to stop.
     this.fresh = false;
 
+    /*
+     * A frame that could not be finished must be asked for again.
+     *
+     * Every edit repaints once, at once — and when the decoder is mid-seek, or
+     * the element was only just created, that one paint finds nothing and is
+     * abandoned. Playback asks again on its next tick, but while paused nothing
+     * did: the frame arrived, sat in the decoder, and the preview stayed black
+     * or kept showing a picture from before the edit. The decoder pool now
+     * announces seeks and first loads as well as presented frames (see
+     * `onFrame`), and this is the backstop for anything that announces nothing:
+     * keep trying on the next display frame until the picture is whole.
+     */
+    if (starved && !playing && !this.fixedSize) this.#retryPaint();
+    else this._retryUntil = 0;
+
     if (starved && this._painted) return false;
 
+    this.#paintLayers(ctx, layers, W, H, t);
+
+    /*
+     * Compare view: the left of the divider is the picture without effects,
+     * looks or motion; the right is the finished picture. Preview only — an
+     * export never has `compare` set.
+     */
+    const cmp = this.compare;
+    if (cmp?.on && !this.fixedSize) {
+      if (!this._cmp || this._cmp.width !== W || this._cmp.height !== H) {
+        this._cmp = document.createElement('canvas'); this._cmp.width = W; this._cmp.height = H;
+      }
+      const cc = this._cmp.getContext('2d');
+      cc.globalCompositeOperation = 'copy';
+      cc.drawImage(this.canvas, 0, 0);
+      this.bypass = true;
+      try { this.#paintLayers(ctx, layers, W, H, t); } finally { this.bypass = false; }
+      const x = Math.round(Math.max(0, Math.min(1, cmp.x ?? 0.5)) * W);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalAlpha = 1;
+      ctx.drawImage(this._cmp, x, 0, W - x, H, x, 0, W - x, H);
+    }
+
+    this._painted = true;
+    this._scene = this.#sceneKey(this.activeClips(t));
+    return true;
+  }
+
+  #paintLayers(ctx, layers, W, H, t) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = 1;
     ctx.fillStyle = this.store.doc.bg || '#000';
     ctx.fillRect(0, 0, W, H);
 
+    const mp = this.bypass ? null : this.motionPreview;
     for (const layer of layers) {
       if (layer.kind === 'transition') { this.#drawTransition(ctx, layer, W, H, t); continue; }
-      const { clip, alpha, src } = layer;
-      if (clip.type === 'text') { drawTextClip(ctx, clip, W, H, t, alpha); continue; }
-      if (clip.type === 'shape') { drawShapeClip(ctx, clip, W, H, t, alpha); continue; }
-      drawVisualClip(ctx, clip, src, W, H, t, alpha);
+      let { clip } = layer;
+      const { alpha, src } = layer;
+      // A move being tried out in the Motion panel: drawn on this clip, at the
+      // panel's own clock, without touching the project.
+      let mt = t;
+      if (mp && mp.clipId === clip.id) {
+        clip = clip.type === 'text'
+          ? { ...clip, text: { ...clip.text, ...mp.patch } }
+          : { ...clip, motion: { ...(clip.motion || {}), ...mp.patch } };
+        mt = mp.t;
+      }
+      if (clip.type === 'effect') { if (!this.bypass) applyEffect(ctx, this.canvas, clip, t, W, H); continue; }
+      if (clip.type === 'text') {
+        if (this.bypass) clip = { ...clip, text: { ...clip.text, anim: 'none', animOut: 'none', animLoop: 'none' } };
+        drawTextClip(ctx, clip, W, H, mt, alpha);
+        continue;
+      }
+      if (this.bypass && clip.fx) clip = { ...clip, fx: null };
+      this.#drawMoving(ctx, clip, src, W, H, t, mt, alpha);
     }
+  }
 
-    this._painted = true;
-    return true;
+  /**
+   * A picture, still or shape, with its named motion (arrives / leaves /
+   * keeps doing) applied around its own centre. Text does the same inside its
+   * own painter, piece by piece.
+   */
+  #drawMoving(ctx, clip, src, W, H, t, mt, alpha) {
+    const paint = (a) => {
+      if (clip.type === 'shape') drawShapeClip(ctx, clip, W, H, t, a);
+      else if (clip.type === 'anim') drawAnimClip(ctx, clip, W, H, t, a);
+      else drawVisualClip(ctx, clip, src, W, H, t, a);
+    };
+    if (!clip.motion || this.bypass) { paint(alpha); return; }
+    const b = this.boundsPx(clip, t, src, W, H);
+    const mv = visualMotion(clip, mt, Math.min(W, H) * 0.12, b.w);
+    if (!mv) { paint(alpha); return; }
+    const a = alpha * mv.a;
+    if (a <= 0.001) return;
+    ctx.save();
+    ctx.translate(b.cx + mv.dx, b.cy + mv.dy);
+    if (mv.rot) ctx.rotate(rad(mv.rot));
+    if (mv.s !== 1 || mv.sx !== 1) ctx.scale(Math.max(0.001, mv.s * mv.sx), Math.max(0.001, mv.s));
+    ctx.translate(-b.cx, -b.cy);
+    if (mv.wipe < 1) {
+      ctx.beginPath();
+      ctx.rect(b.cx - b.w / 2 - 2, -H, (b.w + 4) * Math.max(0, mv.wipe), H * 3);
+      ctx.clip();
+    }
+    if (mv.hue != null) ctx.filter = `hue-rotate(${Math.round(mv.hue)}deg)`;
+    paint(a);
+    ctx.restore();
+  }
+
+  /** Where a clip sits on this canvas, in pixels: centre and size. */
+  boundsPx(clip, t, src = null, W = this.canvas.width, H = this.canvas.height) {
+    const cx = evalProp(clip, 'transform.x', t) * W;
+    const cy = evalProp(clip, 'transform.y', t) * H;
+    const scale = evalProp(clip, 'transform.scale', t);
+    if (clip.type === 'shape') {
+      return { cx, cy, w: evalProp(clip, 'transform.w', t) * W * scale, h: evalProp(clip, 'transform.h', t) * H * scale };
+    }
+    if (clip.type === 'anim') {
+      const b = animBox(clip, W, H, t);
+      return b ? { cx: b.cx, cy: b.cy, w: b.w, h: b.h } : { cx, cy, w: W * 0.2, h: H * 0.1 };
+    }
+    const r = sourceRect(clip, src || this.pool.peek(clip));
+    const sw = r.sw || W, sh = r.sh || H;
+    const fit = (clip.fit || 'cover') === 'cover' ? Math.max(W / sw, H / sh) : Math.min(W / sw, H / sh);
+    return { cx, cy, w: sw * fit * scale, h: sh * fit * scale };
   }
 
   /**
@@ -322,6 +506,9 @@ export class Compositor {
     } else if (clip.type === 'shape') {
       w = clip.transform.w * scale;
       h = clip.transform.h * scale;
+    } else if (clip.type === 'anim') {
+      const b = animBox(clip, W, H, t);
+      w = b ? b.w / W : 0.2; h = b ? b.h / H : 0.1;
     } else {
       // peek(), not frameFor(): this is a measurement, and frameFor would
       // pause and seek a playing clip as a side effect.
@@ -344,6 +531,7 @@ export class Compositor {
     const list = this.activeClips(t);
     for (let i = list.length - 1; i >= 0; i--) {
       const { clip } = list[i];
+      if (clip.type === 'effect') continue;      // an effect is not a thing you grab on the picture
       const b = this.bounds(clip, t);
       const dx = nx - b.cx, dy = ny - b.cy;
       const a = -b.rot * Math.PI / 180;
@@ -353,4 +541,36 @@ export class Compositor {
     }
     return null;
   }
+}
+
+/**
+ * Does a still change over time at `t`?
+ *
+ * Keyframes only move a value between their first and last key — outside that
+ * span it holds — and a fade only changes the picture while it is ramping.
+ */
+function stillMoves(clip, t) {
+  if (motionLive(clip, t)) return true;
+  const local = t - clip.start;
+  if (clip.fadeIn > 0 && local < clip.fadeIn) return true;
+  if (clip.fadeOut > 0 && clip.duration - local < clip.fadeOut) return true;
+  const keys = clip.keys;
+  if (keys) {
+    for (const path in keys) {
+      const list = keys[path];
+      if (list && list.length > 1 && local >= list[0].t && local <= list.at(-1).t) return true;
+    }
+  }
+  return false;
+}
+
+/** Is a clip's named motion changing the picture at `t`? */
+function motionLive(clip, t) {
+  const m = clip.motion;
+  if (!m) return false;
+  if (m.animLoop && m.animLoop !== 'none') return true;
+  const local = t - clip.start;
+  if (m.anim && m.anim !== 'none' && local < (m.animDur || 0.5)) return true;
+  if (m.animOut && m.animOut !== 'none' && clip.duration - local < (m.animOutDur || 0.5)) return true;
+  return false;
 }

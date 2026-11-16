@@ -64,15 +64,35 @@ function scratch(key, w, h) {
     c.height = Math.max(c.height, H);
   }
   const ctx = c.getContext('2d');
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.globalAlpha = 1;
-  ctx.globalCompositeOperation = 'source-over';
-  ctx.filter = 'none';
-  ctx.shadowBlur = 0;
-  ctx.shadowColor = 'transparent';
-  ctx.shadowOffsetX = 0;
-  ctx.shadowOffsetY = 0;
-  ctx.clearRect(0, 0, c.width, c.height);
+  /*
+   * Back to a blank, default context — INCLUDING the clip region.
+   *
+   * Resetting the properties one by one missed the clip, because a clip is not
+   * a property: nothing assigns it back, only `restore()` or `reset()` undoes
+   * one. Rounded corners clip their scratch canvas to the picture's size, so
+   * the next draw — and the `clearRect` meant to wipe the canvas, which obeys
+   * the clip as well — was confined to whatever size the layer had last time.
+   * Shrink a graphic and grow it again and it stayed small; the first frame of
+   * Pop in is a tiny one, so a graphic with the default look vanished the
+   * moment it was given a motion. And because this pool is module-level, an
+   * export inherited whatever the preview left behind.
+   *
+   * `reset()` is the one call that puts everything back, the clip and the
+   * pixels included. The manual path is kept for a context without it.
+   */
+  if (typeof ctx.reset === 'function') {
+    ctx.reset();
+  } else {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.filter = 'none';
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = 'transparent';
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.clearRect(0, 0, c.width, c.height);
+  }
   return { c, ctx };
 }
 
@@ -140,9 +160,24 @@ export function drawFx(ctx, piece, fx, dw, dh, alpha = 1) {
   );
 
   const W = dw + pad * 2, H = dh + pad * 2;
-  // Beyond this the layer is so magnified that the effect canvases would cost
-  // more than the picture. Skipping the effects beats dropping the frame.
-  if (W > 6000 || H > 6000) { plain(ctx, piece, dw, dh, alpha, fx); return; }
+  /*
+   * A very magnified layer — a zoomed-in clip or a big graphic in a 4K export —
+   * would need effect canvases bigger than is sensible. This used to drop every
+   * effect at that point, so the preview showed a glow and the 4K file did not.
+   * Instead, do the effect work at a capped size and let the context scale it
+   * up: every effect is measured relative to the layer, so it comes out the
+   * same shape, just made from fewer pixels — invisible at that magnification,
+   * because the source picture is already being enlarged.
+   */
+  const CAP = 4096;
+  if (W > CAP || H > CAP) {
+    const k = CAP / Math.max(W, H);
+    ctx.save();
+    ctx.scale(1 / k, 1 / k);
+    drawFx(ctx, piece, fx, dw * k, dh * k, alpha);
+    ctx.restore();
+    return;
+  }
 
   const { c: out, ctx: o } = scratch('fx', W, H);
 
@@ -151,9 +186,13 @@ export function drawFx(ctx, piece, fx, dw, dh, alpha = 1) {
   let shaped = piece;
   if (fx.radius > 0) {
     const { c: rc, ctx: r } = scratch('round', dw, dh);
+    // save/restore around the clip as well as the reset above: a clip must
+    // never outlive the draw it was made for.
+    r.save();
     roundedPath(r, 0, 0, dw, dh, fx.radius * short);
     r.clip();
-    r.drawImage(piece, 0, 0, dw, dh);
+    r.drawImage(piece, 0, 0, piece.width, piece.height, 0, 0, dw, dh);
+    r.restore();
     shaped = rc;
   }
   // A shaped copy is bigger than the piece it came from; draw only the part

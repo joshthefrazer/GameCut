@@ -1,7 +1,7 @@
 /**
  * Checking for, fetching and verifying updates.
  *
- * This is the one part of GameCut that talks to the network, and the shape of
+ * This is the one part of Strike that talks to the network, and the shape of
  * it is the whole point:
  *
  *  - It runs in the MAIN process, over Node's own `https`. It does not go
@@ -96,7 +96,7 @@ function fetchBuffer(url, { manifestUrl, limit, depth = 0 } = {}) {
     const mod = url.startsWith('https:') ? https : http;
     const req = mod.get(url, {
       timeout: REQUEST_TIMEOUT_MS,
-      headers: { 'user-agent': 'GameCut', 'accept': '*/*' },
+      headers: { 'user-agent': 'Strike', 'accept': '*/*' },
     }, (res) => {
       const status = res.statusCode || 0;
       if (status >= 300 && status < 400 && res.headers.location) {
@@ -152,7 +152,7 @@ function verifyManifest(raw, publicKeyB64) {
     return { ok: false, reason: 'The update information could not be read.' };
   }
   if (!outer || outer.kind !== 'gamecut-manifest' || !outer.payload || !outer.sig) {
-    return { ok: false, reason: 'That is not a GameCut update manifest.' };
+    return { ok: false, reason: 'That is not a Strike update manifest.' };
   }
 
   let payload, sig, key;
@@ -380,13 +380,13 @@ function createUpdater({ appVersion, runningVersion, config, userDataDir, onStat
       throw new Error('The downloaded update did not match its signed checksum, so it was thrown away.');
     }
 
-    // Parse it here as well: a file that is not a GameCut update should be
+    // Parse it here as well: a file that is not a Strike update should be
     // rejected while it is still a download, not halfway through installing.
     let bundle;
     try { bundle = JSON.parse(buf.toString('utf8')); } catch {
       throw new Error('The downloaded update is not readable.');
     }
-    if (bundle?.kind !== 'gamecut-update') throw new Error('The downloaded file is not a GameCut update.');
+    if (bundle?.kind !== 'gamecut-update') throw new Error('The downloaded file is not a Strike update.');
     if (compareVersions(bundle.version, m.version) !== 0) {
       throw new Error('The downloaded update says it is a different version to the one announced.');
     }

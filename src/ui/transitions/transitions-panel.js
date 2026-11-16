@@ -340,8 +340,7 @@ export function initTransitions({ store, cmds, comp, playback }) {
 
   /* ── Opening the tab ──────────────────────────────────────── */
   function open() {
-    const tab = document.querySelector('#leftTabs [data-tab="trans"]');
-    if (tab && !tab.classList.contains('is-active')) tab.click();
+    bus.emit('drawer:show', 'trans');
   }
 
   bus.on('transitions:open', () => { open(); rerender(); });

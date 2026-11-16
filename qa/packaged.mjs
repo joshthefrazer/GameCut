@@ -7,6 +7,7 @@
 import { _electron as electron } from 'playwright';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { rm, readFile } from 'node:fs/promises';
+import { waitFor } from './wait.mjs';
 
 /**
  * The version the package should report, read from package.json rather than
@@ -99,7 +100,7 @@ await sleep(2500);
 async function enterEditor(page) {
   await page.waitForSelector('#homeNew', { timeout: 20000 });
   await page.click('#homeNew');
-  await page.waitForFunction(() =>
+  await waitFor(page, () =>
     !document.getElementById('app').classList.contains('is-home'), null, { timeout: 20000 });
   await new Promise(r => setTimeout(r, 500));
 }

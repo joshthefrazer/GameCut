@@ -1,0 +1,20 @@
+{
+ "whoosh": 0.7,
+ "hit": 0.9,
+ "boom": 1.6,
+ "pop": 0.18,
+ "ding": 1.4,
+ "ping": 0.5,
+ "tick": 0.08,
+ "riser": 1.6,
+ "glitch": 0.45,
+ "click": 0.12,
+ "scratch": 0.55,
+ "levelup": 0.9,
+ "beep": 0.16,
+ "go": 0.6,
+ "cheer": 2.2,
+ "airhorn": 1.3,
+ "rewind": 1.1,
+ "shutter": 0.22
+}

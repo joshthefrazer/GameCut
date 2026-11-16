@@ -18,12 +18,14 @@ export const TIPS = {
   btnUndo:      { t: 'Undo',            d: 'Step back one change. Everything you do is undoable, so try things.', k: 'Ctrl+Z' },
   btnRedo:      { t: 'Redo',            d: 'Put back a change you just undid.', k: 'Ctrl+Shift+Z' },
   btnHome:      { t: 'Projects',        d: 'Save this project and go back to the list of all your projects.' },
-  btnImport:    { t: 'Import media',    d: 'Bring video, music or images in from your computer. They land in the Media panel on the left — nothing is copied or moved, GameCut just remembers where the files are.', k: 'I' },
+  btnImport:    { t: 'Import media',    d: 'Bring video, music or images in from your computer. They land in the Media panel on the left — nothing is copied or moved, Strike just remembers where the files are.', k: 'I' },
   btnExport:    { t: 'Export video',    d: 'Turn the timeline into a finished MP4 you can upload.' },
-  saveChip:     { t: 'Save state',      d: 'Whether this project has unsaved changes. GameCut saves on its own every half minute and again when you close the window — click here (or Ctrl+S) to save this second.', k: 'Ctrl+S' },
+  saveChip:     { t: 'Save state',      d: 'Whether this project has unsaved changes. Strike saves on its own every half minute and again when you close the window — click here (or Ctrl+S) to save this second.', k: 'Ctrl+S' },
   verChip:      { t: 'Version and updates', d: 'Which version you are running. Click for updates, the log of everything that has changed, and a Check now button. New versions arrive on their own and wait until you install them.' },
   btnHelp:      { t: 'Help',            d: 'What every tool does, and every keyboard shortcut, on one sheet.', k: '?' },
   projName:     { t: 'Project name',    d: 'What this project is called on the projects screen. Type over it any time.' },
+  btnSearch:    { t: 'Search everything', d: 'Type a few letters of anything you want to do — split, export, half speed, punch-in — or the words of a clip to jump to it. Every shortcut is listed beside its action.', k: 'Ctrl+K' },
+  btnVersions:  { t: 'Version history', d: 'Go back to how this project looked earlier — a snapshot is kept every few minutes and before big automatic edits. Going back is itself undoable.' },
   aspectSeg:    { t: 'Shape of the video', d: '16:9 is YouTube. 9:16 is Shorts, TikTok and Reels. 1:1 and 4:5 are for feed posts. Changing it reframes every clip rather than cropping them.' },
 
   /* Preview */
@@ -33,37 +35,56 @@ export const TIPS = {
   tglSnap:      { t: 'Snapping',        d: 'Clips jump to line up with each other, the playhead and the beat grid while you drag. Hold Alt to ignore it for one drag.', k: 'N' },
   previewQuality: { t: 'Preview quality', d: 'How sharp the preview window is while you work. Lower it if playback stutters with long or 4K footage. It has no effect on the exported file.' },
   fpsChip:      { t: 'Preview speed',   d: 'Frames per second the preview is managing right now. If it drops a lot, turn the preview quality down.' },
+  btnCompare:   { t: 'Compare',         d: 'Before and after: left of the line is your footage without effects, looks or motion, right of it is the finished picture. Drag the line.' },
   btnFullscreen:{ t: 'Fullscreen',      d: 'Fill the screen with the preview to check your work.', k: 'F' },
 
   /* Transport */
   btnStart:     { t: 'Go to start',     d: 'Jump the playhead back to 0:00.', k: 'Home' },
-  btnPrevFrame: { t: 'Back one frame',  d: 'Nudge back a single frame. Hold Shift with the arrow key for a whole second.', k: '←' },
+  btnPrevFrame: { t: 'Back one frame',  d: 'Move the playhead back a single frame. Hold Shift with the arrow key for a whole second. (Alt + arrow moves the selected clip instead.)', k: '←' },
   btnPlay:      { t: 'Play / pause',    d: 'Play the timeline from the playhead. The button turns red while it is running.', k: 'Space' },
-  btnNextFrame: { t: 'Forward one frame', d: 'Nudge forward a single frame.', k: '→' },
+  btnNextFrame: { t: 'Forward one frame', d: 'Move the playhead forward a single frame. Shift + arrow jumps a second.', k: '→' },
   btnEnd:       { t: 'Go to end',       d: 'Jump the playhead to the end of the last clip.', k: 'End' },
   btnLoop:      { t: 'Loop',            d: 'Start over automatically when playback reaches the end — handy for matching a cut to music.', k: 'L' },
-  btnMute:      { t: 'Mute preview',    d: 'Silence the preview only. Your export keeps its audio.', k: 'M' },
+  // No key: M is "add a marker", and has been since markers existed. This
+  // used to promise M here as well, so pressing it to silence the preview
+  // dropped a flag on the ruler instead.
+  btnMute:      { t: 'Mute preview',    d: 'Silence the preview only. Your export keeps its audio.' },
   masterVol:    { t: 'Preview volume',  d: 'How loud the preview plays. This does not change the exported file.' },
 
   /* Timeline tools */
+  btnToolSelect:{ t: 'Select tool',     d: 'Click a clip to pick it, drag it to move it, drag an edge to trim it. Dropping a clip onto another slots it in beside it (Ripple on) or puts it on a new layer (Ripple off) — nothing is ever hidden underneath.', k: 'V' },
+  btnToolRazor: { t: 'Razor tool',      d: 'Click a clip to cut it exactly there; the yellow line shows where. Shift-click cuts every lane at once.', k: 'B' },
+  btnToolHand:  { t: 'Hand tool',       d: 'Drag anywhere on the timeline to look around without touching a clip. The middle mouse button does this with any tool.', k: 'H' },
+  btnAddLane:   { t: 'Add a lane',      d: 'Ready-made lanes: Video, Facecam, Text, Voice (cleaned up automatically), Music (dips when someone talks) and SFX. Drag a lane by its dot to reorder it.' },
+  btnHistory:   { t: 'History',         d: 'Every change you made, in order. Click one to go back to just after it — later steps stay in the list to redo. Ctrl+H.' },
+  btnSettings:  { t: 'Settings',        d: 'Accent colour, compact layout, and hover hints on or off. Ctrl+,' },
+  btnSnapshot:  { t: 'Save this frame', d: 'Saves the frame under the playhead as a full-size PNG — for thumbnails. Ctrl+Shift+S.' },
+  btnCloseGaps: { t: 'Close gaps',      d: 'Slide every shot on the main lane back so there are no black gaps. Titles riding on a shot move with it, and crops and sound linked to a shot always follow it.' },
+  btnTrackSize: { t: 'Lane height',     d: 'Fit lanes (the default) makes every lane as tall as fits, so nothing is cut off. Or pick Small, Medium or Large.' },
+  tlOverview:   { t: 'Overview',        d: 'The whole project in one strip. The blue frame is what the timeline shows — drag it to travel, double-click to move the playhead there.' },
   btnSplit:     { t: 'Split',           d: 'Cut the selected clip in two at the playhead. With nothing selected it splits every clip the playhead is over.', k: 'S' },
   btnDelete:    { t: 'Delete',          d: 'Remove whatever is selected from the timeline. The file stays in your Media panel.', k: 'Del' },
   btnDuplicate: { t: 'Duplicate',       d: 'Make a copy of the selection right after it.', k: 'Ctrl+D' },
   btnAddText:   { t: 'Add text',        d: 'Drop a text layer at the playhead. Double-click the words on the preview \u2014 or press Enter with the layer selected \u2014 to type straight onto the picture; the Inspector on the right is for how it looks.', k: 'T' },
   btnMarker:    { t: 'Add marker',      d: 'Pin a coloured flag on the ruler so you can find a moment again later.', k: 'M' },
-  btnRipple:    { t: 'Ripple edit',     d: 'When on, deleting or trimming a clip pulls everything after it back so there is no gap left behind.' },
-  btnMagnet:    { t: 'Magnet',          d: 'The same snapping as the Snap button above the preview — clips line up to each other and to the beat.', k: 'N' },
-  bpmInput:     { t: 'BPM',             d: 'The tempo of your music. Set it and the timeline can line cuts up to the beat. Use Tap if you do not know it.' },
-  btnBeatGrid:  { t: 'Beat grid',       d: 'Draw a line on the timeline for every beat, so cuts can land on the music.', k: 'B' },
+  btnRipple:    { t: 'Ripple',          d: 'On (the default): deleting a clip, trimming either end of it or changing its speed slides the clips after it on the same track, so no black gap is left behind — and makes room when a clip gets longer. Off: everything else stays exactly where it is. Either way, right-click an empty gap to close it.' },
+  btnMagnet:    { t: 'Snap',            d: 'While you drag, clips jump to line up with each other, the playhead, markers and the beat. Hold Alt to ignore it for one drag.', k: 'N' },
+  bpmInput:     { t: 'BPM',             d: 'The tempo of your music. Set it and the beat lines match the song. Use Tap if you do not know it.' },
+  btnBeatGrid:  { t: 'Beat sync',       d: 'Line your cuts up with the music. Turns on a line for every beat (clips snap to them) and shows the BPM box and the Tap button. Right-click the ruler to say where beat 1 is.', k: 'B' },
   btnTapTempo:  { t: 'Tap tempo',       d: 'Tap this in time with your track four or five times and it works out the BPM for you.' },
   btnZoomFit:   { t: 'Zoom to fit',     d: 'Scale the timeline so the whole project is on screen at once.', k: 'Shift+Z' },
-  zoomRange:    { t: 'Zoom',            d: 'How much timeline fits on screen. Ctrl+scroll over the timeline does the same thing, centred on your pointer.' },
+  zoomRange:    { t: 'Zoom',            d: 'How much timeline fits on screen. Ctrl + scroll over the timeline does the same, centred on your pointer. Plain scroll moves up and down the tracks; Shift + scroll moves along the timeline.' },
 
   /* Panels */
   tabMedia:     { t: 'Media',           d: 'Everything you have imported. Hover a tile and press + , or double-click it, to put it on the timeline at the playhead.' },
+  tabText:      { t: 'Text',            d: 'Add text in one click, start from a look, reuse the words you saved, and set up your brand kit (logo, colours, font).' },
+  tabFx:        { t: 'Effects',         d: 'Punch-in zoom, shake, flash, glitch, vignette and more. Each is a clip you drop at the playhead; it changes the picture under it and leaves your titles alone.', k: 'Z = zoom' },
+  btnHighlights:{ t: 'Find highlights', d: 'Listens to the game sound and marks the loud moments in red, so you start from the best parts instead of scrubbing. [ and ] jump between them.' },
+  btnReel:      { t: 'Highlight reel',  d: 'Takes the loudest moments from every recording in Media and lays them end to end on the main lane as a first cut.' },
+  btnBeatSong:  { t: 'Find the beat',   d: 'Works out the tempo of your song and turns on the beat grid, so cuts snap to the beat.' },
+  btnCutBeat:   { t: 'Cut to the beat', d: 'Makes every shot on the main lane a whole number of beats long, starting on a beat.' },
   tabTrans:     { t: 'Transitions',     d: 'How one shot becomes the next. Click the ⋈ button on any cut in the timeline, then pick a tile here — Dissolve, Dip to black or a Slide.' },
   tabGfx:       { t: 'Graphics',        d: 'Images that go ON your footage — logos, emotes, cut-outs, screenshots. Pick how it should land (shadow, glow, sticker edge, 3D tilt), then click one to drop it on the picture. Everything about it stays adjustable in the Inspector afterwards.' },
-  rightTabs:    { t: 'Inspector',       d: 'Settings for whatever is selected — timing, position, text, transitions. With nothing selected it shows the project settings.' },
 };
 
 const DELAY = 340;

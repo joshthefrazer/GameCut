@@ -34,10 +34,13 @@ export class AssetStore extends Emitter {
    * work, so a file can never be filed under the wrong heading.
    */
   byBin(bin) {
-    if (!bin || bin === 'all') return this.all();
-    return this.all().filter(a => a.kind === bin);
+    // Sounds an animation brought along are not media you added; they are
+    // kept out of the media panel (src/anim/sfx.js).
+    const mine = this.all().filter(a => !a.bundled);
+    if (!bin || bin === 'all') return mine;
+    return mine.filter(a => a.kind === bin);
   }
-  count(bin) { return bin && bin !== 'all' ? this.byBin(bin).length : this.#map.size; }
+  count(bin) { return this.byBin(bin).length; }
 
   /** Drop everything — opening another project starts from nothing. */
   clear() {

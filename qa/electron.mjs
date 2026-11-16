@@ -1,6 +1,7 @@
 import { _electron as electron } from 'playwright';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { rm } from 'node:fs/promises';
+import { waitFor } from './wait.mjs';
 
 const OUT = process.argv[2] || '.';
 const problems = [];
@@ -21,7 +22,7 @@ await rm(PROFILE, { recursive: true, force: true });
 const app = await electron.launch({
   args: ['.', '--no-sandbox', '--disable-gpu',
          `--user-data-dir=${PROFILE}`],
-  cwd: '/home/claude/gamecut',
+  cwd: (await import('node:path')).resolve(import.meta.dirname, '..'),
   env: { ...process.env, NODE_ENV: 'production' },
   timeout: 60_000,
 });
@@ -65,7 +66,7 @@ await sleep(2500);
 async function enterEditor(page) {
   await page.waitForSelector('#homeNew', { timeout: 20000 });
   await page.click('#homeNew');
-  await page.waitForFunction(() =>
+  await waitFor(page, () =>
     !document.getElementById('app').classList.contains('is-home'), null, { timeout: 20000 });
   await new Promise(r => setTimeout(r, 500));
 }
@@ -74,7 +75,7 @@ await enterEditor(win);
 
 await step('window opened', async () => {
   const t = await win.title();
-  if (!/GameCut/i.test(t)) throw new Error('unexpected title: ' + t);
+  if (!/Strike/i.test(t)) throw new Error('unexpected title: ' + t);
 });
 
 await step('served over app:// (no localhost bind)', async () => {
@@ -377,13 +378,13 @@ await step('preview refits when its container resizes', async () => {
     }, { w, h });
     // setSize is asynchronous at the OS level; wait for the renderer to see it
     // rather than guessing at a sleep duration.
-    await win.waitForFunction(
+    await waitFor(win, 
       ([tw]) => Math.abs(window.innerWidth - tw) < 40, [w], { timeout: 5000 },
     ).catch(() => {});
     // The refit rides on ResizeObserver + rAF, and rAF is starved on this
     // software-rendered box. Wait for the frame to actually fit its viewport
     // rather than guessing a sleep.
-    await win.waitForFunction(() => {
+    await waitFor(win, () => {
       const f = document.getElementById('previewFrame').getBoundingClientRect();
       const v = document.getElementById('previewViewport').getBoundingClientRect();
       const doc = window.gc.store.doc;

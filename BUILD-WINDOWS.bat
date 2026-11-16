@@ -46,6 +46,8 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
+:: Electron 44+ fetches its own program on first use; get it now, not mid-build.
+call node node_modules\electron\install.js
 
 :: ---- Build ------------------------------------------------------------
 echo.
@@ -71,7 +73,7 @@ echo        once and "Show more options ^> Send to ^>
 echo        Desktop" to get a shortcut.
 echo.
 echo     2. INSTALLER
-echo          dist\GameCut-1.0.0-x64.exe
+echo          dist\GameCut-(version)-x64.exe
 echo        Adds Start menu and desktop shortcuts.
 echo   ==========================================
 echo.

@@ -28,9 +28,14 @@ export function drawRuler(ctx, store, L) {
 
   ctx.strokeStyle = TH.rulerLine;
   ctx.lineWidth = 1;
+  /*
+   * Ticks are placed by index (i × step), never by adding `step` to a running
+   * total: the running total drifts, and a tick that should sit exactly on a
+   * whole second came out a hair short of it and was labelled "+30f".
+   */
   ctx.beginPath();
-  for (let t = Math.floor(t0 / sub) * sub; t <= t1; t += sub) {
-    const x = Math.round(L.t2x(t)) + .5;
+  for (let i = Math.floor(t0 / sub); i * sub <= t1; i++) {
+    const x = Math.round(L.t2x(i * sub)) + .5;
     ctx.moveTo(x, RH - 6); ctx.lineTo(x, RH);
   }
   ctx.stroke();
@@ -41,18 +46,25 @@ export function drawRuler(ctx, store, L) {
   ctx.textBaseline = 'alphabetic';
   ctx.textAlign = 'left';
   ctx.beginPath();
-  for (let t = Math.floor(t0 / step) * step; t <= t1; t += step) {
+  // What was written is kept on the layout so a test can read the ruler the
+  // way a person does, without OCR on a canvas.
+  const labels = [];
+  for (let i = Math.floor(t0 / step); i * step <= t1; i++) {
+    const t = i * step;
     const x = Math.round(L.t2x(t)) + .5;
     ctx.moveTo(x, RH - 11); ctx.lineTo(x, RH);
-    ctx.fillText(tickLabel(t, step, fps), x + 4, 13);
+    const label = tickLabel(t, step, fps);
+    labels.push(label);
+    ctx.fillText(label, x + 4, 13);
   }
+  L.rulerLabels = labels;
   ctx.stroke();
 
   // Track-area vertical grid — subtle, helps eyeball alignment.
   ctx.strokeStyle = TH.grid;
   ctx.beginPath();
-  for (let t = Math.floor(t0 / step) * step; t <= t1; t += step) {
-    const x = Math.round(L.t2x(t)) + .5;
+  for (let i = Math.floor(t0 / step); i * step <= t1; i++) {
+    const x = Math.round(L.t2x(i * step)) + .5;
     ctx.moveTo(x, RH); ctx.lineTo(x, L.H);
   }
   ctx.stroke();
@@ -98,7 +110,16 @@ export function drawPlayhead(ctx, store, L) {
   ctx.restore();
 }
 
-/** Live snap indicator while dragging. */
+const SNAP_NAMES = {
+  playhead: 'Playhead', clip: 'Clip edge', marker: 'Marker', beat: 'Beat', origin: 'Start',
+};
+
+/**
+ * Live snap indicator while dragging — and what it snapped to.
+ *
+ * A dashed line alone says "something grabbed this"; the label says what, so
+ * a clip that jumped to a marker you forgot about is not a mystery.
+ */
 export function drawSnapLine(ctx, store, L) {
   const t = store.rt.snapLine;
   if (t == null) return;
@@ -109,6 +130,35 @@ export function drawSnapLine(ctx, store, L) {
   ctx.setLineDash([4, 3]);
   ctx.beginPath();
   ctx.moveTo(x, L.RH); ctx.lineTo(x, L.H);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  const name = SNAP_NAMES[store.rt.snapKind];
+  if (name) {
+    ctx.font = '600 10px system-ui, -apple-system, sans-serif';
+    const w = ctx.measureText(name).width + 12;
+    const lx = Math.min(L.W - w - 2, Math.max(2, x + 4));
+    ctx.fillStyle = TH.snap;
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(lx, L.RH + 3, w, 16, 8) : ctx.rect(lx, L.RH + 3, w, 16);
+    ctx.fill();
+    ctx.fillStyle = '#04121c';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(name, lx + 6, L.RH + 11.5);
+  }
+  ctx.restore();
+}
+
+/** Razor tool: where a click would cut. */
+export function drawRazorLine(ctx, store, L) {
+  const r = store.rt.razorAt;
+  if (!r || store.ui.tool !== 'razor') return;
+  const x = Math.round(L.t2x(r.t)) + .5;
+  ctx.save();
+  ctx.strokeStyle = '#fbbf24';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  if (r.all) { ctx.moveTo(x, L.RH); ctx.lineTo(x, L.H); }
+  else { ctx.moveTo(x, r.y0); ctx.lineTo(x, r.y1); }
   ctx.stroke();
   ctx.restore();
 }

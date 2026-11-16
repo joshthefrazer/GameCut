@@ -261,7 +261,7 @@ export function initUpdates({ store }) {
         <button class="upd__btn upd__btn--primary" id="updCardGo"></button>
         <button class="upd__btn" id="updCardMore">What&rsquo;s new</button>
       </div>`;
-    card.querySelector('b').textContent = `GameCut ${v} is ready`;
+    card.querySelector('b').textContent = `Strike ${v} is ready`;
 
     const notes = state.available.notes || [];
     const bodyEl = card.querySelector('.updcard__body');

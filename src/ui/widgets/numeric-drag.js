@@ -85,13 +85,23 @@ export function row(labelText, ...controls) {
   return r;
 }
 
+/**
+ * Whether a person opened or folded a group is remembered by its title, so the
+ * inspector rebuilding after every edit does not snap it back shut mid-task.
+ */
+const groupOpen = new Map();
+
 export function group(title, open = true) {
   const g = document.createElement('section');
-  g.className = 'group' + (open ? '' : ' is-closed');
+  const isOpen = groupOpen.has(title) ? groupOpen.get(title) : open;
+  g.className = 'group' + (isOpen ? '' : ' is-closed');
   g.innerHTML = `<button class="group__h">
       <svg class="caret" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>${title}
     </button><div class="group__c"></div>`;
-  g.querySelector('.group__h').addEventListener('click', () => g.classList.toggle('is-closed'));
+  g.querySelector('.group__h').addEventListener('click', () => {
+    g.classList.toggle('is-closed');
+    groupOpen.set(title, !g.classList.contains('is-closed'));
+  });
   g.body = g.querySelector('.group__c');
   return g;
 }

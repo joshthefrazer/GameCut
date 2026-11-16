@@ -9,8 +9,9 @@
 import { _electron as electron } from 'playwright';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { rm } from 'node:fs/promises';
+import { waitFor } from './wait.mjs';
 
-const ROOT = '/home/claude/gamecut';
+const ROOT = (await import('node:path')).resolve(import.meta.dirname, '..');
 const SHOT = process.argv[2] || '/tmp/gamecut-shots';
 
 const problems = [];
@@ -28,6 +29,21 @@ const app = await electron.launch({
   timeout: 60_000,
 });
 const page = await app.firstWindow();
+/*
+ * The inspector shows one tab at a time and folds its advanced groups away.
+ * A person clicks the tab (or opens the group) first; so does this, before
+ * any click aimed inside it.
+ */
+const _click = page.click.bind(page);
+const reveal = (sel) => page.evaluate((s) => {
+  const el = document.querySelector(s);
+  if (!el) return;
+  const pane = el.closest('.ipane');
+  if (pane && !pane.classList.contains('is-active')) document.querySelector(`#inspectorRoot [data-itab="${pane.dataset.ipane}"]`)?.click();
+  const g = el.closest('.group.is-closed');
+  if (g) g.querySelector('.group__h')?.click();
+}, sel).catch(() => {});
+page.click = async (sel, opts) => { await reveal(sel); return _click(sel, opts); };
 
 // `willReadFrequently` is provoked by this harness reading pixels off the app's
 // canvases to assert they painted — the app itself never calls getImageData.
@@ -63,7 +79,7 @@ await sleep(2200);
 async function enterEditor(page) {
   await page.waitForSelector('#homeNew', { timeout: 20000 });
   await page.click('#homeNew');
-  await page.waitForFunction(() =>
+  await waitFor(page, () =>
     !document.getElementById('app').classList.contains('is-home'), null, { timeout: 20000 });
   await new Promise(r => setTimeout(r, 500));
 }
@@ -99,7 +115,8 @@ await page.evaluate(async () => {
   strip.transform.y = 0.545; strip.transform.w = 0.22; strip.transform.h = 0.0035;
 
   cmds.addClip(text[0].id, title, { select: false, label: 'Seed' });
-  cmds.addClip(text[1].id, sub, { select: false, label: 'Seed' });
+  // New projects start with one text lane; a second one appears when needed.
+  cmds.addClip((text[1] || cmds.addTrack('text')).id, sub, { select: false, label: 'Seed' });
   if (video) cmds.addClip(video.id, strip, { select: false, label: 'Seed' });
   history.reset();
   store.select([title.id]);
@@ -665,12 +682,14 @@ await step('every left-panel tab is backed by something real', async () => {
     // Graphics has to be more than a heading: a way in, and looks to pick from.
     gfxAdd: !!document.getElementById('gfxAdd'),
     gfxLooks: document.querySelectorAll('#gfxRoot .gfxlook').length,
+    animCards: document.querySelectorAll('#animRoot .acard').length,
   }));
   if (r.stragglers.length) throw new Error('removed panels still in the DOM: ' + r.stragglers.join(', '));
   if (r.tabs.join() !== r.panes.join()) {
     throw new Error(`tabs (${r.tabs.join(', ')}) do not match panes (${r.panes.join(', ')})`);
   }
-  if (r.tabs.join() !== 'media,trans,gfx') throw new Error('unexpected tabs: ' + r.tabs.join(', '));
+  if (r.tabs.join() !== 'media,anim,pads,text,gfx,trans,fx') throw new Error('unexpected tabs: ' + r.tabs.join(', '));
+  if (r.animCards < 20) throw new Error('the Animate drawer has ' + r.animCards + ' animations');
   if (r.transTiles < 4) throw new Error('transitions panel has ' + r.transTiles + ' tiles');
   if (!r.transApplies) throw new Error('transitions panel exposes no way to apply anything');
   if (!r.gfxAdd) throw new Error('the Graphics tab offers no way to add one');
@@ -688,8 +707,18 @@ await step('media filters are the three that exist', async () => {
   }
 });
 
-await step('right tab → audio', () => page.click('#rightTabs [data-tab="audio"]'));
-await step('right tab → inspector', () => page.click('#rightTabs [data-tab="inspect"]'));
+await step('inspector tabs switch what is shown', async () => {
+  await page.evaluate(() => {
+    const c = window.gc.store.doc.tracks.flatMap(t => t.clips).find(c => c.type === 'text');
+    if (c) window.gc.store.select([c.id]);
+  });
+  await sleep(260);
+  for (const k of ['motion', 'timing', 'place', 'text']) {
+    await _click(`#inspectorRoot [data-itab="${k}"]`);
+    const on = await page.evaluate((k) => document.querySelector(`#inspectorRoot [data-ipane="${k}"]`)?.classList.contains('is-active'), k);
+    if (!on) throw new Error(`the ${k} tab did not show its pane`);
+  }
+});
 
 await step('inspector renders for text clip', async () => {
   await page.evaluate(() => {
@@ -705,7 +734,7 @@ await step('edit text content', async () => {
   if (await ta.count()) { await ta.fill('QA RENDER TEST'); await ta.dispatchEvent('input'); }
 });
 await step('drag a numeric field', async () => {
-  const num = page.locator('#inspectorRoot .num').first();
+  const num = page.locator('#inspectorRoot .ipane.is-active .num').first();
   if (!await num.count()) return;
   const b = await num.boundingBox();
   await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
@@ -714,7 +743,8 @@ await step('drag a numeric field', async () => {
   await page.mouse.up();
 });
 await step('toggle a keyframe', async () => {
-  const kf = page.locator('#inspectorRoot .kf').first();
+  await reveal('#inspectorRoot .kf');
+  const kf = page.locator('#inspectorRoot .ipane.is-active .group:not(.is-closed) .kf').first();
   if (await kf.count()) { await kf.click(); await sleep(120); await kf.click(); }
 });
 
@@ -1318,7 +1348,7 @@ async function selectNoisyVideo() {
     track.clips.push(clip);
     store.docChanged('test clip');
     store.select([clip.id]);
-    document.querySelector('#rightTabs [data-tab="audio"]')?.click();
+    document.querySelector('#inspectorRoot [data-itab="sound"]')?.click();
     return clip.id;
   });
 }
@@ -1331,7 +1361,9 @@ async function selectNoisyVideo() {
  * and every click lands on a clip that no longer exists.
  */
 async function mixerReady(page, clipId) {
-  await page.waitForFunction(
+  await waitFor(page, () => !!document.querySelector('#inspectorRoot [data-itab="sound"]'), null, { timeout: 8000, polling: 80 }).catch(() => {});
+  await page.evaluate(() => document.querySelector('#inspectorRoot [data-itab="sound"]')?.click());
+  await waitFor(page, 
     (id) => document.getElementById('audioRoot')?.dataset.clip === id,
     clipId, { timeout: 8000, polling: 80 });
   await sleep(60);
@@ -1407,11 +1439,14 @@ await step('a picture-only layer says so instead of showing a dead fader', async
   });
   await page.click('#btnAddText').catch(() => {});
   await sleep(160);
-  const r = await page.evaluate(() => {
-    const root = document.getElementById('audioRoot');
-    return { empty: !!root.querySelector('.empty'), faders: root.querySelectorAll('.sldr').length };
-  });
-  if (!r.empty || r.faders) throw new Error('a text layer was offered a volume control');
+  // A text layer has no Sound tab at all, so there is no fader to be dead.
+  const r = await page.evaluate(() => ({
+    soundTab: !!document.querySelector('#inspectorRoot [data-itab="sound"]'),
+    faders: document.querySelectorAll('#inspectorRoot .ipane.is-active .sldr').length,
+    kind: window.gc.store.selectedClips[0]?.clip.type,
+  }));
+  if (r.kind !== 'text') throw new Error('setting up: the new text is not selected');
+  if (r.soundTab) throw new Error('a text layer was offered a volume control');
 });
 
 /* ── The crop studio ─────────────────────────────────────────────
@@ -1727,7 +1762,7 @@ async function aSpedClip(speed = 2) {
 
 await step('a sped-up clip offers a badge, a normal one does not', async () => {
   await aSpedClip(2);
-  await page.evaluate(() => document.querySelector('#rightTabs [data-tab="inspect"]')?.click());
+  await page.evaluate(() => document.querySelector('#inspectorRoot [data-itab="timing"]')?.click());
   await sleep(220);
   const withSpeed = await page.evaluate(() => {
     const b = document.getElementById('btnSpeedBadge');
@@ -1748,7 +1783,7 @@ await step('a sped-up clip offers a badge, a normal one does not', async () => {
 
 await step('adding the badge puts a draggable layer on the picture', async () => {
   const id = await aSpedClip(4);
-  await page.evaluate(() => document.querySelector('#rightTabs [data-tab="inspect"]')?.click());
+  await page.evaluate(() => document.querySelector('#inspectorRoot [data-itab="timing"]')?.click());
   await sleep(220);
   await page.click('#btnSpeedBadge');
   await sleep(260);
@@ -1900,7 +1935,7 @@ async function aGraphic() {
     store.docChanged('graphic');
     store.select([clip.id]);
     playback.seek(1);
-    document.querySelector('#rightTabs [data-tab="inspect"]')?.click();
+    document.querySelector('#inspectorRoot [data-itab="timing"]')?.click();
     return clip.id;
   });
   await sleep(260);
@@ -2000,6 +2035,9 @@ await step('a keyframe can be dragged and deleted by hand', async () => {
     return (c.keys['transform.scale'] || []).map(k => k.t);
   }, id);
   if (before.length < 2) throw new Error('nothing to drag');
+  await reveal('#keysStrip');
+  await page.evaluate(() => document.querySelector('#keysStrip')?.scrollIntoView({ block: 'center' }));
+  await sleep(120);
 
   // Drag the last diamond of the size row to the right.
   const box = await page.evaluate(() => {
@@ -2247,7 +2285,7 @@ await step('an effect slider can be undone', async () => {
     track.clips.push(clip);
     store.docChanged('fx undo test');
     store.select([clip.id]);
-    document.querySelector('#rightTabs [data-tab="inspect"]')?.click();
+    document.querySelector('#inspectorRoot [data-itab="timing"]')?.click();
     await new Promise(r => setTimeout(r, 250));
     void cmds; void history;
     return clip.id;
@@ -2261,6 +2299,10 @@ await step('an effect slider can be undone', async () => {
     const row = [...document.querySelectorAll('#inspectorRoot .row')]
       .find(x => x.querySelector('label')?.textContent === 'Glow');
     if (!row) return null;
+    const pane = row.closest('.ipane');
+    if (pane && !pane.classList.contains('is-active')) document.querySelector(`#inspectorRoot [data-itab="${pane.dataset.ipane}"]`)?.click();
+    row.closest('.group.is-closed')?.querySelector('.group__h')?.click();
+    await new Promise(r => setTimeout(r, 60));
     row.scrollIntoView({ block: 'center' });
     await new Promise(r => setTimeout(r, 120));
     const t = row.querySelector('.sldr__track')?.getBoundingClientRect();

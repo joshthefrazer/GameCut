@@ -11,7 +11,7 @@ import { bus } from './core/events.js';
 export function initDesktop({ history }) {
   const api = window.gamecut;
   if (!api?.isDesktop) {
-    console.warn('[GameCut] preload bridge missing — menu and save dialogs disabled');
+    console.warn('[Strike] preload bridge missing — menu and save dialogs disabled');
     return { isDesktop: false };
   }
 
@@ -28,7 +28,7 @@ export function initDesktop({ history }) {
   api.onMenu('menu:redo', () => history.redo());
 
   api.version()
-    .then((v) => { if (v) document.title = `GameCut ${v}`; })
+    .then((v) => { if (v) document.title = `Strike ${v}`; })
     .catch(() => {});
 
   /* The version chip and everything behind it now live in
@@ -48,7 +48,7 @@ export function initDesktop({ history }) {
   api.gpuStatus?.()
     .then((g) => {
       if (!g || g.accelerated) return;
-      console.warn('[GameCut] GPU compositing is', g.compositing, '— rendering on the CPU');
+      console.warn('[Strike] GPU compositing is', g.compositing, '— rendering on the CPU');
       bus.emit('toast', {
         msg: 'Your graphics card is not being used, so the preview will be slow. '
            + 'Updating your graphics driver usually fixes this. '

@@ -12,12 +12,21 @@ import { defaultFx } from '../../engine/layers/fx.js';
 import { GFX_LOOKS } from '../graphics/looks.js';
 import { MOTIONS, MOTION_PATHS } from '../graphics/motion.js';
 import { buildKeysStrip } from './keys-strip.js';
+import { buildMotionPanel } from './motion-panel.js';
+import { EFFECTS } from '../../engine/layers/effects.js';
+import { buildAnimPanel } from './anim-panel.js';
 
 const KF_ICON = `<svg viewBox="0 0 24 24"><path d="M12 3 21 12 12 21 3 12z"/></svg>`;
 
 export function initInspector({ store, cmds, comp, playback }) {
-  const root = document.getElementById('inspectorRoot');
-  const audioRoot = document.getElementById('audioRoot');
+  const inspectorEl = document.getElementById('inspectorRoot');
+  // The Sound tab's pane becomes #audioRoot while a clip with sound is shown;
+  // with nothing to mix there is nothing to show.
+  const audioEl = document.createElement('section');
+  // Each section builder appends to `root` / `audioRoot`; buildClip points
+  // them at the tab the section belongs in.
+  let root = inspectorEl;
+  let audioRoot = audioEl;
   let live = [];   // [{path, el}] refreshed as the playhead moves
 
   const rerender = raf(build);
@@ -25,11 +34,33 @@ export function initInspector({ store, cmds, comp, playback }) {
   function build() {
     const sel = store.selectedClips;
     live = [];
+    root = inspectorEl; audioRoot = audioEl;
     root.innerHTML = '';
     if (sel.length !== 1) return buildProject(sel.length);
     buildClip(sel[0].clip, sel[0].track);
-    buildAudio(sel[0].clip, sel[0].track);
   }
+
+  /* ── Tabs: the inspector shows only what you picked, a part at a time ── */
+  const ICONS = {
+    video: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/></svg>',
+    image: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m3 16 5-5 4 4 3-3 6 6"/></svg>',
+    audio: '<svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>',
+    text: 'T',
+    shape: '<svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/></svg>',
+    effect: '<svg viewBox="0 0 24 24"><path d="M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z"/></svg>',
+    anim: '<svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>',
+  };
+  const TABS = {
+    video: [['picture', 'Picture'], ['motion', 'Motion'], ['timing', 'Timing'], ['sound', 'Sound']],
+    image: [['picture', 'Picture'], ['motion', 'Motion'], ['timing', 'Timing']],
+    text:  [['text', 'Text'], ['motion', 'Motion'], ['timing', 'Timing'], ['place', 'Position']],
+    shape: [['shape', 'Shape'], ['motion', 'Motion'], ['timing', 'Timing']],
+    audio: [['sound', 'Sound'], ['timing', 'Timing']],
+    effect: [['effect', 'Effect'], ['timing', 'Timing']],
+    anim: [['custom', 'Customize'], ['place', 'Position'], ['motion', 'Motion'], ['timing', 'Timing']],
+  };
+  store.ui.inspTab ||= {};
+  const fmtS = (v) => (v < 10 ? v.toFixed(1) : Math.round(v)) + ' s';
 
   /* ── Nothing selected → project settings ──────────────────── */
   function buildProject(n) {
@@ -89,13 +120,72 @@ export function initInspector({ store, cmds, comp, playback }) {
   /* ── Clip inspector ───────────────────────────────────────── */
   function buildClip(clip, track) {
     const head = document.createElement('div');
-    head.className = 'insp__head';
-    head.innerHTML = `<i class="insp__swatch" style="--c:${(CLIP_COLORS[clip.type] || CLIP_COLORS.video)[0]}"></i>
-      <div class="insp__title"><b>${clip.name || clip.type}</b>
-        <span>${clip.type} · ${track.name}</span></div>`;
-    root.appendChild(head);
+    head.className = 'ihead';
+    const kindName = { video: 'Video', image: 'Picture', audio: 'Sound', text: 'Text', shape: 'Shape', effect: 'Effect', anim: 'Animation' }[clip.type] || clip.type;
+    head.innerHTML = `<span class="ihead__icon" style="--c:${(CLIP_COLORS[clip.type] || CLIP_COLORS.video)[0]}">${ICONS[clip.type] || ''}</span>
+      <div class="ihead__text"><b></b><span>${kindName} · ${fmtS(clip.duration)} · at ${fmtS(clip.start)} · ${track.name}</span></div>`;
+    head.querySelector('b').textContent = clip.type === 'text' ? (clip.text?.text || clip.name || 'Text').split('\n')[0] : (clip.name || kindName);
+    // Double-click the name to rename the clip (text clips are named by their words).
+    if (clip.type !== 'text') {
+      const nameEl = head.querySelector('b');
+      nameEl.title = 'Double-click to rename';
+      nameEl.classList.add('ihead__name');
+      nameEl.addEventListener('dblclick', () => {
+        const input = document.createElement('input');
+        input.className = 'ihead__rename';
+        input.id = 'clipRename';
+        input.value = clip.name || '';
+        input.maxLength = 80;
+        nameEl.replaceWith(input);
+        input.focus(); input.select();
+        let done = false;
+        const finish = (keep) => {
+          if (done) return; done = true;
+          if (keep && input.value.trim() && input.value.trim() !== clip.name) cmds.renameClip(clip.id, input.value);
+          else input.replaceWith(nameEl);
+        };
+        input.addEventListener('keydown', (ev) => {
+          ev.stopPropagation();
+          if (ev.key === 'Enter') finish(true);
+          if (ev.key === 'Escape') finish(false);
+        });
+        input.addEventListener('blur', () => finish(true));
+      });
+    }
+    inspectorEl.appendChild(head);
+
+    const tabs = TABS[clip.type] || TABS.video;
+    const bar = document.createElement('div');
+    bar.className = 'itabs';
+    bar.setAttribute('role', 'tablist');
+    const panes = {};
+    let active = store.ui.inspTab[clip.type];
+    if (!tabs.some(([k]) => k === active)) active = tabs[0][0];
+    const show = (k) => {
+      active = k;
+      store.ui.inspTab[clip.type] = k;
+      for (const b of bar.children) { b.classList.toggle('is-active', b.dataset.itab === k); b.setAttribute('aria-selected', String(b.dataset.itab === k)); }
+      for (const [pk, el] of Object.entries(panes)) el.classList.toggle('is-active', pk === k);
+    };
+    for (const [k, label] of tabs) {
+      const b = document.createElement('button');
+      b.className = 'itab';
+      b.dataset.itab = k;
+      b.setAttribute('role', 'tab');
+      b.textContent = label;
+      b.addEventListener('click', () => show(k));
+      bar.appendChild(b);
+      const pane = document.createElement('div');
+      pane.className = 'ipane';
+      pane.dataset.ipane = k;
+      panes[k] = pane;
+    }
+    inspectorEl.append(bar, ...Object.values(panes));
+    show(active);
+    const into = (k) => { root = panes[k] || panes[tabs[0][0]]; };
 
     /* Timing */
+    into('timing');
     const gT = group('Timing');
     gT.body.appendChild(row('Start',
       numField({ value: clip.start, min: 0, step: .01, decimals: 2, suffix: 's',
@@ -104,7 +194,7 @@ export function initInspector({ store, cmds, comp, playback }) {
     gT.body.appendChild(row('Duration',
       numField({ value: clip.duration, min: 1 / store.doc.fps, step: .01, decimals: 2, suffix: 's',
         onCommit: v => cmds.setClipProp(clip.id, 'duration', v, { label: 'Set duration' }) })));
-    if (clip.type !== 'text' && clip.type !== 'shape') {
+    if (clip.type !== 'text' && clip.type !== 'shape' && clip.type !== 'effect' && clip.type !== 'anim') {
       gT.body.appendChild(row('Speed',
         // setClipSpeed, not setClipProp: the clip has to get shorter as it gets
         // faster, and the duration field above has to show the new length.
@@ -118,12 +208,36 @@ export function initInspector({ store, cmds, comp, playback }) {
         onCommit: v => cmds.setClipProp(clip.id, 'fadeOut', v, { label: 'Fade out' }) })));
     // Last in the group: it is an extra, not one of the numbers that describe
     // the clip, and putting it between Speed and Fade broke the run of fields.
-    if (clip.type !== 'text' && clip.type !== 'shape') buildBadge(clip, gT);
+    if (clip.type !== 'text' && clip.type !== 'shape' && clip.type !== 'effect' && clip.type !== 'anim') buildBadge(clip, gT);
+    if (clip.type === 'video') {
+      const ramps = document.createElement('div');
+      ramps.className = 'chips';
+      ramps.id = 'rampButtons';
+      for (const [id, label, tip] of [['hit', 'Hit & release', 'Slow into the moment at the playhead, hold it, snap back'],
+                                      ['smooth', 'Smooth slow-mo', 'Eases down to slow motion around the playhead and back'],
+                                      ['rush', 'Rush in', 'Fast forward up to the moment, then slow it down']]) {
+        const b = document.createElement('button');
+        b.className = 'chip-btn';
+        b.dataset.ramp = id;
+        b.textContent = label;
+        b.title = tip;
+        b.addEventListener('click', () => { cmds.speedRamp(clip.id, store.rt.playhead, id); comp.render(); });
+        ramps.appendChild(b);
+      }
+      gT.body.appendChild(row('Speed ramp', ramps));
+      const help = document.createElement('p');
+      help.className = 'insp__help';
+      help.textContent = 'Put the playhead on the moment (the shot, the hit), then pick a ramp.';
+      gT.body.appendChild(help);
+    }
     root.appendChild(gT);
 
     /* Transform */
-    if (track.kind !== 'audio') {
-      const gX = group('Transform');
+    if (clip.type === 'video' || clip.type === 'image') buildTransition(clip, track);
+    into(clip.type === 'text' || clip.type === 'anim' ? 'place' : clip.type === 'shape' ? 'shape' : 'picture');
+    if (clip.type === 'effect') { into('effect'); buildEffect(clip); }
+    if (track.kind !== 'audio' && clip.type !== 'effect') {
+      const gX = group(clip.type === 'text' ? 'Position' : 'Position & size');
       gX.body.appendChild(kfRow(clip, 'Position', 'transform.x', 'transform.y'));
       gX.body.appendChild(kfRow(clip, 'Scale', 'transform.scale'));
       gX.body.appendChild(kfRow(clip, 'Rotation', 'transform.rotation'));
@@ -142,12 +256,23 @@ export function initInspector({ store, cmds, comp, playback }) {
       root.appendChild(gX);
     }
 
-    if (clip.type === 'video' || clip.type === 'image') buildTransition(clip, track);
     if (clip.type === 'video' || clip.type === 'image') buildLook(clip);
-    if (track.kind !== 'audio') buildMotion(clip);
+    if (clip.type === 'video') buildFraming(clip);
     if (clip.crop) buildCrop(clip);
-    if (clip.type === 'text') buildText(clip);
     if (clip.type === 'shape') buildShape(clip);
+    if (clip.type === 'text') { into('text'); buildText(clip); }
+    if (clip.type === 'anim') { into('custom'); buildAnimPanel({ clip, root, store, cmds, comp, rerender }); }
+    if (track.kind !== 'audio' && clip.type !== 'effect') {
+      into('motion');
+      buildMotionPanel({ clip, root, store, cmds, comp, playback, rerender });
+      buildMotion(clip);
+    }
+    if (panes.sound) {
+      audioRoot = panes.sound;
+      panes.sound.id = 'audioRoot';
+      buildAudio(clip, track);
+    }
+    root = inspectorEl; audioRoot = audioEl;
   }
 
   /**
@@ -260,7 +385,7 @@ export function initInspector({ store, cmds, comp, playback }) {
     // one whose owner is looking for these, and a collapsed group is a group
     // nobody finds.
     void animated;
-    const g = group('Movement', true);
+    const g = group('Keyframes (advanced)', false);
 
     const chips = document.createElement('div');
     chips.className = 'looks looks--motion';
@@ -588,7 +713,7 @@ export function initInspector({ store, cmds, comp, playback }) {
 
   /* ── Text ─────────────────────────────────────────────────── */
   function buildText(clip) {
-    buildTextPanel({ clip, root, store, cmds, comp, rerender });
+    buildTextPanel({ clip, root, store, cmds, comp, rerender, playback });
   }
 
   function buildShape(clip) {
@@ -602,6 +727,105 @@ export function initInspector({ store, cmds, comp, playback }) {
     g.body.appendChild(row('Fill', fill));
     g.body.appendChild(kfRow(clip, 'Width', 'transform.w'));
     g.body.appendChild(kfRow(clip, 'Height', 'transform.h'));
+    root.appendChild(g);
+  }
+
+  /* ── Smart framing: auto-vertical and stabilize ─────────────── */
+  function buildFraming(clip) {
+    const g = group('Smart framing');
+    const mk = (id, label, help, run) => {
+      const b = document.createElement('button');
+      b.className = 'fontdrop';
+      b.id = id;
+      b.textContent = label;
+      b.title = help;
+      b.addEventListener('click', async () => {
+        b.disabled = true;
+        try {
+          const r = await run();
+          if (r && !r.ok) bus.emit('toast', { msg: r.reason, kind: 'err' });
+        } catch (e) {
+          bus.emit('toast', { msg: `Could not analyse that clip: ${e.message}`, kind: 'err' });
+        } finally { b.disabled = false; comp.render(); rerender(); }
+      });
+      g.body.appendChild(b);
+    };
+    const narrow = (store.doc.width / store.doc.height) < 1.2;
+    mk('btnAutoVertical', narrow ? 'Auto-vertical: follow the action' : 'Auto-vertical (switch to 9:16 first)',
+      'Watches the clip and keeps the narrow frame on whatever is moving, instead of a dead-centre crop',
+      async () => { const { autoReframe } = await import('../../edit/frame-analysis.js'); return autoReframe({ store, cmds, clipId: clip.id }); });
+    mk('btnStabilize', 'Stabilize: take the shake out',
+      'Measures the camera shake and moves the picture against it, zoomed in a touch so no edge shows',
+      async () => { const { stabilizeClip } = await import('../../edit/frame-analysis.js'); return stabilizeClip({ store, cmds, clipId: clip.id }); });
+    if (clip.crop && clip.type === 'video') {
+      if (clip.crop.path?.length) {
+        mk('btnFollowCrop', 'Stop following (keep the box still)',
+          'The crop box stops moving and stays where it was drawn',
+          async () => { cmds.setClipProp(clip.id, 'crop.path', null, { merge: false, label: 'Stop following' }); return { ok: true }; });
+      } else {
+        mk('btnFollowCrop', 'Follow it as it moves',
+          'Keeps this crop box on whatever is inside it at the playhead, for the whole clip — a player, a car, a face',
+          async () => { const { followCrop } = await import('../../edit/follow.js'); return followCrop({ store, cmds, comp }, clip.id); });
+      }
+    }
+    const help = document.createElement('p');
+    help.className = 'insp__help';
+    help.textContent = 'These write ordinary keyframes or a path you can undo — open Motion › Keyframes to fine-tune.';
+    g.body.appendChild(help);
+    root.appendChild(g);
+  }
+
+  /* ── Effect clip ────────────────────────────────────────────── */
+  function buildEffect(clip) {
+    const e = clip.effect || {};
+    const g = group('Effect');
+    const grid = document.createElement('div');
+    grid.className = 'fx__grid fx__grid--small';
+    for (const it of EFFECTS) {
+      const b = document.createElement('button');
+      b.className = 'fxtile fxtile--small' + (e.kind === it.id ? ' is-on' : '');
+      b.dataset.fx = it.id;
+      b.title = it.note;
+      b.innerHTML = `<span class="fxtile__stage fxtile__stage--${it.id}"><i></i></span><b>${it.name}</b>`;
+      b.addEventListener('click', () => {
+        cmds.setClipProp(clip.id, 'effect', { ...e, kind: it.id }, { merge: false, label: `Effect: ${it.name}` });
+        cmds.setClipProp(clip.id, 'name', it.name, { merge: false, label: `Effect: ${it.name}` });
+        comp.render(); rerender();
+      });
+      grid.appendChild(b);
+    }
+    g.body.appendChild(grid);
+    let before = e.amount ?? 0.6;
+    g.body.appendChild(row('Strength', slider({
+      value: before, min: 0.05, max: 1, step: 0.01, reset: 0.6,
+      format: (v) => `${Math.round(v * 100)}%`,
+      onStart: () => { before = clip.effect.amount ?? 0.6; },
+      onInput: (v) => { clip.effect.amount = v; comp.render(); },
+      onCommit: (v) => { clip.effect.amount = before; cmds.setClipProp(clip.id, 'effect', { ...clip.effect, amount: v }, { merge: false, label: 'Effect strength' }); },
+    })));
+    if (e.kind === 'zoom') {
+      const styles = document.createElement('div');
+      styles.className = 'chips';
+      styles.id = 'zoomStyles';
+      for (const [id, label, tip] of [['smooth', 'Smooth', 'Glides in, holds, glides out'], ['snap', 'Snap', 'Jumps in on the frame'],
+                                      ['bounce', 'Bounce', 'Overshoots and settles'], ['impact', 'Impact', 'Snaps in with a hit of shake']]) {
+        const b = document.createElement('button');
+        b.className = 'chip-btn' + ((e.style || 'smooth') === id ? ' is-on' : '');
+        b.dataset.zstyle = id; b.textContent = label; b.title = tip;
+        b.addEventListener('click', () => { cmds.setClipProp(clip.id, 'effect', { ...clip.effect, style: id }, { merge: false, label: `Zoom: ${label}` }); comp.render(); rerender(); });
+        styles.appendChild(b);
+      }
+      g.body.appendChild(row('Moves', styles));
+      g.body.appendChild(row('Zoom onto',
+        numField({ label: 'x', value: e.x ?? 0.5, min: 0, max: 1, step: .01, decimals: 2,
+          onCommit: v => cmds.setClipProp(clip.id, 'effect', { ...clip.effect, x: v }, { merge: false, label: 'Zoom point' }) }),
+        numField({ label: 'y', value: e.y ?? 0.5, min: 0, max: 1, step: .01, decimals: 2,
+          onCommit: v => cmds.setClipProp(clip.id, 'effect', { ...clip.effect, y: v }, { merge: false, label: 'Zoom point' }) })));
+      const help = document.createElement('p');
+      help.className = 'insp__help';
+      help.textContent = 'Or drag the + on the picture onto your crosshair.';
+      g.body.appendChild(help);
+    }
     root.appendChild(g);
   }
 
@@ -690,7 +914,52 @@ export function initInspector({ store, cmds, comp, playback }) {
       numField({ label: 'out', value: clip.fadeOut, min: 0, max: 30, step: .01, decimals: 2, suffix: 's',
         onCommit: v => { cmds.setClipProp(clip.id, 'fadeOut', v, { label: 'Fade out' }); resettle(clip); } })));
 
+    /* Voice clean-up: one switch, same sound in the preview and the export. */
+    const clean = toggleBtn({
+      label: clip.clean ? 'On' : 'Off',
+      on: !!clip.clean,
+      title: 'Cuts rumble, hiss and muddiness and evens out the level — for commentary and mic audio',
+      onChange: (on) => {
+        clean.textContent = on ? 'On' : 'Off';
+        cmds.setClipProp(clip.id, 'clean', on, { merge: false, label: on ? 'Voice clean-up on' : 'Voice clean-up off' });
+        if (store.rt.playing) playback?.audio?.start(store.rt.playhead);
+      },
+    });
+    clean.id = 'btnVoiceClean';
+    g.body.appendChild(row('Voice clean-up', clean));
+
     audioRoot.appendChild(g);
+
+    /* Auto-duck: the music dips under voice and game sound by itself. */
+    if (track.kind === 'audio') {
+      const gd = group('Auto-duck');
+      const d = track.duck || { on: false, depth: 0.7 };
+      const duck = toggleBtn({
+        label: d.on ? 'On' : 'Off',
+        on: !!d.on,
+        title: 'Lower this whole lane whenever someone talks or the game gets loud',
+        onChange: (on) => {
+          duck.textContent = on ? 'On' : 'Off';
+          cmds.setTrackFlag(track.id, 'duck', { ...d, on });
+          if (store.rt.playing) playback?.audio?.start(store.rt.playhead);
+        },
+      });
+      duck.id = 'btnAutoDuck';
+      gd.body.appendChild(row(`Duck “${track.name}”`, duck));
+      let depthBefore = d.depth ?? 0.7;
+      gd.body.appendChild(row('Dips by', slider({
+        value: depthBefore, min: 0.2, max: 0.95, step: 0.01, reset: 0.7,
+        format: (v) => `${Math.round(20 * Math.log10(1 - v))} dB`,
+        onStart: () => { depthBefore = track.duck?.depth ?? 0.7; },
+        onInput: () => {},
+        onCommit: (v) => { cmds.setTrackFlag(track.id, 'duck', { ...(track.duck || { on: true }), depth: v }); },
+      })));
+      const note = document.createElement('p');
+      note.className = 'insp__help';
+      note.textContent = 'Works from the sound of every other lane. Turn it on for your music lane and stop drawing volume curves.';
+      gd.body.appendChild(note);
+      audioRoot.appendChild(gd);
+    }
 
     /* Track level — the same fader, one level up. */
     const gt = group(`Track — ${track.name}`);

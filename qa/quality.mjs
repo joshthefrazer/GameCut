@@ -9,7 +9,7 @@
 import { levelFor, MAX_H264_BITRATE } from '../src/export/render-export.js';
 import {
   bitrateOf, sourceBitrate, bitrateForPreset, matchSource,
-  clampBitrate, fmtMbps, MIN_CUSTOM_BITRATE, MAX_CUSTOM_BITRATE,
+  clampBitrate, fmtMbps, MIN_CUSTOM_BITRATE, MAX_CUSTOM_BITRATE, BEST_CEILING,
 } from '../src/export/quality.js';
 import { EXPORT_PRESETS } from '../src/project/presets.js';
 
@@ -122,6 +122,21 @@ is(bitrateOf(1000, 0), 0, 'no duration means no answer');
   const huge = bitrateForPreset(best, 1_500_000_000);
   if (huge <= MAX_CUSTOM_BITRATE) ok(`a near-lossless source still advertises ${fmtMbps(huge)}`);
   else bad(`the tile would advertise ${fmtMbps(huge)}, past what the renderer will encode`);
+}
+
+/* ── Best quality never asks for more than an encoder takes ──── */
+// yt4k used to follow the footage x1.25 x2 with no ceiling: a 120 Mbps OBS
+// recording asked for 300 Mbps, past the software encoder's ~288 limit, and
+// every export from that footage came with a warning.
+{
+  const best = EXPORT_PRESETS.find(p => p.id === 'yt4k');
+  for (const src of [60e6, 120e6, 300e6]) {
+    const v = bitrateForPreset(best, src);
+    if (v <= BEST_CEILING && v < 288e6) ok(`${fmtMbps(src)} footage → Best quality asks ${fmtMbps(v)}`);
+    else bad(`${fmtMbps(src)} footage makes Best quality ask for ${fmtMbps(v)}, past ${fmtMbps(BEST_CEILING)}`);
+  }
+  if (bitrateForPreset(best, 30e6) > 30e6) ok('ordinary footage still raises Best quality above the source');
+  else bad('Best quality no longer follows the footage');
 }
 
 /* ── The hand-typed figure ───────────────────────────────────── */

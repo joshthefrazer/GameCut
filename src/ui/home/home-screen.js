@@ -39,8 +39,22 @@ export function initHome({ library, onOpen, onNew }) {
   const esc = (s) => String(s).replace(/[<>&"]/g, c =>
     ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
 
+  const tidy = document.getElementById('homeTidy');
   async function refresh() {
-    const list = await library.list();
+    const all = await library.list();
+    // Empty projects (nothing on the timeline) were mostly made by the old
+    // close-the-app bug. They stay on disk until you say so, out of the way.
+    const empty = all.filter(p => !p.clips);
+    const list = all.filter(p => p.clips);
+    if (tidy) {
+      tidy.hidden = !empty.length;
+      tidy.textContent = `Clear ${empty.length} empty project${empty.length === 1 ? '' : 's'}`;
+      tidy.onclick = async () => {
+        for (const p of empty) await library.remove(p.id);
+        bus.emit('toast', { msg: `Cleared ${empty.length} empty project${empty.length === 1 ? '' : 's'}`, kind: 'ok' });
+        refresh();
+      };
+    }
     count.textContent = list.length
       ? `${list.length} project${list.length === 1 ? '' : 's'}` : '';
     grid.innerHTML = '';
@@ -48,8 +62,8 @@ export function initHome({ library, onOpen, onNew }) {
     if (!list.length) {
       grid.innerHTML = `<div class="home__empty">
         <b>No projects yet</b>
-        <span>Start one above. Everything you do is saved here automatically,
-        and the footage stays where it already is on your drive.</span>
+        <span>Pick what you are making above. Your work is saved here as you go,
+        and your recordings stay where they already are.</span>
       </div>`;
       return;
     }
@@ -107,10 +121,13 @@ export function initHome({ library, onOpen, onNew }) {
     }
   }
 
-  document.getElementById('homeNew').addEventListener('click', () => onNew());
+  for (const b of root.querySelectorAll('[data-start]')) {
+    b.addEventListener('click', () => onNew(b.dataset.start));
+  }
 
   const show = async () => {
     app.classList.add('is-home');
+    bus.emit('home:open');
     await refresh();
   };
   const hide = () => app.classList.remove('is-home');

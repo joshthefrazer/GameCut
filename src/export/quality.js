@@ -2,7 +2,7 @@
  * How good the exported file should be.
  *
  * ── Why this file exists ──────────────────────────────────────
- * GameCut used to offer three fixed quality tiers, and the best of them was
+ * Strike used to offer three fixed quality tiers, and the best of them was
  * 16 Mbps at 1080p. That is a perfectly sensible number for footage from a
  * phone. It is nowhere near enough for footage from Medal or OBS, which record
  * gameplay at 50-100 Mbps: every export re-encoded a 70 Mbps source down to 16,
@@ -17,7 +17,7 @@
  *      relative to what you actually recorded.
  *   2. Anything can be typed in by hand. There is no list of allowed bitrates
  *      to fall off the end of — any number the H.264 format can carry is a
- *      number GameCut will encode at.
+ *      number Strike will encode at.
  *
  * ── Measuring the source ──────────────────────────────────────
  * Bytes divided by seconds is the file's average bitrate, which is the honest
@@ -81,12 +81,25 @@ export function bitrateForPreset(preset, srcBitrate) {
   // Scaled by resolution: a 4K export of 1080p footage needs more than the
   // source, a 720p draft of it needs less.
   const scale = preset.scale > 1 ? preset.scale : 1;
-  // Clamped, because the renderer clamps too. A near-lossless capture can be
-  // 500 Mbps, and 500 x 1.25 x 2 is past what H.264 can carry — left unclamped
-  // the tile would advertise a bitrate and a file size four times what would
-  // actually be produced.
-  return clampBitrate(Math.max(preset.vBitrate, Math.round(srcBitrate * HEADROOM * scale)));
+  // Capped at BEST_CEILING. Following the footage without a ceiling is how
+  // "Best quality" came to ask a 120 Mbps recording's 4K export for 300 Mbps:
+  // past what the software encoder will take (~288), so EVERY export from that
+  // footage showed a warning, and past anything an upload site keeps anyway.
+  // The renderer still caps further at whatever this machine's encoder takes.
+  return Math.min(BEST_CEILING,
+    clampBitrate(Math.max(preset.vBitrate, Math.round(srcBitrate * HEADROOM * scale))));
 }
+
+/**
+ * The most "Best quality" will ever ask for.
+ *
+ * 150 Mbps is more than twice what YouTube recommends for a 4K60 upload
+ * (53-68 Mbps for H.264) and three times TikTok's — the site re-encodes
+ * whatever it is given, so beyond this the only effect is a bigger, slower
+ * upload. Comfortably inside every H.264 level that carries 4K and below the
+ * software encoder's limit. Custom can still ask for anything.
+ */
+export const BEST_CEILING = 150_000_000;
 
 /**
  * What "Match my footage" sets.

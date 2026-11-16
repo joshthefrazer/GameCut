@@ -1,5 +1,7 @@
 import { audioCtx } from '../audio/waveform.js';
 import { snapFrame, clamp } from '../core/time.js';
+import { assets } from '../media/asset-store.js';
+import { audibleClips } from '../audio/graph.js';
 
 /**
  * Transport clock.
@@ -18,6 +20,29 @@ export class Playback {
     this.anchorTime = 0;
     this._raf = null;
     this.onTick = null;
+    /*
+     * A long recording's sound takes a while to prepare. Pressing Play before
+     * it was ready used to mean silence until Play was pressed again; now,
+     * the moment more sound is ready than is playing, it is brought in.
+     */
+    this._heard = 0;
+    assets.on('change', () => {
+      if (!this.store.rt.playing) return;
+      const n = this.#playable();
+      if (n > this._heard) this.#restartSound();
+    });
+  }
+
+  #playable() {
+    try { return audibleClips(this.store).filter(c => c.src).length; } catch { return 0; }
+  }
+
+  #restartSound() {
+    const ctx = audioCtx();
+    this.anchorCtx = ctx.currentTime;
+    this.anchorTime = this.store.rt.playhead;
+    this.audio.start(this.store.rt.playhead);
+    this._heard = this.#playable();
   }
 
   play() {
@@ -31,6 +56,7 @@ export class Playback {
     this.anchorCtx = ctx.currentTime;
     this.anchorTime = rt.playhead;
     this.audio.start(rt.playhead);
+    this._heard = this.#playable();
     this.store.setRT({ playing: true });
     this.#loop();
   }
@@ -83,7 +109,11 @@ export class Playback {
   #loop = () => {
     if (!this.store.rt.playing) return;
     const ctx = audioCtx();
-    const t = this.anchorTime + (ctx.currentTime - this.anchorCtx);
+    // The sound scheduled for a moment reaches your ears outputLatency later
+    // (tens of ms on most outputs, far more on Bluetooth), so the picture is
+    // held back by the same amount to stay with what you hear.
+    const lat = Math.min(0.5, Math.max(0, ctx.outputLatency || ctx.baseLatency || 0));
+    const t = Math.max(this.anchorTime, this.anchorTime + (ctx.currentTime - this.anchorCtx) - lat);
     const end = this.store.rt.duration;
 
     if (t >= end) {

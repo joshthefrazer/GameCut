@@ -1,0 +1,144 @@
+<!doctype html><meta charset="utf-8"><title>encoder probe</title>
+<script type="module">
+/* ── GameCut's own level logic, copied verbatim from src/export/render-export.js ── */
+const H264_LEVELS = [
+  { name: '3.0', idc: '1e', maxMBPS: 40500, maxFS: 1620, maxBR: 10000 },
+  { name: '3.1', idc: '1f', maxMBPS: 108000, maxFS: 3600, maxBR: 14000 },
+  { name: '3.2', idc: '20', maxMBPS: 216000, maxFS: 5120, maxBR: 20000 },
+  { name: '4.0', idc: '28', maxMBPS: 245760, maxFS: 8192, maxBR: 20000 },
+  { name: '4.1', idc: '29', maxMBPS: 245760, maxFS: 8192, maxBR: 50000 },
+  { name: '4.2', idc: '2a', maxMBPS: 522240, maxFS: 8704, maxBR: 50000 },
+  { name: '5.0', idc: '32', maxMBPS: 589824, maxFS: 22080, maxBR: 135000 },
+  { name: '5.1', idc: '33', maxMBPS: 983040, maxFS: 36864, maxBR: 240000 },
+  { name: '5.2', idc: '34', maxMBPS: 2073600, maxFS: 36864, maxBR: 240000 },
+  { name: '6.0', idc: '3c', maxMBPS: 4177920, maxFS: 139264, maxBR: 240000 },
+  { name: '6.1', idc: '3d', maxMBPS: 8355840, maxFS: 139264, maxBR: 480000 },
+  { name: '6.2', idc: '3e', maxMBPS: 16711680, maxFS: 139264, maxBR: 800000 },
+];
+function levelFor(w, h, fps, bitrate, high = true) {
+  const fs = Math.ceil(w / 16) * Math.ceil(h / 16), mbps = fs * fps, kbit = (bitrate || 0) / 1000;
+  const scale = high ? 1.25 : 1;
+  return H264_LEVELS.find(l => l.maxFS >= fs && l.maxMBPS >= mbps && l.maxBR * scale >= kbit) || null;
+}
+function codecCandidates(w, h, fps, bitrate) {
+  const high = levelFor(w, h, fps, bitrate, true), main = levelFor(w, h, fps, bitrate, false);
+  const out = [];
+  if (high) out.push(`avc1.6400${high.idc}`);
+  if (main) out.push(`avc1.4d40${main.idc}`, `avc1.42e0${main.idc}`);
+  if (!out.length) { const top = H264_LEVELS.at(-1); out.push(`avc1.6400${top.idc}`, `avc1.4d40${top.idc}`); }
+  return [...new Set(out)];
+}
+
+const res = { userAgent: navigator.userAgent, matrix: [], gamecutPath: [], encodes: [] };
+const sup = async (cfg) => {
+  try { const r = await VideoEncoder.isConfigSupported(cfg); return { ok: !!r.supported }; }
+  catch (e) { return { ok: false, err: String(e.message || e).slice(0, 160) }; }
+};
+
+/* ── 1. The matrix: what does isConfigSupported say? ─────────────────── */
+const SIZES = [[1920, 1080], [2560, 1440], [3840, 2160]];
+const FPS = [30, 60];
+const MBPS = [8, 16, 25, 40, 62, 80, 100, 150, 300];
+const ACCEL = ['no-preference', 'prefer-hardware', 'prefer-software'];
+const MODES = ['variable', 'constant'];
+res.matrixCols = ['w', 'h', 'fps', 'mbps', 'accel', 'codec', 'mode', 'supported', 'error'];
+for (const [w, h] of SIZES) for (const fps of FPS) for (const mbps of MBPS) {
+  const codecs = [codecCandidates(w, h, fps, mbps * 1e6)[0], 'avc1.640033', 'avc1.4d4033', 'avc1.42e033'];
+  for (const codec of [...new Set(codecs)]) for (const accel of ACCEL) for (const mode of MODES) {
+    const r = await sup({ codec, width: w, height: h, framerate: fps, bitrate: mbps * 1e6,
+      latencyMode: 'quality', bitrateMode: mode, hardwareAcceleration: accel });
+    res.matrix.push([w, h, fps, mbps, accel, codec, mode, r.ok, r.err || null]);
+  }
+}
+// The hardware frame-rate check is skipped when framerate is left out.
+res.noFramerate = [];
+for (const [w, h] of SIZES) for (const mbps of [16, 80, 150]) {
+  const r = await sup({ codec: 'avc1.640033', width: w, height: h, bitrate: mbps * 1e6,
+    latencyMode: 'quality', hardwareAcceleration: 'prefer-hardware' });
+  res.noFramerate.push([w, h, mbps, r.ok, r.err || null]);
+}
+window.probe.part(res);
+
+/* ── 2. GameCut's exact path, for the exports people actually ask for ── */
+for (const [w, h, fps, mbps] of [[1920,1080,60,16],[1920,1080,60,45],[1920,1080,60,80],[1920,1080,60,120],
+                                  [1920,1080,30,80],[2560,1440,60,80],[3840,2160,60,45],[3840,2160,60,100]]) {
+  const cfg = { width: w, height: h, framerate: fps, bitrate: mbps * 1e6, latencyMode: 'quality' };
+  const steps = [];
+  let picked = null;
+  while (true) {
+    for (const codec of codecCandidates(w, h, fps, cfg.bitrate)) {
+      const r = await sup({ ...cfg, codec });
+      steps.push([codec, cfg.bitrate / 1e6, r.ok, r.err || null]);
+      if (r.ok) { picked = codec; break; }
+    }
+    if (picked || cfg.bitrate <= 1e6) break;
+    cfg.bitrate = Math.max(1e6, Math.round(cfg.bitrate / 2));
+  }
+  res.gamecutPath.push({ ask: `${w}x${h}@${fps} ${mbps}Mbps`, picked, finalMbps: cfg.bitrate / 1e6, steps });
+}
+window.probe.part({ gamecutPath: res.gamecutPath });
+
+/* ── 3. Real encodes of hard footage: what bitrate actually comes out? ── */
+function noiseFrames(w, h, n) {
+  const frames = [];
+  for (let i = 0; i < n; i++) {
+    const c = new OffscreenCanvas(w, h), g = c.getContext('2d');
+    const img = g.createImageData(w, h), d = img.data;
+    let s = (i + 1) * 2654435761 >>> 0;
+    for (let p = 0; p < d.length; p += 4) {
+      s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0;
+      d[p] = s & 255; d[p + 1] = (s >>> 8) & 255; d[p + 2] = (s >>> 16) & 255; d[p + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+    frames.push(c);
+  }
+  return frames;
+}
+async function encode({ w, h, fps, mbps, accel, mode = 'variable', codec, omitFps = false }) {
+  const row = { w, h, fps, mbps, accel, mode, codec, omitFps };
+  const cfg = { codec, width: w, height: h, bitrate: mbps * 1e6, latencyMode: 'quality',
+    bitrateMode: mode, hardwareAcceleration: accel, ...(omitFps ? {} : { framerate: fps }) };
+  const s = await sup(cfg);
+  row.supported = s.ok; if (!s.ok) { row.err = s.err; return row; }
+  const frames = noiseFrames(w, h, 8);
+  let bytes = 0, err = null, outCodec = null, chunks = 0;
+  const enc = new VideoEncoder({
+    output: (c, meta) => { bytes += c.byteLength; chunks++; if (meta?.decoderConfig?.codec) outCodec = meta.decoderConfig.codec; },
+    error: (e) => { err = String(e.message || e); },
+  });
+  const t0 = performance.now();
+  try {
+    enc.configure(cfg);
+    const N = fps * 2;
+    for (let i = 0; i < N; i++) {
+      const vf = new VideoFrame(frames[i % frames.length], { timestamp: Math.round(i * 1e6 / fps), duration: Math.round(1e6 / fps) });
+      enc.encode(vf, { keyFrame: i % fps === 0 });
+      vf.close();
+      if (enc.encodeQueueSize > 8) await new Promise(r => setTimeout(r, 2));
+      if (err) break;
+    }
+    await enc.flush();
+  } catch (e) { err = err || String(e.message || e); }
+  try { enc.close(); } catch {}
+  row.ms = Math.round(performance.now() - t0);
+  row.chunks = chunks; row.outCodec = outCodec; row.err = err;
+  row.deliveredMbps = +(bytes * 8 / 2 / 1e6).toFixed(2);
+  return row;
+}
+const JOBS = [
+  { w: 1920, h: 1080, fps: 60, mbps: 16, accel: 'no-preference', codec: 'avc1.64002a' },
+  { w: 1920, h: 1080, fps: 60, mbps: 80, accel: 'no-preference', codec: 'avc1.640032' },
+  { w: 1920, h: 1080, fps: 60, mbps: 80, accel: 'prefer-hardware', codec: 'avc1.640032' },
+  { w: 1920, h: 1080, fps: 60, mbps: 80, accel: 'prefer-software', codec: 'avc1.42e032' },
+  { w: 1920, h: 1080, fps: 30, mbps: 80, accel: 'prefer-hardware', codec: 'avc1.640032' },
+  { w: 1920, h: 1080, fps: 30, mbps: 80, accel: 'prefer-hardware', codec: 'avc1.640032', mode: 'constant' },
+  { w: 1920, h: 1080, fps: 60, mbps: 80, accel: 'prefer-hardware', codec: 'avc1.640032', omitFps: true },
+  { w: 1920, h: 1080, fps: 60, mbps: 80, accel: 'prefer-hardware', codec: 'avc1.640032', omitFps: true, mode: 'constant' },
+  { w: 2560, h: 1440, fps: 60, mbps: 80, accel: 'no-preference', codec: 'avc1.640032' },
+];
+for (const j of JOBS) {
+  try { res.encodes.push(await encode(j)); } catch (e) { res.encodes.push({ ...j, crashed: String(e) }); }
+  window.probe.part({ encodes: res.encodes });
+}
+window.probe.done({});
+</script>

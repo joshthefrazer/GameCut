@@ -52,9 +52,11 @@ for (const f of FILES) {
 for (const d of DIRS) {
   for (const abs of await walk(path.join(ROOT, d))) {
     const rel = path.relative(ROOT, abs).split(path.sep).join('/');
-    const body = await readFile(abs, 'utf8');
+    const buf = await readFile(abs);
+    const txt = buf.toString('utf8');
+    const body = Buffer.from(txt, 'utf8').equals(buf) ? txt : { b64: buf.toString('base64') };
     files[rel] = body;
-    bytes += body.length;
+    bytes += buf.length;
   }
 }
 

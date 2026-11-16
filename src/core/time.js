@@ -29,31 +29,70 @@ export function shortTime(sec) {
 }
 
 /**
+ * A time as a person reads it: `m:ss.f` — "0:07.5", "1:02.0", "1:00:05.0".
+ *
+ * For display only. Everything that edits still works in exact frames; this is
+ * what goes on a label, where "00:00:07:30" makes you do arithmetic and "+15f"
+ * means nothing at all to someone who has never used an editor before.
+ * `digits` is how many decimals of a second to show (0 drops the point).
+ */
+export function humanTime(sec, digits = 1) {
+  sec = Math.max(0, sec || 0);
+  const scale = 10 ** digits;
+  // Round once, on the whole value, so 59.96 becomes 1:00.0 rather than 0:60.0.
+  const total = Math.round(sec * scale) / scale;
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total - h * 3600 - m * 60;
+  const ss = digits ? s.toFixed(digits).padStart(digits + 3, '0') : pad(Math.round(s));
+  return h ? `${h}:${pad(m)}:${ss}` : `${m}:${ss}`;
+}
+
+/**
  * Adaptive ruler step: smallest "nice" interval whose on-screen width
- * clears `minPx`. Sub-second steps fall back to frame multiples.
+ * clears `minPx`.
+ *
+ * Sub-second steps are tenths, fifths and halves of a second, which label
+ * cleanly as 0:01.5. Single frames only appear once you have zoomed in far
+ * enough that a tenth of a second is wider than a label — the one place a
+ * frame count is what you are actually looking at.
  */
 export function rulerStep(pxPerSec, fps, minPx = 78) {
   const frame = 1 / fps;
+  const frames = [frame, frame * 2, frame * 5].filter(f => f < 0.1 - 1e-9);
   const candidates = [
-    frame, frame * 2, frame * 5, frame * 10, frame * 15, frame * 30,
+    ...frames, 0.1, 0.2, 0.5,
     1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600
   ];
   for (const c of candidates) if (c * pxPerSec >= minPx) return c;
   return candidates.at(-1);
 }
 
-/** Label for a ruler tick, terse at high zoom, coarse when zoomed out. */
+/**
+ * Label for a ruler tick at `sec`, given the ruler's `step`.
+ *
+ * The frame count is worked out from ONE rounding of `sec × fps`. The old
+ * version took `sec % 1` of a value that had been built by adding `step` over
+ * and over, so floating error crept in and a tick sitting exactly on a whole
+ * second could come out as "+30f" (at 30 fps) — the rounding of 0.9999… of a
+ * second — instead of the second itself.
+ */
 export function tickLabel(sec, step, fps) {
-  if (step < 1) {
-    const f = Math.round((sec % 1) * fps);
-    return f === 0 ? `${Math.floor(sec)}s` : `+${f}f`;
+  const rate = Math.round(fps) || 30;
+  if (step < 0.1 - 1e-9) {
+    // Frame-level zoom: whole seconds by name, frames in between by count.
+    const total = Math.round(sec * fps);
+    const f = total % rate;
+    return f === 0 ? humanTime(total / fps, 0) : `+${f}f`;
   }
-  if (step < 60) {
-    const m = Math.floor(sec / 60), s = Math.round(sec % 60);
-    return m ? `${m}:${pad(s)}` : `${s}s`;
+  if (step < 1 - 1e-9) {
+    // Tenths are enough to name every tick at these steps (0.1 / 0.2 / 0.5).
+    const t = Math.round(sec * 10) / 10;
+    return Math.abs(t - Math.round(t)) < 1e-6 ? humanTime(t, 0) : humanTime(t, 1);
   }
+  if (step < 3600) return humanTime(Math.round(sec), 0);
   const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
-  return h ? `${h}:${pad(m)}:00` : `${m}:00`;
+  return `${h}:${pad(m)}:00`;
 }
 
 /** Beat grid times across [t0,t1] for a given BPM + offset. */

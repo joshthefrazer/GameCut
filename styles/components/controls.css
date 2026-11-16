@@ -188,3 +188,30 @@
 /* Square ghost button for a single glyph — the padded pill shape reads as
    "this has a label that failed to load" when there is only an icon in it. */
 .btn--icon{width:30px;padding:0;justify-content:center}
+
+/* ── Ask box: a one-line question, drawn by the app ─────────── */
+.askd{
+  position:fixed;inset:0;z-index:1500;display:grid;place-items:center;
+  background:rgba(4,8,16,.6);backdrop-filter:blur(3px);
+  animation:cropst-in .14s var(--ease-out) both;
+}
+.askd__card{
+  width:min(360px,calc(100vw - 32px));display:flex;flex-direction:column;gap:10px;
+  padding:16px;border-radius:var(--r-lg);
+  background:var(--glass-bg-2);border:1px solid var(--glass-line-2);box-shadow:var(--sh-pop);
+}
+.askd__title{font-size:14px;font-weight:700;color:var(--txt-0)}
+.askd__label{font-size:12px;color:var(--txt-2)}
+.askd__in{
+  height:34px;padding:0 10px;border-radius:var(--r-md);
+  border:1px solid var(--glass-line);background:var(--field);color:var(--txt-0);font-size:13px;
+}
+.askd__in:focus{outline:none;border-color:var(--acc);box-shadow:var(--glow-acc)}
+.askd__row{display:flex;justify-content:flex-end;gap:8px;margin-top:2px}
+.askd__row button{
+  height:32px;padding:0 14px;border-radius:var(--r-md);font-size:12.5px;font-weight:600;
+  border:1px solid var(--glass-line);background:var(--surface);color:var(--txt-1);
+}
+.askd__row button:hover{color:var(--txt-0);background:var(--surface-hi)}
+.askd__ok{background:var(--acc)!important;border-color:transparent!important;color:#fff!important}
+.askd,.askd *{-webkit-app-region:no-drag}

@@ -1,5 +1,5 @@
 /**
- * GameCut — Electron host.
+ * Strike — Electron host.
  *
  * Content is served over a custom `app://` protocol rather than a localhost
  * HTTP server. That matters for three reasons:
@@ -14,10 +14,23 @@ const { app, BrowserWindow, Menu, dialog, shell, ipcMain, protocol, session } = 
 const path = require('path');
 const fs = require('fs');
 const fsp = require('fs/promises');
+const crypto = require('crypto');
+
+/*
+ * Strike was called GameCut. The app's own folder (projects, settings, the
+ * captions model, preview copies) is named after the app, so renaming it would
+ * have quietly started everyone over with an empty projects screen. Keep using
+ * the folder that already holds their work. A test run that passes its own
+ * --user-data-dir keeps that.
+ */
+if (!app.commandLine.hasSwitch('user-data-dir')) {
+  try { app.setPath('userData', path.join(app.getPath('appData'), 'GameCut')); } catch { /* keep the default */ }
+}
 
 const APP_SCHEME = 'app';
 const APP_HOST = 'gamecut';
 const MEDIA_SCHEME = 'gcmedia';
+const MODELS_SCHEME = 'gcmodels';
 const ROOT = __dirname;
 
 /**
@@ -89,6 +102,7 @@ const MIME = {
   '.otf':  'font/otf',
   '.wasm': 'application/wasm',
   '.map':  'application/json; charset=utf-8',
+  '.wav':  'audio/wav',
 };
 
 /**
@@ -119,14 +133,17 @@ const SERVE_FILES = ['index.html'];
  */
 const CSP = [
   "default-src 'self'",
-  "script-src 'self'",
+  // 'wasm-unsafe-eval' lets WebAssembly compile (the captions engine). It is
+  // not 'unsafe-eval': JavaScript strings still cannot be run as code.
+  "script-src 'self' 'wasm-unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: gcmedia:",
   "media-src 'self' blob: gcmedia:",
   "font-src 'self' data: blob:",
   // gcmedia: is fetched too, not only played: reopening a project rebuilds each
   // waveform by reading the audio back off disk rather than storing it.
-  "connect-src 'self' blob: data: gcmedia:",
+  // gcmodels: the captions engine reads its model files off disk.
+  "connect-src 'self' blob: data: gcmedia: gcmodels:",
   "worker-src 'self' blob:",
   "object-src 'none'",
   "frame-src 'none'",
@@ -142,7 +159,7 @@ const ISOLATION_HEADERS = {
   'Content-Security-Policy': CSP,
 };
 
-/* GameCut is a local tool: nothing about a project should ever leave the
+/* Strike is a local tool: nothing about a project should ever leave the
    machine. Chromium's own background services (component/variations updates,
    crash upload, speech) are the only things that would otherwise dial out, so
    they are switched off here rather than left to default. */
@@ -195,6 +212,11 @@ protocol.registerSchemesAsPrivileged([
      * it "offline" until it is pointed at again.
      */
     scheme: MEDIA_SCHEME,
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true },
+  },
+  {
+    // The auto-captions model, read from Strike's own folder (see MODELS).
+    scheme: MODELS_SCHEME,
     privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true },
   },
 ]);
@@ -326,6 +348,7 @@ async function serveMedia(request) {
 
 function registerProtocol() {
   protocol.handle(MEDIA_SCHEME, serveMedia);
+  protocol.handle(MODELS_SCHEME, serveModel);
 
   protocol.handle(APP_SCHEME, async (request) => {
     let url;
@@ -376,7 +399,7 @@ function lockDownNetwork() {
   // handing the page a local file it already opened, never a network fetch.
   // Leaving it out blocked every video import with ERR_BLOCKED_BY_CLIENT and no
   // message that named the cause.
-  const ALLOWED = /^(app|gcmedia|blob|data|devtools):/i;
+  const ALLOWED = /^(app|gcmedia|gcmodels|blob|data|devtools):/i;
   session.defaultSession.webRequest.onBeforeRequest((details, cb) => {
     cb({ cancel: !ALLOWED.test(details.url) });
   });
@@ -421,7 +444,7 @@ function createWindow() {
     minHeight: 660,
     show: false,                       // avoid the white flash before first paint
     backgroundColor: '#070b14',        // matches --bg-0 so the reveal is seamless
-    title: 'GameCut',
+    title: 'Strike',
     /**
      * The app draws its own top bar.
      *
@@ -522,8 +545,17 @@ function createWindow() {
     }
   });
 
+  /* A page that reloads or goes away cannot finish writing a video, so the
+     half-written file it was making goes with it. */
+  const sinkWc = win.webContents.id;
+  win.webContents.on('did-start-navigation', (details) => {
+    if (details?.isMainFrame !== false && !details?.isSameDocument) abortSinks(sinkWc);
+  });
+  win.webContents.on('destroyed', () => abortSinks(sinkWc));
+
   win.webContents.on('render-process-gone', (_e, details) => {
-    dialog.showErrorBox('GameCut stopped responding',
+    abortSinks(sinkWc);
+    dialog.showErrorBox('Strike stopped responding',
       `The editor process exited (${details.reason}). The window will reload.`);
     if (win && !win.isDestroyed()) win.reload();
   });
@@ -562,9 +594,9 @@ function buildMenu() {
           click: async () => {
             if (!win) return;
             const { canceled, filePaths } = await dialog.showOpenDialog(win, {
-              title: 'Install a GameCut update',
+              title: 'Install a Strike update',
               properties: ['openFile'],
-              filters: [{ name: 'GameCut update', extensions: ['gcupdate', 'json'] }],
+              filters: [{ name: 'Strike update', extensions: ['gcupdate', 'json'] }],
             });
             if (canceled || !filePaths?.[0]) return;
             const r = await installUpdate(filePaths[0]);
@@ -586,7 +618,7 @@ function buildMenu() {
             const u = updateInstalled();
             dialog.showMessageBox(win, {
               type: 'info',
-              title: 'GameCut version',
+              title: 'Strike version',
               message: u
                 ? `Update ${u.version}`
                 : `Built-in version ${app.getVersion()}`,
@@ -623,11 +655,11 @@ function buildMenu() {
       label: 'Help',
       submenu: [
         {
-          label: 'About GameCut',
+          label: 'About Strike',
           click: () => dialog.showMessageBox(win, {
             type: 'info',
-            title: 'About GameCut',
-            message: `GameCut ${app.getVersion()}`,
+            title: 'About Strike',
+            message: `Strike ${app.getVersion()}`,
             detail: 'Local video editor for gaming clips.\nNothing leaves this machine.',
             buttons: ['OK'],
           }),
@@ -665,6 +697,7 @@ function buildMenu() {
  */
 const EXTERNAL_TARGETS = {
   'youtube-upload': 'https://www.youtube.com/upload',
+  'tiktok-upload': 'https://www.tiktok.com/upload',
 };
 
 ipcMain.handle('shell:openTarget', async (_e, key) => {
@@ -689,7 +722,7 @@ ipcMain.handle('dialog:saveAs', async (_e, opts = {}) => {
     title: opts.title || 'Save',
     defaultPath: opts.defaultPath || undefined,
     filters: opts.filters || [
-      { name: 'GameCut Project', extensions: ['gcproj'] },
+      { name: 'Strike Project', extensions: ['gcproj'] },
       { name: 'MP4 Video', extensions: ['mp4'] },
       { name: 'All files', extensions: ['*'] },
     ],
@@ -703,6 +736,203 @@ ipcMain.handle('fs:writeFile', async (_e, filePath, data) => {
   return true;
 });
 
+/**
+ * A file-system failure, in words.
+ *
+ * "EPERM: operation not permitted, rename …\x.gcproj.tmp" tells a fourteen
+ * year old nothing, and it was all a failed save ever produced — when it
+ * produced anything at all. These are the handful of things that actually go
+ * wrong on a home PC, said the way you would say them to a person.
+ *
+ * `replacing` is set when the failing step was swapping a finished file into
+ * place: on Windows that is where "the video is open in a player" shows up,
+ * as EPERM or EBUSY rather than as anything that says so.
+ */
+function plainError(err, { replacing = false } = {}) {
+  const code = err && err.code;
+  switch (code) {
+    case 'ENOSPC': case 'EDQUOT': return 'The disk is full';
+    case 'EROFS': return 'That drive is read-only';
+    case 'EBUSY': case 'ETXTBSY': return 'The file is open in another program';
+    case 'EPERM': case 'EACCES':
+      return replacing ? 'The file is open in another program' : 'The folder is not writable';
+    case 'ENOENT': return 'The folder is not there any more';
+    case 'ENOTDIR': return 'Part of that path is a file, not a folder';
+    case 'EISDIR': return 'There is a folder with that name in the way';
+    case 'ENAMETOOLONG': return 'The file name is too long';
+    case 'EMFILE': case 'ENFILE': return 'Too many files are open — close some programs and try again';
+    case 'EIO': return 'The drive reported an error';
+    default: return code ? `The file could not be written (${code})` : 'The file could not be written';
+  }
+}
+
+/**
+ * Rename, replacing whatever is at the destination.
+ *
+ * Windows refuses for a moment when a virus scanner or the search indexer has
+ * just opened the old file, and that refusal looks exactly like "open in
+ * another program". Retrying for a fraction of a second rides it out; a file
+ * that really is held open still fails, and says so.
+ */
+async function renameReplacing(from, to) {
+  for (let i = 0; ; i++) {
+    try { await fsp.rename(from, to); return; } catch (err) {
+      const transient = process.platform === 'win32' && /^(EPERM|EBUSY|EACCES)$/.test(err?.code || '');
+      if (!transient || i >= 6) throw err;
+      await new Promise(r => setTimeout(r, 40 * (i + 1)));
+    }
+  }
+}
+
+
+/* Paths this session has written a finished export to. sink:close records
+   them; nothing else reads them yet. */
+const writtenPaths = new Set();
+const samePath = (p) => (process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p));
+
+/* ── Export sink ──────────────────────────────────────────────────
+
+   Where a finished video goes, written as it is made rather than handed over
+   whole at the end. The page asks for a file (a native save dialog — the page
+   never names a path), gets back an unguessable token for it, and writes
+   chunks at positions; closing flushes, syncs and renames `<name>.partial`
+   into place, so a half-written export never sits on the disk under the name
+   of a finished one.
+
+   A token is good for the one file the person picked, from the window that
+   asked, until it is closed or aborted — and every open one is aborted if the
+   window goes, so a render cut off by a crash or a close leaves no
+   multi-gigabyte .partial behind. */
+const sinks = new Map();   // token -> { fh, path, partial, bytes, wc, pending }
+
+const PREFS_FILE = () => path.join(app.getPath('userData'), 'prefs.json');
+function readPrefs() {
+  try { return JSON.parse(fs.readFileSync(PREFS_FILE(), 'utf8')) || {}; } catch { return {}; }
+}
+function writePrefs(patch) {
+  try { fs.writeFileSync(PREFS_FILE(), JSON.stringify({ ...readPrefs(), ...patch })); } catch { /* not worth failing over */ }
+}
+
+function sinkFor(e, token) {
+  if (typeof token !== 'string') return null;
+  const s = sinks.get(token);
+  return s && s.wc === e.sender.id ? s : null;
+}
+
+/** Close and delete every unfinished export a window had open. */
+function abortSinks(wcId) {
+  for (const [token, s] of sinks) {
+    if (wcId !== undefined && s.wc !== wcId) continue;
+    sinks.delete(token);
+    s.fh.close().catch(() => {}).finally(() => fsp.rm(s.partial, { force: true }).catch(() => {}));
+  }
+}
+
+/**
+ * Files the person chose in a save dialog this session. A second version of
+ * an export (the TikTok cut of a YouTube video, say) may be written beside
+ * one of these, and nowhere else — the page still never names a folder.
+ */
+const exportedPaths = new Set();
+
+ipcMain.handle('sink:openBeside', async (e, opts = {}) => {
+  const beside = String(opts?.beside || '');
+  if (!exportedPaths.has(beside)) return { error: 'That is not a file Strike saved' };
+  const suffix = String(opts?.suffix || 'copy').replace(/[<>:"/\\|?*\x00-\x1f]/g, '').trim().slice(0, 40) || 'copy';
+  const dir = path.dirname(beside);
+  const stem = path.basename(beside, path.extname(beside));
+  let filePath = path.join(dir, `${stem} - ${suffix}.mp4`);
+  for (let n = 2; fs.existsSync(filePath) && n < 100; n++) filePath = path.join(dir, `${stem} - ${suffix} (${n}).mp4`);
+  const partial = `${filePath}.partial`;
+  let fh;
+  try { fh = await fsp.open(partial, 'w'); } catch (err) { return { error: plainError(err) }; }
+  const token = crypto.randomBytes(32).toString('hex');
+  sinks.set(token, { fh, path: filePath, partial, bytes: 0, wc: e.sender.id, pending: new Set() });
+  exportedPaths.add(filePath);
+  return { token, path: filePath };
+});
+
+ipcMain.handle('sink:open', async (e, opts = {}) => {
+  if (!win) return { error: 'There is no window to ask from' };
+  // A name, not a path: the folder is the person's choice, in the dialog.
+  const suggested = path.basename(String(opts?.suggestedName || '')).replace(/[<>:"/\\|?*\x00-\x1f]/g, '').trim()
+    || 'Strike export.mp4';
+  const ext = (path.extname(suggested).slice(1) || 'mp4').toLowerCase();
+  const prefs = readPrefs();
+  let dir = prefs.lastExportDir;
+  if (!dir || !fs.existsSync(dir)) { try { dir = app.getPath('videos'); } catch { dir = app.getPath('home'); } }
+
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    title: typeof opts?.title === 'string' && opts.title ? opts.title : 'Save video',
+    defaultPath: path.join(dir, suggested),
+    filters: [{ name: `${ext.toUpperCase()} ${['png', 'jpg', 'jpeg'].includes(ext) ? 'image' : 'video'}`, extensions: [ext] }],
+  });
+  if (canceled || !filePath) return { cancelled: true };
+  writePrefs({ lastExportDir: path.dirname(filePath) });
+  exportedPaths.add(filePath);
+
+  const partial = `${filePath}.partial`;
+  let fh;
+  try { fh = await fsp.open(partial, 'w'); } catch (err) { return { error: plainError(err) }; }
+  const token = crypto.randomBytes(32).toString('hex');
+  sinks.set(token, { fh, path: filePath, partial, bytes: 0, wc: e.sender.id, pending: new Set() });
+  return { token, path: filePath };
+});
+
+ipcMain.handle('sink:write', async (e, token, chunk, position) => {
+  const s = sinkFor(e, token);
+  if (!s) return { error: 'That export file is not open any more' };
+  if (!(chunk instanceof Uint8Array)) return { error: 'Nothing to write' };
+  if (!Number.isSafeInteger(position) || position < 0) return { error: 'That is not a place in the file' };
+  const job = (async () => {
+    let done = 0;
+    while (done < chunk.byteLength) {
+      const { bytesWritten } = await s.fh.write(chunk, done, chunk.byteLength - done, position + done);
+      if (!bytesWritten) throw Object.assign(new Error('short write'), { code: 'EIO' });
+      done += bytesWritten;
+    }
+  })();
+  s.pending.add(job);
+  try { await job; } catch (err) { return { error: plainError(err) }; } finally { s.pending.delete(job); }
+  s.bytes = Math.max(s.bytes, position + chunk.byteLength);
+  return { ok: true };
+});
+
+ipcMain.handle('sink:close', async (e, token) => {
+  const s = sinkFor(e, token);
+  if (!s) return { ok: false, reason: 'That export file is not open any more' };
+  sinks.delete(token);                     // a token is spent the moment it is closed
+  try {
+    await Promise.allSettled([...s.pending]);
+    await s.fh.sync();
+    await s.fh.close();
+  } catch (err) {
+    await s.fh.close().catch(() => {});
+    await fsp.rm(s.partial, { force: true }).catch(() => {});
+    return { ok: false, reason: plainError(err) };
+  }
+  try {
+    await renameReplacing(s.partial, s.path);
+  } catch (err) {
+    await fsp.rm(s.partial, { force: true }).catch(() => {});
+    return { ok: false, reason: plainError(err, { replacing: true }) };
+  }
+  let bytes = s.bytes;
+  try { bytes = (await fsp.stat(s.path)).size; } catch { /* keep the count */ }
+  writtenPaths.add(samePath(s.path));
+  return { ok: true, path: s.path, bytes };
+});
+
+ipcMain.handle('sink:abort', async (e, token) => {
+  const s = sinkFor(e, token);
+  if (!s) return true;
+  sinks.delete(token);
+  await Promise.allSettled([...s.pending]);
+  await s.fh.close().catch(() => {});
+  await fsp.rm(s.partial, { force: true }).catch(() => {});
+  return true;
+});
+
 /* ── Project library ───────────────────────────────────────────── */
 
 /**
@@ -713,6 +943,158 @@ ipcMain.handle('fs:writeFile', async (_e, filePath, data) => {
  * so the library is small no matter how much video the projects reference.
  */
 const PROJ_DIR = path.join(app.getPath('userData'), 'projects');
+
+/**
+ * Smooth-editing copies ("proxies"): a light 540p version of a heavy clip,
+ * kept in Strike's own cache folder and used only by the preview. The page
+ * names the original; this side decides where the copy lives, so the page
+ * can never write anywhere but the cache.
+ */
+const PROXY_DIR = path.join(app.getPath('userData'), 'proxies');
+async function proxyPathFor(src) {
+  let key = String(src || '');
+  try { const st = await fsp.stat(src); key += `|${st.size}|${st.mtimeMs}`; } catch { /* moved: still a stable name */ }
+  return path.join(PROXY_DIR, crypto.createHash('sha1').update(key).digest('hex').slice(0, 24) + '.mp4');
+}
+ipcMain.handle('proxy:find', async (_e, src) => {
+  if (typeof src !== 'string' || !src) return { found: false };
+  const p = await proxyPathFor(src);
+  try { await fsp.access(p, fs.constants.R_OK); return { found: true, mediaId: registerMedia(p) }; }
+  catch { return { found: false }; }
+});
+ipcMain.handle('proxy:open', async (e, src) => {
+  if (typeof src !== 'string' || !src) return { error: 'No source' };
+  await fsp.mkdir(PROXY_DIR, { recursive: true });
+  const filePath = await proxyPathFor(src);
+  const partial = `${filePath}.partial`;
+  let fh;
+  try { fh = await fsp.open(partial, 'w'); } catch (err) { return { error: plainError(err) }; }
+  const token = crypto.randomBytes(32).toString('hex');
+  sinks.set(token, { fh, path: filePath, partial, bytes: 0, wc: e.sender.id, pending: new Set() });
+  return { token, path: filePath };
+});
+/**
+ * Auto-captions: the speech model.
+ *
+ * Speech-to-text runs on this computer (Whisper, through ONNX in the page). Its
+ * model is too big to ship in the installer, so it is fetched ONCE, when the
+ * person asks for captions and says yes to the download, into Strike's own
+ * folder. The page never touches the network: this process downloads a fixed
+ * list of files from one fixed place, and the page reads them back through
+ * gcmodels://, which can only see that folder.
+ */
+const MODEL_DIR = path.join(app.getPath('userData'), 'models');
+const MODEL_HOST = process.env.GAMECUT_MODEL_HOST || 'https://huggingface.co';
+const MODELS = {
+  'whisper-base.en': {
+    repo: 'onnx-community/whisper-base.en_timestamped',
+    files: [
+      'config.json', 'generation_config.json', 'preprocessor_config.json',
+      'tokenizer.json', 'tokenizer_config.json',
+      'onnx/encoder_model_quantized.onnx', 'onnx/decoder_model_merged_quantized.onnx',
+    ],
+    approxBytes: 80_000_000,
+  },
+};
+const modelPath = (id, file) => path.join(MODEL_DIR, id, ...file.split('/'));
+
+async function serveModel(request) {
+  let url;
+  try { url = new URL(request.url); } catch { return new Response('Bad request', { status: 400 }); }
+  const HEAD = { 'Cross-Origin-Resource-Policy': 'cross-origin', 'Access-Control-Allow-Origin': '*' };
+  const file = resolveWithin(url.pathname, MODEL_DIR);
+  if (!file) return new Response('Forbidden', { status: 403, headers: HEAD });
+  let st;
+  try { st = await fsp.stat(file); } catch { return new Response('Not found', { status: 404, headers: HEAD }); }
+  if (!st.isFile()) return new Response('Not found', { status: 404, headers: HEAD });
+  const ext = path.extname(file).toLowerCase();
+  return new Response(fs.createReadStream(file), {
+    status: 200,
+    headers: { ...HEAD, 'Content-Length': String(st.size),
+      'Content-Type': ext === '.json' ? 'application/json' : 'application/octet-stream' },
+  });
+}
+
+async function modelStatus(id) {
+  const m = MODELS[id];
+  if (!m) return { error: 'Unknown model' };
+  let have = 0, bytes = 0;
+  for (const f of m.files) {
+    try { const st = await fsp.stat(modelPath(id, f)); if (st.size > 0) { have++; bytes += st.size; } } catch { /* missing */ }
+  }
+  return { ready: have === m.files.length, have, of: m.files.length, bytes, approxBytes: m.approxBytes };
+}
+
+/** GET with redirects (the model host hands off to its file store). */
+function download(url, dest, onBytes, signal, hops = 0) {
+  const https = require('node:https'), http = require('node:http');
+  return new Promise((resolve, reject) => {
+    if (signal.cancelled) return reject(new Error('cancelled'));
+    const mod = url.startsWith('https:') ? https : http;
+    const req = mod.get(url, { headers: { 'User-Agent': `Strike/${app.getVersion()}` } }, (res) => {
+      if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location && hops < 6) {
+        res.resume();
+        return resolve(download(new URL(res.headers.location, url).href, dest, onBytes, signal, hops + 1));
+      }
+      if (res.statusCode !== 200) { res.resume(); return reject(new Error(`the download server said ${res.statusCode}`)); }
+      const total = Number(res.headers['content-length']) || 0;
+      const part = dest + '.part';
+      const out = fs.createWriteStream(part);
+      let got = 0;
+      signal.abort = () => { req.destroy(new Error('cancelled')); };
+      res.on('data', (c) => { got += c.length; onBytes(got, total); });
+      res.on('error', reject);
+      out.on('error', reject);
+      res.pipe(out);
+      out.on('finish', async () => {
+        try {
+          if (total && got !== total) throw new Error('the download was cut short');
+          await fsp.rename(part, dest);
+          resolve(got);
+        } catch (err) { reject(err); }
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(60_000, () => req.destroy(new Error('the download stalled')));
+  });
+}
+
+const modelJobs = new Map();
+ipcMain.handle('models:status', (_e, id) => modelStatus(String(id || '')));
+ipcMain.handle('models:download', async (e, id) => {
+  id = String(id || '');
+  const m = MODELS[id];
+  if (!m) return { error: 'Unknown model' };
+  if (modelJobs.has(id)) return { error: 'Already downloading' };
+  const signal = { cancelled: false, abort: null };
+  modelJobs.set(id, signal);
+  const wc = e.sender;
+  try {
+    let done = 0;
+    for (const f of m.files) {
+      const dest = modelPath(id, f);
+      try { if ((await fsp.stat(dest)).size > 0) { done += (await fsp.stat(dest)).size; continue; } } catch { /* fetch it */ }
+      await fsp.mkdir(path.dirname(dest), { recursive: true });
+      const base = done;
+      await download(`${MODEL_HOST}/${m.repo}/resolve/main/${f}`, dest, (got) => {
+        if (!wc.isDestroyed()) wc.send('models:progress', { id, file: f, bytes: base + got, approxBytes: m.approxBytes });
+      }, signal);
+      done += (await fsp.stat(dest)).size;
+      if (signal.cancelled) throw new Error('cancelled');
+    }
+    return { ok: true, ...(await modelStatus(id)) };
+  } catch (err) {
+    return { error: signal.cancelled ? 'cancelled' : plainError(err) };
+  } finally {
+    modelJobs.delete(id);
+  }
+});
+ipcMain.handle('models:cancel', (_e, id) => {
+  const s = modelJobs.get(String(id || ''));
+  if (s) { s.cancelled = true; s.abort?.(); }
+  return { ok: true };
+});
+
 const projFile = (id) => path.join(PROJ_DIR, `${safeId(id)}.gcproj`);
 
 /** Ids are ours, but they end up in a filename, so they are checked anyway. */
@@ -790,6 +1172,9 @@ ipcMain.handle('proj:delete', async (_e, id) => {
  * passes the paths here. Registering is what makes a file reachable over
  * gcmedia:; nothing else on the disk is.
  */
+/* Clip Inbox: recordings in the folders recorders save to. See inbox.cjs. */
+require('./inbox.cjs')({ ipcMain, app, dialog, getWin: () => win, registerMedia });
+
 ipcMain.handle('media:register', (_e, paths) => {
   const out = {};
   for (const p of Array.isArray(paths) ? paths : []) {
@@ -797,6 +1182,38 @@ ipcMain.handle('media:register', (_e, paths) => {
     out[p] = registerMedia(p);
   }
   return out;
+});
+
+/**
+ * Keep a frozen frame as a real picture file.
+ *
+ * Freeze frame turns one frame of a video into a still. The still has to be a
+ * file on disk, not a blob in memory, or a saved project would reopen with a
+ * hole where the pause was. The editor hands over PNG bytes and nothing else:
+ * the name is the content's own hash and the folder is fixed, so it cannot
+ * choose where anything lands.
+ */
+const STILLS_DIR = () => path.join(app.getPath('userData'), 'stills');
+const PNG_SIG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+ipcMain.handle('media:still', async (_e, bytes) => {
+  if (!(bytes instanceof Uint8Array) || bytes.byteLength < 64 || bytes.byteLength > 256 * 1024 * 1024) {
+    return { error: 'That frame could not be read' };
+  }
+  const buf = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (!buf.subarray(0, 8).equals(PNG_SIG)) return { error: 'That frame could not be read' };
+  try {
+    const dir = STILLS_DIR();
+    await fsp.mkdir(dir, { recursive: true });
+    const name = crypto.createHash('sha256').update(buf).digest('hex').slice(0, 24) + '.png';
+    const abs = path.join(dir, name);
+    if (!fs.existsSync(abs)) {
+      await fsp.writeFile(abs + '.partial', buf);
+      await fsp.rename(abs + '.partial', abs);
+    }
+    return { path: abs, id: registerMedia(abs) };
+  } catch (err) {
+    return { error: plainError(err) };
+  }
 });
 
 /** Point a moved file at its project again. */
@@ -868,10 +1285,10 @@ async function installUpdate(bundlePath) {
   try {
     bundle = JSON.parse(await fsp.readFile(bundlePath, 'utf8'));
   } catch (err) {
-    return { ok: false, reason: 'That file is not a GameCut update.' };
+    return { ok: false, reason: 'That file is not a Strike update.' };
   }
   if (!bundle || bundle.kind !== 'gamecut-update' || !bundle.files) {
-    return { ok: false, reason: 'That file is not a GameCut update.' };
+    return { ok: false, reason: 'That file is not a Strike update.' };
   }
 
   const entries = Object.entries(bundle.files);
@@ -1052,9 +1469,9 @@ ipcMain.handle('update:openInstaller', async (_e, url) => {
 ipcMain.handle('update:pick', async () => {
   if (!win) return { ok: false, reason: 'No window.' };
   const { canceled, filePaths } = await dialog.showOpenDialog(win, {
-    title: 'Install a GameCut update',
+    title: 'Install a Strike update',
     properties: ['openFile'],
-    filters: [{ name: 'GameCut update', extensions: ['gcupdate', 'json'] }],
+    filters: [{ name: 'Strike update', extensions: ['gcupdate', 'json'] }],
   });
   if (canceled || !filePaths?.[0]) return { ok: false, cancelled: true };
   const r = await installUpdate(filePaths[0]);
@@ -1094,13 +1511,13 @@ ipcMain.handle('app:gpuStatus', () => {
 // A second launch focuses the existing window instead of starting a rival copy
 // that would fight over the same project files.
 if (!app.requestSingleInstanceLock()) {
-  // Normally this means GameCut is already open, and the running copy gets
+  // Normally this means Strike is already open, and the running copy gets
   // focused by the 'second-instance' handler below. It can also mean a stale
   // lock left by an unclean exit, in which case nothing is there to focus and
   // the app would vanish without a word — so say why before going.
   console.error(
-    '[GameCut] Another instance holds the single-instance lock; exiting.\n' +
-    '          If no GameCut window is open, the lock is stale. Remove it:\n' +
+    '[Strike] Another instance holds the single-instance lock; exiting.\n' +
+    '          If no Strike window is open, the lock is stale. Remove it:\n' +
     `            ${path.join(app.getPath('userData'), 'SingletonLock')}`);
   app.quit();
 } else {
@@ -1125,7 +1542,7 @@ if (!app.requestSingleInstanceLock()) {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
   }).catch((err) => {
-    dialog.showErrorBox('GameCut failed to start', String(err?.stack || err));
+    dialog.showErrorBox('Strike failed to start', String(err?.stack || err));
     app.quit();
   });
 
@@ -1137,6 +1554,6 @@ if (!app.requestSingleInstanceLock()) {
 process.on('uncaughtException', (err) => {
   // Surface it instead of dying silently behind a blank window.
   try {
-    dialog.showErrorBox('GameCut — unexpected error', String(err?.stack || err));
+    dialog.showErrorBox('Strike — unexpected error', String(err?.stack || err));
   } catch { /* dialog unavailable pre-ready */ }
 });

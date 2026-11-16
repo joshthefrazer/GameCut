@@ -62,3 +62,7 @@
   font-size:10px;color:var(--txt-2);text-align:center;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
+
+/* ── Add text: built-in looks and the words you saved ───────── */
+.gfx__text{margin-bottom:12px}
+.gfx__sub{margin:8px 2px 5px;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--txt-3,var(--txt-2))}

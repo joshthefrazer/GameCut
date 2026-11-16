@@ -3,7 +3,7 @@
   position:relative;z-index:1;
   height:100vh;height:100dvh;
   display:grid;
-  grid-template-rows:var(--topbar-h) minmax(180px,1fr) var(--gutter) var(--timeline-h,306px);
+  grid-template-rows:var(--topbar-h) minmax(180px,1fr) 10px var(--timeline-h,330px);
   gap:0;
 }
 
@@ -77,6 +77,13 @@
 .topbar{-webkit-app-region:drag}
 .topbar button,.topbar input,.topbar select,.topbar .seg,.topbar .chip{-webkit-app-region:no-drag}
 
+/* Anything that covers the top bar has to opt out of dragging too.
+   On Windows the title strip is a drag region at the OS level: a full-window
+   room drawn on top of it does not hide it, it just inherits its clicks. That
+   made the crop room's Box button, Undo and Cancel unclickable while the
+   buttons that happened to sit over the top bar's own buttons still worked. */
+.cropst,.cropst *,.modal,.modal *,.help,.help *,.upd,.upd *,.updcard,.updcard *,.ease,.ease *,.ctx,.ctx *{-webkit-app-region:no-drag}
+
 /* Windows paints its minimise / maximise / close buttons INSIDE our caption,
    over the right-hand end. Reserve exactly the width it actually uses.
 
@@ -93,3 +100,6 @@ html.is-win .topbar{
 html.is-win .home__bar{
   padding-right:calc(18px + 100% - env(titlebar-area-width, calc(100% - 146px)));
 }
+
+/* While a full-window room is open the top bar is not a place to drag from. */
+.has-room .topbar{-webkit-app-region:no-drag}

@@ -1,4 +1,4 @@
-; Installer hooks for GameCut.
+; Installer hooks for Strike.
 ;
 ; electron-builder inserts these macros into its own NSIS template. A macro the
 ; template does not reference is simply never expanded, so defining one it does
@@ -7,9 +7,9 @@
 
 ; ── Closing a running copy ─────────────────────────────────────
 ; Windows will not let anyone overwrite a file that is open, and the installer
-; writes into a folder it may well be running out of. If GameCut is open — or a
+; writes into a folder it may well be running out of. If Strike is open — or a
 ; previous uninstaller is still shutting down — the install stops partway with
-; "Error opening file for writing: ... Uninstall GameCut.exe", which reads like
+; "Error opening file for writing: ... Uninstall Strike.exe", which reads like
 ; a broken download and is nothing of the kind.
 ;
 ; So close it first, rather than asking the person to know that.
@@ -17,11 +17,13 @@
 !macro customInit
   ; /T takes the process tree with it — Chromium leaves helper processes, and a
   ; single one of those still holding a handle is enough to fail the write.
+  nsExec::Exec 'cmd /c taskkill /F /IM "Strike.exe" /T'
   nsExec::Exec 'cmd /c taskkill /F /IM "GameCut.exe" /T'
   Sleep 800
 !macroend
 
 !macro customUnInit
+  nsExec::Exec 'cmd /c taskkill /F /IM "Strike.exe" /T'
   nsExec::Exec 'cmd /c taskkill /F /IM "GameCut.exe" /T'
   Sleep 800
 !macroend
@@ -46,7 +48,7 @@
   !ifdef MUI_WELCOMEPAGE_TITLE
     !undef MUI_WELCOMEPAGE_TITLE
   !endif
-  !define MUI_WELCOMEPAGE_TITLE "GameCut"
+  !define MUI_WELCOMEPAGE_TITLE "Strike"
   !ifdef MUI_WELCOMEPAGE_TEXT
     !undef MUI_WELCOMEPAGE_TEXT
   !endif
@@ -100,7 +102,7 @@
     Pop $0
 
     ${If} $0 != 0
-      MessageBox MB_OK|MB_ICONINFORMATION "Windows no longer lets a program pin itself to the taskbar.$\r$\n$\r$\nI will open the folder with GameCut in it — drag the GameCut icon down onto your taskbar, or right-click it and choose Pin to taskbar."
+      MessageBox MB_OK|MB_ICONINFORMATION "Windows no longer lets a program pin itself to the taskbar.$\r$\n$\r$\nI will open the folder with Strike in it — drag the Strike icon down onto your taskbar, or right-click it and choose Pin to taskbar."
       ExecShell "open" "explorer.exe" '/select,"$launchLink"'
     ${EndIf}
   FunctionEnd
@@ -112,11 +114,11 @@
   !ifdef MUI_FINISHPAGE_TITLE
     !undef MUI_FINISHPAGE_TITLE
   !endif
-  !define MUI_FINISHPAGE_TITLE "GameCut is ready"
+  !define MUI_FINISHPAGE_TITLE "Strike is ready"
   !ifdef MUI_FINISHPAGE_TEXT
     !undef MUI_FINISHPAGE_TEXT
   !endif
-  !define MUI_FINISHPAGE_TEXT "It is in your Start menu and on your desktop.$\r$\n$\r$\nGameCut checks for its own updates and will tell you when there is one — you will not have to come back here."
+  !define MUI_FINISHPAGE_TEXT "It is in your Start menu and on your desktop.$\r$\n$\r$\nStrike checks for its own updates and will tell you when there is one — you will not have to come back here."
 
   !ifdef MUI_FINISHPAGE_RUN
     !undef MUI_FINISHPAGE_RUN
@@ -129,7 +131,7 @@
   !ifdef MUI_FINISHPAGE_RUN_TEXT
     !undef MUI_FINISHPAGE_RUN_TEXT
   !endif
-  !define MUI_FINISHPAGE_RUN_TEXT "Open GameCut now"
+  !define MUI_FINISHPAGE_RUN_TEXT "Open Strike now"
 
   ; SHOWREADME is NSIS's second finish-page checkbox. Pointed at a function, it
   ; is simply "an extra thing to offer", which is what it is being used for.
@@ -140,7 +142,7 @@
   !ifdef MUI_FINISHPAGE_SHOWREADME_TEXT
     !undef MUI_FINISHPAGE_SHOWREADME_TEXT
   !endif
-  !define MUI_FINISHPAGE_SHOWREADME_TEXT "Pin GameCut to my taskbar"
+  !define MUI_FINISHPAGE_SHOWREADME_TEXT "Pin Strike to my taskbar"
   !ifdef MUI_FINISHPAGE_SHOWREADME_FUNCTION
     !undef MUI_FINISHPAGE_SHOWREADME_FUNCTION
   !endif

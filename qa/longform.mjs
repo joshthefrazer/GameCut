@@ -9,8 +9,9 @@
 import { _electron as electron } from 'playwright';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { rm } from 'node:fs/promises';
+import { waitFor } from './wait.mjs';
 
-const ROOT = '/home/claude/gamecut';
+const ROOT = (await import('node:path')).resolve(import.meta.dirname, '..');
 const LONG = `${ROOT}/qa/fixtures/long-clip.mp4`;
 const SHORT = `${ROOT}/qa/fixtures/test-clip.mp4`;
 const TONE = `${ROOT}/qa/fixtures/test-tone.mp3`;
@@ -46,7 +47,7 @@ await sleep(2200);
 async function enterEditor(page) {
   await page.waitForSelector('#homeNew', { timeout: 20000 });
   await page.click('#homeNew');
-  await page.waitForFunction(() =>
+  await waitFor(page, () =>
     !document.getElementById('app').classList.contains('is-home'), null, { timeout: 20000 });
   await new Promise(r => setTimeout(r, 500));
 }
@@ -62,18 +63,33 @@ const poll = async (fn, ms = 40_000) => {
   return null;
 };
 
-await step('a 12-minute clip imports without decoding its audio', async () => {
+/**
+ * A long MP4 keeps its sound — compactly.
+ *
+ * This used to assert the opposite: that a 12.5-minute clip was NOT decoded,
+ * because decodeAudioData would have held ~290 MB of floats plus the whole
+ * file. The price was an export with no sound for every long (or merely
+ * large) recording. MP4 sound is now read out of the file and kept as 16-bit
+ * samples (media/mp4-audio.js), so what is checked is that it IS decoded, and
+ * that it costs 16-bit stereo and no more.
+ */
+await step('a 12-minute clip imports with its sound, kept compact', async () => {
   await win.setInputFiles('#filePicker', [LONG]);
   const a = await poll(async () => {
     const m = await import('app://gamecut/src/media/asset-store.js');
     const x = m.assets.all().find(v => v.name.includes('long-clip'));
-    return x ? { dur: x.duration, buf: !!x.peaks?.buffer, stream: !!x.streamAudio } : null;
-  });
+    if (!x || x.audioState === 'pending') return null;
+    const b = x.peaks?.buffer;
+    return { dur: x.duration, state: x.audioState, kind: b?.constructor?.name,
+             bytes: b?.bytes || 0, rate: b?.sampleRate || 0, stream: !!x.streamAudio };
+  }, 90_000);
   if (!a) throw new Error('long clip never imported');
   if (!(a.dur > 700)) throw new Error('duration wrong: ' + a.dur);
-  // The whole point: 12.5 min of audio in RAM would be ~290 MB.
-  if (a.buf) throw new Error('decoded the audio into memory anyway — the duration guard did not fire');
-  if (!a.stream) throw new Error('not flagged for streaming playback, so it would be silent');
+  if (a.state !== 'ready' || a.stream) throw new Error(`sound not decoded (state ${a.state}) — exports would be silent`);
+  if (a.kind !== 'PcmStore') throw new Error(`sound held as ${a.kind}, not the compact 16-bit store`);
+  const ceiling = a.dur * a.rate * 2 * 2 * 1.1;
+  if (a.bytes > ceiling) throw new Error(`sound costs ${(a.bytes / 2 ** 20).toFixed(0)} MB — more than 16-bit stereo`);
+  console.log(`     ${(a.bytes / 2 ** 20).toFixed(0)} MB for ${(a.dur / 60).toFixed(1)} min of sound`);
 });
 
 await step('a short clip still gets its waveform', async () => {
@@ -94,7 +110,7 @@ await step('heap stays sane after importing all of it', async () => {
   console.log(`     heap ${mb.toFixed(0)} MB`);
 });
 
-await step('long clip is audible through its decoder', async () => {
+await step('long clip is audible, and its decoder stays muted', async () => {
   const r = await win.evaluate(async () => {
     const { assets } = await import('app://gamecut/src/media/asset-store.js');
     const { placeAsset } = await import('app://gamecut/src/ui/timeline/place-asset.js');
@@ -111,14 +127,15 @@ await step('long clip is audible through its decoder', async () => {
     await new Promise(r => setTimeout(r, 900));
     const els = [...document.querySelectorAll('#gc-decoder-host video')];
     const unmuted = els.filter(e => !e.muted).length;
+    const scheduled = playback.audio.nodes.length;
     playback.pause();
-    const stillMuted = [...document.querySelectorAll('#gc-decoder-host video')]
-      .filter(e => !e.muted).length;
-    return { streamed: list.filter(c => c.stream).length, unmuted, stillMuted };
+    return { decoded: list.filter(c => c.src).length, unmuted, scheduled };
   });
-  if (!r.streamed) throw new Error('clip not treated as streaming audio');
-  if (!r.unmuted) throw new Error('decoder stayed muted during playback — no sound');
-  if (r.stillMuted) throw new Error('decoder left unmuted after pause — audio would leak');
+  // Its sound now plays from the decoded store, a few seconds at a time, so
+  // the video element must stay muted or it would play twice.
+  if (!r.decoded) throw new Error('clip not treated as decoded audio');
+  if (!r.scheduled) throw new Error('nothing scheduled during playback — no sound');
+  if (r.unmuted) throw new Error('decoder element unmuted as well — the sound would play twice');
 });
 
 // Regression: playbackRate above 16 throws NotSupportedError, and the pool used
@@ -334,13 +351,15 @@ await step('fps readout shows the real rate and the active quality', async () =>
   console.log(`     reads "${txt}"`);
 });
 
-await step('export warns that long audio will be silent', async () => {
+await step('export does not claim a long MP4 will be silent', async () => {
+  // It used to warn — truthfully — that the long clip's sound could not be
+  // mixed. Now it can, and a warning would be a lie.
   const txt = await win.evaluate(() => {
     document.getElementById('btnExport').click();
-    return document.querySelector('#exportModal .modal__warn')?.textContent || '';
+    return document.querySelector('#xpWarns')?.textContent || '';
   });
-  if (!/silent/i.test(txt)) throw new Error('no warning shown for unmixable audio');
-  await win.evaluate(() => document.querySelector('#exportModal [data-close]')?.click());
+  if (/no sound|silent/i.test(txt)) throw new Error('warned about sound that will be in the file: ' + txt.trim());
+  await win.evaluate(() => document.querySelector('#exportModal .modal__actions [data-close]')?.click());
 });
 
 await rm(PROFILE, { recursive: true, force: true });

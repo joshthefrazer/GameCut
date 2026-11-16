@@ -141,12 +141,20 @@ async function walk(dir, out = []) {
   return out;
 }
 
+
+/** Text stays text; anything that does not survive as UTF-8 travels as base64. */
+async function packFile(abs) {
+  const buf = await readFile(abs);
+  const txt = buf.toString('utf8');
+  return Buffer.from(txt, 'utf8').equals(buf) ? txt : { b64: buf.toString('base64') };
+}
+
 const files = {};
 for (const f of FILES) files[f] = await readFile(path.join(ROOT, f), 'utf8');
 for (const d of DIRS) {
   for (const abs of await walk(path.join(ROOT, d))) {
     const rel = path.relative(ROOT, abs).split(path.sep).join('/');
-    files[rel] = await readFile(abs, 'utf8');
+    files[rel] = await packFile(abs);
   }
 }
 
@@ -317,6 +325,7 @@ const sha256 = createHash('sha256').update(Buffer.from(bundleText, 'utf8')).dige
  */
 let installer = null;
 for (const guess of [
+  `Strike-${version}-x64.exe`,
   `GameCut-${version}-x64.exe`,
   `GameCut Setup ${version}.exe`,
   `GameCut-${version}.exe`,

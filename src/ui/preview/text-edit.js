@@ -1,6 +1,6 @@
 import { bus } from '../../core/events.js';
 import { evalProp } from '../../engine/keyframes.js';
-import { shortEdge } from '../../engine/layers/text-layer.js';
+import { shortEdge, entranceSpan } from '../../engine/layers/text-layer.js';
 
 /**
  * Typing on the picture.
@@ -34,7 +34,7 @@ export function initTextEdit({ overlay, frame, store, comp, cmds, playback }) {
     // would have you typing into letters that are still flying in. Park on a
     // moment where the layer is simply there.
     const settle = clip.start + Math.min(clip.duration * 0.5,
-      Math.max(0.05, (clip.text?.animDur || 0.35) + 0.05));
+      Math.max(0.05, entranceSpan(clip) + 0.05));
     if (Math.abs(store.rt.playhead - settle) > 1e-3
         && (store.rt.playhead < clip.start || store.rt.playhead >= clip.start + clip.duration)) {
       playback.seek(settle);

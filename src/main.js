@@ -24,6 +24,20 @@ import { initHome } from './ui/home/home-screen.js';
 import { initTips } from './ui/help/tips.js';
 import { initUpdates } from './ui/updates/updates-panel.js';
 import { initHelp } from './ui/help/help-overlay.js';
+import { initPalette } from './ui/palette.js';
+import { initEffects } from './ui/effects/effects-panel.js';
+import { initAnimLibrary } from './ui/anim/anim-library.js';
+import { initSmartZoom } from './ui/zoom/smart-zoom-panel.js';
+import { initTour } from './ui/tour.js';
+import { initPads } from './ui/pads/pads-panel.js';
+import { initLayouts } from './ui/layouts/layouts-panel.js';
+import { initInbox } from './ui/inbox/inbox.js';
+import { initThumbnails } from './ui/thumbs/thumbnail-maker.js';
+import { initSmartEdit } from './edit/smart-edit.js';
+import { initVersions } from './ui/versions.js';
+import { initProxies } from './media/proxies.js';
+import { initCaptions } from './captions/captions.js';
+import { initQol } from './ui/qol.js';
 import { bus } from './core/events.js';
 import { assets } from './media/asset-store.js';
 
@@ -58,9 +72,18 @@ initMediaPool({ store, cmds });
 initInspector({ store, cmds, comp, playback });
 const transitions = initTransitions({ store, cmds, comp, playback });
 const graphics = initGraphics({ store, cmds, comp });
+initEffects({ store, cmds, comp });
 initTips();
 const help = initHelp();
 initShortcuts({ store, cmds, history, playback, timeline, preview, help });
+const palette = initPalette({ store, cmds, history, playback, timeline, preview, help });
+const animLib = initAnimLibrary({ store, cmds, comp });
+const smartZoom = initSmartZoom({ store, cmds, playback, comp });
+const tour = initTour();
+const pads = initPads({ store, cmds, playback });
+const layouts = initLayouts({ store, cmds, comp });
+const smart = initSmartEdit({ store, cmds, history, playback });
+const proxies = initProxies({ store, comp });
 const desktop = initDesktop({ history });
 const updates = initUpdates({ store });
 
@@ -88,6 +111,9 @@ initExport({ store, playback });
 
 /* ── Projects: the home screen, saving, and autosave ──────────── */
 const library = createLibrary({ store, comp, history });
+const versions = initVersions({ library });
+const captions = initCaptions({ store, cmds, history });
+const qol = initQol({ store, cmds, history, playback, comp, timeline });
 
 /** Everything that has to be told the document was swapped out. */
 function refreshAll() {
@@ -102,23 +128,65 @@ function refreshAll() {
   bus.emit('assets');
 }
 
+/**
+ * Leave nothing focused as the editor opens. The first project of a session
+ * opened with the cursor in the project-name box, so the first keys pressed
+ * (S to split, Space to play, T for text) typed into the name instead, and
+ * the editor seemed to ignore them.
+ */
+/*
+ * The project name box only takes focus when you click it or Tab to it.
+ * Chromium sometimes hands focus back to it on its own (as the window comes
+ * forward, or after a file dialog closes), and every key pressed after that
+ * (S, Space, T) was typed into the project's name instead of reaching the
+ * editor.
+ */
+{
+  const nameBox = document.getElementById('projName');
+  let meant = 0;
+  nameBox?.addEventListener('pointerdown', () => { meant = performance.now(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Tab') meant = performance.now(); }, true);
+  nameBox?.addEventListener('focus', () => { if (performance.now() - meant > 800) nameBox.blur(); });
+}
+
+function dropFocus() {
+  const a = document.activeElement;
+  if (a && a !== document.body && typeof a.blur === 'function') a.blur();
+}
+
+function startNew(kind = 'youtube') {
+  // "-blank": a project something else is about to fill (the Clip Inbox), so no "bring in footage" hint.
+  const quiet = /-blank$/.test(kind);
+  kind = kind.replace(/-blank$/, '');
+  const doc = makeProject(ASPECTS[kind === 'short' ? '9:16' : '16:9']);
+  store.replaceDoc(doc);
+  assetsClear();
+  library.newProject();
+  history.reset();
+  refreshAll();
+  home.hide();
+  dropFocus();
+  bus.emit('editor:open');
+  if (kind === 'montage') {
+    if (!store.ui.beatGrid) document.getElementById('btnBeatGrid')?.click();
+    bus.emit('toast', { msg: 'Montage: bring in your clips and a song — the beat grid is on, so cuts snap to the music' });
+  } else if (kind === 'drop') {
+    document.getElementById('filePicker')?.click();
+  } else if (!quiet) {
+    bus.emit('toast', { msg: kind === 'short' ? 'New short (9:16) — bring in a recording to start' : 'New video — bring in some footage to start' });
+  }
+}
+
 const home = initHome({
   library,
-  onNew: () => {
-    const doc = makeProject(ASPECTS['16:9']);
-    store.replaceDoc(doc);
-    assetsClear();
-    library.newProject();
-    history.reset();
-    refreshAll();
-    home.hide();
-    bus.emit('toast', { msg: 'New project — drop some footage in to start' });
-  },
+  onNew: (kind) => startNew(kind),
   onOpen: async (id) => {
     const r = await library.open(id);
     if (!r.ok) { bus.emit('toast', { msg: r.reason, kind: 'err' }); return; }
     refreshAll();
     home.hide();
+    dropFocus();
+    bus.emit('editor:open');
     if (r.missing) {
       bus.emit('toast', {
         msg: `${r.missing} file${r.missing === 1 ? '' : 's'} could not be found — they were moved or deleted. The clips are still on the timeline.`,
@@ -129,6 +197,8 @@ const home = initHome({
     }
   },
 });
+const inbox = initInbox({ store, cmds, startProject: startNew, library });
+const thumbs = initThumbnails({ store, qol });
 
 /**
  * "Is my work safe?" answered without being asked.
@@ -195,7 +265,7 @@ async function assetsClear() {
  * asked to go somewhere else.
  */
 bus.on('home:request', async () => {
-  if (library.id) await library.save({ silent: true });
+  if (library.id && library.dirty && library.worthKeeping()) await library.save({ silent: true });
   await home.show();
 });
 
@@ -207,7 +277,7 @@ bus.on('home:request', async () => {
  * save is a few hundred kilobytes and costs nothing worth noticing.
  */
 setInterval(async () => {
-  if (library.id && library.dirty && !store.rt.playing) {
+  if (library.id && library.dirty && library.worthKeeping() && !store.rt.playing) {
     await library.save({ silent: true });
     paintSaveChip();
   }
@@ -223,7 +293,9 @@ setInterval(async () => {
  */
 window.gamecut?.onCloseRequest?.(async () => {
   const name = store.doc.name || 'Untitled Project';
-  if (!library.id || !library.dirty) return { saved: false };
+  // Nothing to keep: closing from the home screen, or a project you opened and
+  // never touched, or a new one with nothing in it, writes nothing at all.
+  if (!library.id || !library.dirty || !library.worthKeeping() || home.isOpen()) return { saved: false };
 
   const r = await library.save({ silent: true });
   if (!r?.ok) return { saved: false, failed: true, name, reason: r?.reason };
@@ -239,10 +311,8 @@ window.gamecut?.onCloseRequest?.(async () => {
 library.newProject();
 home.show();
 
-bus.emit('toast', {
-  msg: 'Space to play · S split · T text · C crop · ? for what everything does',
-  ms: 5200,
-});
+// No keyboard hint here: the app opens on the home screen, where it would sit
+// over "What are you making?". The first-run tour covers the keys instead.
 
 /* Expose for console poking during development. */
-Object.assign(window, { gc: { store, history, cmds, comp, playback, timeline, preview, transport, desktop, library, home, help, transitions, updates, assets, graphics } });
+Object.assign(window, { gc: { store, history, cmds, comp, playback, timeline, preview, transport, desktop, library, home, help, transitions, updates, assets, graphics, palette, smart, versions, proxies, captions, qol, animLib, smartZoom, tour, pads, layouts, inbox, thumbs } });

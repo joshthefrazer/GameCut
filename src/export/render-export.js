@@ -1,6 +1,8 @@
-import { Muxer, ArrayBufferTarget } from '../../vendor/mp4-muxer.mjs';
+import { Muxer, ArrayBufferTarget, StreamTarget } from '../../vendor/mp4-muxer.mjs';
 import { Compositor } from '../engine/compositor.js';
-import { renderTimelineAudio, audibleClips } from '../audio/graph.js';
+import { assets } from '../media/asset-store.js';
+import { dequeued } from './wait.js';
+import { mixTimeline, audibleClips } from '../audio/graph.js';
 
 /**
  * Offline renderer: timeline → MP4 (H.264 video; AAC audio where the machine
@@ -37,7 +39,7 @@ import { renderTimelineAudio, audibleClips } from '../audio/graph.js';
  * resolution alone, so a 1080p30 export was handed level 4.0, whose ceiling is
  * 20 Mbps. Ask for 80 Mbps and the encoder is being asked for something its own
  * codec string forbids. What comes back is not an error — it is a file quietly
- * encoded at a fraction of what was asked for, which looks like GameCut simply
+ * encoded at a fraction of what was asked for, which looks like Strike simply
  * ignoring the setting. Recordings from Medal and OBS routinely sit at 50-100
  * Mbps, so every export from that footage was being squeezed through a 20 Mbps
  * pipe and handed back looking worse than the source.
@@ -119,28 +121,203 @@ async function pickVideoCodec(config) {
 }
 
 /**
- * Which audio codec this machine can actually *encode*.
+ * The two ways this machine can encode H.264, best first.
+ *
+ * Measured on the owner's PC (Windows, Intel GPU), through this same API:
+ *
+ *   · Electron 33: the hardware encoder refused every 60 fps config, so every
+ *     export ran on OpenH264, the software fallback. OpenH264 ignores the
+ *     bitrate it is given — asked for 16 or 80 Mbps it produced 243-270 Mbps
+ *     on hard footage — and refuses anything above about 288.
+ *   · Electron 44: the hardware encoder takes 1080p60, 1440p60, 4K60 and
+ *     1080p120, and honours the bitrate ONLY in 'constant' mode (asked 80,
+ *     produced 82.9). In 'variable' mode it drifts to whatever it likes
+ *     (asked 16 or 80 → ~28 Mbps; asked 200 → 55).
+ *
+ * So hardware + constant is the path that does what the dialog says, and it is
+ * tried first. Software is the fallback for when the hardware will not take
+ * the job at all — and it is announced, because on that path nobody, Strike
+ * included, can promise the file size. (Measured on Linux too, where OpenH264
+ * is the only encoder: asked for 4 or 16 Mbps on noise, it wrote 67.)
+ */
+const PATHS = [
+  { path: 'hardware', honours: true,
+    options: [
+      { hardwareAcceleration: 'prefer-hardware', bitrateMode: 'constant' },
+      // Some graphics cards (several AMD and Intel ones) refuse constant mode
+      // but encode happily in variable mode. Falling straight to the
+      // processor for that made their exports several times slower than they
+      // needed to be; the graphics card in variable mode is far better.
+      { hardwareAcceleration: 'prefer-hardware', bitrateMode: 'variable' },
+      { hardwareAcceleration: 'prefer-hardware' },
+    ] },
+  { path: 'software', honours: false,
+    options: [
+      { hardwareAcceleration: 'prefer-software', bitrateMode: 'constant' },
+      { hardwareAcceleration: 'prefer-software' },
+      { hardwareAcceleration: 'no-preference' },
+    ] },
+];
+
+/** Codec string + options for this exact config on this path, or null. */
+async function accepts(base, options, bitrate) {
+  for (const o of options) {
+    const codec = await pickVideoCodec({ ...base, ...o, bitrate });
+    if (codec) return { codec, options: o };
+  }
+  return null;
+}
+
+/**
+ * The most this path will take at this size and frame rate, up to `want`.
+ *
+ * Asked of the encoder rather than assumed: the ceiling depends on the GPU, the
+ * driver and the resolution, and the encoder is the only reliable source. A
+ * binary search over isConfigSupported — a dozen cheap questions — replaces the
+ * old loop that halved the bitrate on any refusal and then reported the halving
+ * as if it were the machine's limit.
+ */
+async function bestRate(base, options, want) {
+  const ok = await accepts(base, options, want);
+  if (ok) return { ...ok, bitrate: want, capped: false };
+  const floor = await accepts(base, options, 1_000_000);
+  if (!floor) return null;                 // this path refuses the size, not the rate
+  let lo = 1_000_000, hi = want, best = floor;
+  while (hi - lo > 1_000_000) {
+    const mid = Math.round((lo + hi) / 2 / 500_000) * 500_000;
+    const r = await accepts(base, options, mid);
+    if (r) { lo = mid; best = r; } else hi = mid;
+  }
+  return { ...best, bitrate: lo, capped: true };
+}
+
+/**
+ * Prove a config works by encoding one frame with it.
+ *
+ * isConfigSupported is a promise about the config, not about the device: a
+ * hardware encoder can say yes and then fail to start (driver busy, another
+ * app holding the session). Finding that out on frame one of a twenty-minute
+ * render is the wrong time — so it is found out here, in a few milliseconds,
+ * and the software path takes over.
+ */
+async function smokeTest(config) {
+  let got = false, err = null;
+  const enc = new VideoEncoder({ output: () => { got = true; }, error: (e) => { err = e; } });
+  try {
+    enc.configure(config);
+    const c = new OffscreenCanvas(config.width, config.height);
+    c.getContext('2d').fillRect(0, 0, 2, 2);
+    const f = new VideoFrame(c, { timestamp: 0, duration: 1 });
+    enc.encode(f, { keyFrame: true });
+    f.close();
+    await enc.flush();
+  } catch (e) { err = err || e; }
+  try { if (enc.state !== 'closed') enc.close(); } catch { /* closed */ }
+  return got && !err;
+}
+
+/**
+ * Decide how this export will be encoded, before anything is rendered.
+ *
+ * Returns { codec, config, path, honours, bitrate, requested, capped } — or
+ * null when nothing on this machine can encode H.264 at this size at all.
+ *
+ * `bitrate` is never more than the chosen path accepts. Asking for more used to
+ * be how "Best quality" produced a warning on every export: it tracks the
+ * footage, 4K doubles it, and a 120 Mbps recording asked the encoder for 300.
+ *
+ * Exported so the export dialog can show the real figure before you press
+ * Export, rather than a request the encoder will change. Cached per size, rate
+ * and bitrate, because the answer does not change while the app is open.
+ */
+const planCache = new Map();
+export async function planVideoEncoder({ width, height, fps, bitrate }) {
+  const requested = Math.min(MAX_H264_BITRATE, Math.max(1_000_000, Math.round(bitrate || 0)));
+  const key = `${width}x${height}@${fps}:${requested}`;
+  if (!planCache.has(key)) planCache.set(key, makePlan(width, height, fps, requested));
+  return planCache.get(key);
+}
+
+async function makePlan(width, height, fps, requested) {
+  const base = { width, height, framerate: fps, latencyMode: 'quality' };
+  for (const p of PATHS) {
+    const r = await bestRate(base, p.options, requested);
+    if (!r) continue;
+    const config = { ...base, ...r.options, bitrate: r.bitrate };
+    if (!(await smokeTest({ ...config, codec: r.codec }))) continue;
+    return { codec: r.codec, config, path: p.path, honours: p.honours,
+             bitrate: r.bitrate, requested, capped: r.capped };
+  }
+  return null;
+}
+
+/**
+ * What the plan means for the file, in plain words — or '' when there is
+ * nothing to say. Only things that actually happened produce a sentence.
+ */
+export function encoderNote(plan, { width, height, fps } = {}) {
+  if (!plan) return '';
+  if (plan.path === 'software') {
+    return 'This computer\'s graphics chip can\'t encode this video, so Strike is using its '
+      + 'slower built-in encoder. That encoder doesn\'t stick to the quality setting, so '
+      + 'Strike can\'t control the file size: it may come out much bigger or smaller than '
+      + 'the estimate.';
+  }
+  if (plan.capped) {
+    return `This computer's encoder tops out at ${Math.round(plan.bitrate / 1e6)} Mbps for `
+      + `${width}×${height}${fps ? ` at ${fps} fps` : ''}, so that's what this video uses `
+      + `(${Math.round(plan.requested / 1e6)} Mbps was asked for).`;
+  }
+  return '';
+}
+
+/**
+ * Which audio codec this machine can actually *encode*, and at what bitrates.
  *
  * Decoding and encoding are different capabilities: Chromium on Linux plays AAC
  * happily but cannot produce it, while Windows usually can via the OS encoder.
  * AAC is preferred because every player and platform takes it; Opus in MP4 is a
  * valid, well-supported fallback (YouTube accepts it) rather than losing sound
  * altogether. Asking at runtime is the only reliable way to know.
+ *
+ * Bitrates are asked one at a time, because Windows' own AAC encoder (Media
+ * Foundation) is documented to take only 96, 128, 160 and 192 kbps — offering
+ * 256 or 320 there is a choice the encoder refuses or quietly overrides.
  */
-async function pickAudioCodec() {
+const AUDIO_RATES = [96_000, 128_000, 160_000, 192_000, 256_000, 320_000];
+let audioCaps = null;
+export function audioCapabilities() {
+  if (!audioCaps) audioCaps = probeAudio();
+  return audioCaps;
+}
+
+async function probeAudio() {
   const options = [
-    { muxer: 'aac', encoder: 'mp4a.40.2', ideal: true },
-    { muxer: 'opus', encoder: 'opus', ideal: false },
+    { muxer: 'aac', encoder: 'mp4a.40.2', name: 'AAC' },
+    { muxer: 'opus', encoder: 'opus', name: 'Opus' },
   ];
+  if (typeof AudioEncoder === 'undefined') return { codec: null, bitrates: [] };
   for (const o of options) {
-    try {
-      const { supported } = await AudioEncoder.isConfigSupported({
-        codec: o.encoder, sampleRate: 48000, numberOfChannels: 2, bitrate: 128_000,
-      });
-      if (supported) return o;
-    } catch { /* try the next */ }
+    const rates = [];
+    for (const b of AUDIO_RATES) {
+      try {
+        const { supported } = await AudioEncoder.isConfigSupported({
+          codec: o.encoder, sampleRate: 48000, numberOfChannels: 2, bitrate: b,
+        });
+        if (supported) rates.push(b);
+      } catch { /* not this one */ }
+    }
+    if (rates.length) return { codec: o, bitrates: rates };
   }
-  return null;
+  return { codec: null, bitrates: [] };
+}
+
+/** The bitrate this machine's audio encoder takes that is closest to, and not above, the ask. */
+export function nearestAudioRate(caps, want) {
+  const list = caps?.bitrates || [];
+  if (!list.length) return 0;
+  const under = list.filter(b => b <= want);
+  return under.length ? under[under.length - 1] : list[0];
 }
 
 /** Feature check with a message a human can act on. */
@@ -155,7 +332,7 @@ export function exportSupport() {
 }
 
 /**
- * Render the project to MP4 bytes.
+ * Render the project to an MP4.
  *
  * @param {object}   o
  * @param {object}   o.store        project store
@@ -167,11 +344,31 @@ export function exportSupport() {
  * @param {Function} o.onProgress   ({phase, done, total, percent}) => void
  * @param {Function} o.shouldCancel () => boolean, polled every frame
  * @param {'fast'|'exact'} o.frameAccuracy  how the source is walked — see below
- * @returns {Promise<Uint8Array|null>} null if cancelled
+ * @param {object}   [o.sink]       { write(chunk: Uint8Array, position) → Promise }
+ *                                  — when given, the file is streamed to it as
+ *                                  it is made and never held in memory
+ * @returns {Promise<Uint8Array|{bytes:number}|null>}
+ *   without a sink: the file's bytes; with one: how many bytes were written;
+ *   null if cancelled.
+ *
+ * ── Why a sink ────────────────────────────────────────────────
+ * The whole file used to live in memory three or four times over: the muxer's
+ * in-memory "fast start" buffer, the ArrayBuffer it was copied into, and the
+ * copy sent to the main process to save. A 20-minute "Recommended" export is
+ * ~2.5 GB, so the renderer peaked near 8 GB and crashed at 99%, throwing the
+ * whole render away. Now each piece is written to disk at its position as soon
+ * as the muxer has it, and memory stays flat however long the video is.
+ *
+ * The streamed file puts its index (moov) at the END. YouTube, TikTok, Windows'
+ * Media Player and Films & TV all read that without complaint — it only
+ * matters to a web player starting a download before it has finished, which is
+ * not what an export is for. "Fragmented" MP4 was the other option; it was not
+ * chosen because several Windows tools still show a fragmented file's length
+ * as zero or refuse to seek in it.
  */
 export async function renderToMp4({
   store, width, height, fps, vBitrate, aBitrate, onProgress, shouldCancel,
-  frameAccuracy = 'fast',
+  frameAccuracy = 'fast', sink = null,
 }) {
   const support = exportSupport();
   if (!support.ok) throw new Error(support.reason);
@@ -180,82 +377,94 @@ export async function renderToMp4({
   width = Math.max(2, Math.round(width / 2) * 2);
   height = Math.max(2, Math.round(height / 2) * 2);
 
-  const duration = Math.max(1 / fps, store.rt.duration);
+  // A NaN or Infinity length (media with no duration in its header) would
+  // mean an export that never ends. The importer refuses such media now; this
+  // is the backstop for a document that got one some other way.
+  const timeline = Number.isFinite(store.rt.duration) ? store.rt.duration : 0;
+  if (!(timeline > 0) && !Number.isFinite(store.rt.duration)) {
+    throw new Error('The timeline has no definite length — a clip on it has an unknown duration.');
+  }
+  const duration = Math.max(1 / fps, timeline);
   const totalFrames = Math.max(1, Math.round(duration * fps));
   const report = (phase, done, total) =>
     onProgress?.({ phase, done, total, percent: total ? Math.min(100, (done / total) * 100) : 0 });
 
-  /* ── Audio first: it is quick, and its absence changes the muxer config ── */
-  report('audio', 0, 1);
-  const wantAudio = support.audio && audibleClips(store).length > 0;
-  let audioBuffer = null;
-  let audioCodec = null;
-  if (wantAudio) {
-    audioCodec = await pickAudioCodec();
-    if (!audioCodec) {
-      console.warn('no audio encoder on this machine — exporting silent');
-    } else {
-      try {
-        audioBuffer = await renderTimelineAudio(store, duration, 48000);
-      } catch (err) {
-        console.warn('audio bounce failed, exporting silent:', err);
-        audioBuffer = null;
-      }
-    }
+  /* ── Video encoder: decided before anything is written ──────────── */
+  report('encoder', 0, 1);
+  const plan = await planVideoEncoder({ width, height, fps, bitrate: vBitrate });
+  if (!plan) {
+    const e = new Error(`This computer has no H.264 encoder that can make a ${width}×${height} `
+      + `${fps} fps video.`);
+    e.kind = 'encoder';
+    throw e;
   }
-  if (shouldCancel?.()) return null;
-  report('audio', 1, 1);
 
-  /* ── Muxer + encoders ──────────────────────────────────────────────── */
-  const muxer = new Muxer({
-    target: new ArrayBufferTarget(),
-    fastStart: 'in-memory',          // moov at the front, so it streams on upload
-    video: { codec: 'avc', width, height },
-    ...(audioBuffer && audioCodec
-      ? { audio: { codec: audioCodec.muxer, numberOfChannels: 2,
-                   sampleRate: audioBuffer.sampleRate } }
-      : {}),
-  });
-
-  const vConfig = {
-    width, height, framerate: fps,
-    bitrate: Math.min(MAX_H264_BITRATE, Math.max(1_000_000, Math.round(vBitrate))),
-    latencyMode: 'quality',
-  };
-
-  /**
-   * Find a codec, dropping the bitrate only if nothing will take it.
-   *
-   * The level table above says what H.264 permits; this machine's encoder is a
-   * second, separate opinion — an older hardware encoder can refuse a rate the
-   * format allows. Rather than failing the export outright, back off in halves
-   * and carry on, then say what happened. A slightly lower bitrate than asked
-   * for is a video; an exception is not.
-   */
-  let codec = await pickVideoCodec(vConfig);
-  let reducedFrom = 0;
-  while (!codec && vConfig.bitrate > 1_000_000) {
-    reducedFrom = reducedFrom || vConfig.bitrate;
-    vConfig.bitrate = Math.max(1_000_000, Math.round(vConfig.bitrate / 2));
-    codec = await pickVideoCodec(vConfig);
-  }
-  if (!codec) throw new Error(`No H.264 encoder available for ${width}×${height} at ${fps}fps.`);
+  /* ── Audio: which codec, which bitrate, and is there anything to mix ── */
+  const audible = support.audio ? audibleClips(store).filter(c => c.src) : [];
+  const caps = audible.length ? await audioCapabilities() : null;
+  const audioCodec = caps?.codec || null;
+  const audioRate = audioCodec ? nearestAudioRate(caps, aBitrate || 192_000) : 0;
+  const warnings = [];
+  if (audible.length && !audioCodec) warnings.push('This computer has no audio encoder, so the video has no sound.');
 
   // Always announced, not only when something went wrong: this is the one
   // moment the abstract request ("80 Mbps") becomes a concrete decision (which
-  // profile, which level, what the encoder was actually configured at), and it
-  // is what both the warning below and the export suite read.
+  // path, which profile and level, what the encoder was actually configured
+  // at), and it is what the dialog and the export suite both read.
   onProgress?.({
     phase: 'encoder',
-    codec,
-    requested: Math.round(vBitrate),
-    bitrate: vConfig.bitrate,
-    note: reducedFrom
-      ? `This machine's encoder would not take ${Math.round(reducedFrom / 1e6)} Mbps at `
-        + `${width}×${height}${fps ? ` ${fps}fps` : ''}. Exporting at `
-        + `${Math.round(vConfig.bitrate / 1e6)} Mbps instead.`
-      : '',
+    codec: plan.codec,
+    path: plan.path,
+    honours: plan.honours,
+    capped: plan.capped,
+    hardwareAcceleration: plan.config.hardwareAcceleration,
+    bitrateMode: plan.config.bitrateMode || null,
+    requested: plan.requested,
+    bitrate: plan.bitrate,
+    audioCodec: audioCodec?.name || null,
+    audioBitrate: audioRate,
+    note: encoderNote(plan, { width, height, fps }),
     done: 0, total: 1, percent: 0,
+  });
+
+  if (shouldCancel?.()) return null;
+
+  /* ── Where the bytes go ────────────────────────────────────────── */
+  let writeErr = null;
+  let inflight = 0;
+  let written = 0;
+  let writing = Promise.resolve();
+  const target = sink
+    ? new StreamTarget({
+      chunked: true,
+      chunkSize: 8 * 1024 * 1024,
+      onData: (data, position) => {
+        // Writes are chained, so the main process sees them in order and the
+        // number in flight is known — that is the backpressure below.
+        inflight += data.byteLength;
+        written = Math.max(written, position + data.byteLength);
+        writing = writing.then(async () => {
+          if (!writeErr) await sink.write(data, position);
+        }).catch((e) => { writeErr = writeErr || saveError(e); })
+          .finally(() => { inflight -= data.byteLength; });
+      },
+    })
+    : new ArrayBufferTarget();
+  const failIfWriteFailed = () => { if (writeErr) throw writeErr; };
+  const drain = async (limit) => {
+    while (inflight > limit) {
+      await new Promise(r => setTimeout(r, 2));
+      failIfWriteFailed();
+    }
+  };
+
+  const muxer = new Muxer({
+    target,
+    // In memory (tests, or no save bridge): index at the front. Streamed:
+    // index at the end — see above.
+    fastStart: sink ? false : 'in-memory',
+    video: { codec: 'avc', width, height },
+    ...(audioCodec ? { audio: { codec: audioCodec.muxer, numberOfChannels: 2, sampleRate: 48000 } } : {}),
   });
 
   let encodeError = null;
@@ -263,9 +472,20 @@ export async function renderToMp4({
     output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
     error: (e) => { encodeError = e; },
   });
-  videoEncoder.configure({ ...vConfig, codec });
+  videoEncoder.configure({ ...plan.config, codec: plan.codec });
 
-  /* ── Video: composite every frame at full resolution ───────────────── */
+  /* ── Audio: mixed and encoded a stretch at a time, alongside the picture ─
+     The whole mix used to be one OfflineAudioContext the length of the video
+     — 23 MB a minute of output plus a float copy of every source — rendered
+     before the first frame. Now it is ten seconds at a time, just ahead of
+     the picture, so the file is interleaved and memory does not grow with
+     length. */
+  const audio = audioCodec
+    ? audioStream({ store, duration, codec: audioCodec.encoder, bitrate: audioRate,
+                    muxer, warnings })
+    : null;
+
+  /* ── Video: composite every frame at full resolution ───────────── */
   const canvas = document.createElement('canvas');
   const comp = new Compositor(store, canvas, { fixedSize: { w: width, h: height } });
 
@@ -288,13 +508,49 @@ export async function renderToMp4({
   const tol = Math.min(1 / (fps * 2), 1 / 120);
   let corrections = 0;
   const startedAt = performance.now();
+  let finished = false;
+
+  /*
+   * Exact frames from WebCodecs for every MP4 clip that allows it (see
+   * frame-reader.js); anything else keeps the <video> element path.
+   */
+  const { Mp4FrameReader, forgetProbes, READER_STATS, resetReaderStats } = await import('./frame-reader.js');
+  resetReaderStats();
+  /*
+   * One reader per CLIP, not per file: two clips of the same recording on
+   * screen at once (a replay over the live moment, a facecam layer) would
+   * otherwise drag one decoder back and forth every frame. A reader is closed
+   * once its clip is over, so a recording cut into fifty pieces never has
+   * fifty decoders open.
+   */
+  const readers = new Map();       // clipId -> reader | null
+  const readerFor = async (clip) => {
+    const a = assets.get(clip.assetId);
+    if (!a || a.kind !== 'video') return null;
+    if (!readers.has(clip.id)) readers.set(clip.id, await Mp4FrameReader.open(a));
+    return readers.get(clip.id);
+  };
+  const retire = (t) => {
+    for (const [id, r] of readers) {
+      if (!r) continue;
+      const c = store.doc.tracks.flatMap(x => x.clips).find(x => x.id === id);
+      if (!c || c.start + c.duration < t - 0.05) { r.close(); readers.set(id, null); }
+    }
+  };
+  const srcTime = (clip, t) => {
+    const a = assets.get(clip.assetId);
+    const raw = Math.max(0, (clip.inPoint || 0) + (t - clip.start) * (clip.speed || 1));
+    return Math.min(raw, Math.max(0, (a?.duration || Infinity) - 1 / 60));
+  };
 
   try {
     for (let i = 0; i < totalFrames; i++) {
       if (shouldCancel?.()) return null;
       if (encodeError) throw encodeError;
+      failIfWriteFailed();
 
       const t = i / fps;
+      if (audio) await audio.until(t + 2);
 
       /**
        * Walk the source to this frame.
@@ -309,9 +565,22 @@ export async function renderToMp4({
       // Includes the outgoing side of any transition running at this frame —
       // that clip is painted but is not "active", so asking activeClips alone
       // left its decoder unprepared.
-      const clips = comp.clipsNeededAt(t);
-      if (i === 0 || frameAccuracy === 'exact') await comp.pool.seekExact(clips, t);
-      else corrections += await comp.pool.streamTo(clips, t, { tolerance: tol });
+      if (i % 30 === 0) retire(t);
+      const needed = comp.clipsNeededAt(t);
+      const clips = [];
+      comp.pool.overrides.clear();
+      for (const c of needed) {
+        const r = await readerFor(c);
+        let pic = null;
+        if (r) {
+          try { pic = await r.canvasAt(srcTime(c, t)); } catch (e) { console.warn('frame reader failed; using the player', e); readers.set(c.id, null); r.close(); }
+        }
+        if (pic) comp.pool.overrides.set(c.id, pic); else clips.push(c);
+      }
+      if (clips.length) {
+        if (i === 0 || frameAccuracy === 'exact') await comp.pool.seekExact(clips, t);
+        else corrections += await comp.pool.streamTo(clips, t, { tolerance: tol });
+      }
 
       comp.render(t, false);
 
@@ -323,11 +592,12 @@ export async function renderToMp4({
       frame.close();
 
       // Backpressure: without this the queue grows until memory runs out on a
-      // long timeline.
+      // long timeline — the encoder's queue, and the disk's.
       while (videoEncoder.encodeQueueSize > 8) {
-        await new Promise(r => setTimeout(r, 4));
+        await dequeued(videoEncoder);
         if (encodeError) throw encodeError;
       }
+      if (sink) await drain(48 * 1024 * 1024);
 
       if (i % 5 === 0 || i === totalFrames - 1) {
         // Frames a second, so a slow render says why it is slow rather than
@@ -337,6 +607,7 @@ export async function renderToMp4({
           phase: 'video', done: i + 1, total: totalFrames,
           percent: Math.min(100, ((i + 1) / totalFrames) * 100),
           fps: rate, seeking: comp.pool.streamSuspend > 0,
+          fastDecode: READER_STATS.used, gpuDecode: READER_STATS.hardware, gpuEncode: plan?.path === 'hardware',
         });
       }
     }
@@ -350,69 +621,114 @@ export async function renderToMp4({
       console.info(`[export] ${corrections}/${totalFrames} frames needed a corrective seek`);
     }
 
-    /* ── Audio encode ────────────────────────────────────────────────── */
-    if (audioBuffer && audioCodec) {
+    if (audio) {
       report('encoding audio', 0, 1);
-      await encodeAudio(audioBuffer, muxer, aBitrate, audioCodec.encoder,
-                        () => shouldCancel?.());
+      await audio.finish(() => shouldCancel?.());
       report('encoding audio', 1, 1);
     }
 
     if (shouldCancel?.()) return null;
 
     muxer.finalize();
-    report('done', 1, 1);
-    return new Uint8Array(muxer.target.buffer);
+    if (sink) {
+      await writing;
+      failIfWriteFailed();
+    }
+    finished = true;
+    onProgress?.({ phase: 'done', done: 1, total: 1, percent: 100, warnings: warnings.slice() });
+    return sink ? { bytes: written, warnings } : new Uint8Array(muxer.target.buffer);
   } finally {
     try { if (videoEncoder.state !== 'closed') videoEncoder.close(); } catch { /* already closed */ }
+    audio?.close();
     // Leave nothing playing: a cancelled export would otherwise keep decoding.
     comp.pool.endStream();
+    comp.pool.overrides.clear();
+    for (const r of readers.values()) r?.close();
+    forgetProbes();
     comp.dispose();
+    // A render that stopped early still has writes in flight; let them land
+    // (or fail) before the caller deletes the half-written file.
+    if (!finished && sink) await writing.catch(() => {});
   }
 }
 
-/** Slice the bounced buffer into AudioData chunks and encode as AAC. */
-async function encodeAudio(buffer, muxer, bitrate, codec, cancelled) {
+/** A failed write, worded for a person and marked as a saving problem. */
+function saveError(e) {
+  const err = new Error(String(e?.message || e || 'The video could not be written to disk.')
+    .replace(/^Error invoking remote method '[^']+': (Error: )?/, ''));
+  err.kind = 'save';
+  return err;
+}
+
+/**
+ * The export's soundtrack, mixed and encoded on demand.
+ *
+ * `until(t)` makes sure everything up to `t` seconds has been handed to the
+ * muxer; `finish()` does the rest. A mixing failure part-way is not allowed to
+ * fail the video — it is recorded in `warnings`, which the dialog shows, so a
+ * file with missing sound is never handed over without a word.
+ */
+function audioStream({ store, duration, codec, bitrate, muxer, warnings }) {
+  const SR = 48000;
   let err = null;
   const enc = new AudioEncoder({
     output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
     error: (e) => { err = e; },
   });
-  enc.configure({
-    codec,
-    sampleRate: buffer.sampleRate,
-    numberOfChannels: 2,
-    bitrate: Math.max(64_000, Math.round(bitrate)),
-  });
+  enc.configure({ codec, sampleRate: SR, numberOfChannels: 2, bitrate });
 
-  const CHUNK = 4096;
-  const left = buffer.getChannelData(0);
-  const right = buffer.numberOfChannels > 1 ? buffer.getChannelData(1) : left;
+  let doneTo = 0;                 // seconds mixed and handed to the encoder
+  let broken = false;
+  const mixer = mixTimeline(store, duration, { sampleRate: SR, segment: 10 });
 
-  for (let off = 0; off < buffer.length; off += CHUNK) {
-    if (cancelled?.()) break;
-    if (err) throw err;
-    const n = Math.min(CHUNK, buffer.length - off);
-    // f32-planar wants every channel laid end to end in one array.
-    const planar = new Float32Array(n * 2);
-    planar.set(left.subarray(off, off + n), 0);
-    planar.set(right.subarray(off, off + n), n);
+  const encodeBuffer = async (buf, frame0) => {
+    const CHUNK = 4096;
+    const left = buf.getChannelData(0);
+    const right = buf.numberOfChannels > 1 ? buf.getChannelData(1) : left;
+    for (let off = 0; off < buf.length; off += CHUNK) {
+      if (err) throw err;
+      const n = Math.min(CHUNK, buf.length - off);
+      // f32-planar wants every channel laid end to end in one array.
+      const planar = new Float32Array(n * 2);
+      planar.set(left.subarray(off, off + n), 0);
+      planar.set(right.subarray(off, off + n), n);
+      const data = new AudioData({
+        format: 'f32-planar', sampleRate: SR, numberOfFrames: n, numberOfChannels: 2,
+        timestamp: Math.round(((frame0 + off) / SR) * 1e6),
+        data: planar,
+      });
+      enc.encode(data);
+      data.close();
+      while (enc.encodeQueueSize > 16) await dequeued(enc);
+    }
+  };
 
-    const data = new AudioData({
-      format: 'f32-planar',
-      sampleRate: buffer.sampleRate,
-      numberOfFrames: n,
-      numberOfChannels: 2,
-      timestamp: Math.round((off / buffer.sampleRate) * 1e6),
-      data: planar,
-    });
-    enc.encode(data);
-    data.close();
+  const step = async () => {
+    const r = await mixer.next();
+    if (r.done) { doneTo = Infinity; return; }
+    const { buffer, frame } = r.value;
+    await encodeBuffer(buffer, frame);
+    doneTo = (frame + buffer.length) / SR;
+  };
 
-    while (enc.encodeQueueSize > 16) await new Promise(r => setTimeout(r, 2));
-  }
+  const guard = async (fn) => {
+    if (broken) return;
+    try { await fn(); } catch (e) {
+      broken = true;
+      console.warn('audio mix failed part-way:', e);
+      warnings.push(`The sound stopped being mixed at ${Math.floor(doneTo / 60)}:`
+        + `${String(Math.floor(doneTo % 60)).padStart(2, '0')} because of an error `
+        + `(${e?.message || e}). The rest of the video has no sound.`);
+    }
+  };
 
-  await enc.flush();
-  if (err) throw err;
-  enc.close();
+  return {
+    until: (t) => guard(async () => { while (doneTo < Math.min(t, duration)) await step(); }),
+    finish: (cancelled) => guard(async () => {
+      while (doneTo < duration && !cancelled()) await step();
+      await enc.flush();
+      if (err) throw err;
+    }),
+    close: () => { try { if (enc.state !== 'closed') enc.close(); } catch { /* closed */ } },
+  };
 }

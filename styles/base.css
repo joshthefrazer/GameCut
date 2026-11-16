@@ -53,7 +53,11 @@ svg{fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-l
 }
 
 /* Toasts ------------------------------------------------------ */
-.toast-stack{position:fixed;right:18px;bottom:18px;z-index:90;display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+/* Messages appear over the top of the preview, never over the timeline where
+   they used to cover the clips you were trying to click. shell.js keeps
+   --toast-x / --toast-y on the preview's top centre. */
+.toast-stack{position:fixed;left:var(--toast-x,50%);top:var(--toast-y,64px);transform:translateX(-50%);
+  z-index:90;display:flex;flex-direction:column;gap:8px;align-items:center;max-width:min(680px,calc(100vw - 40px))}
 .toast{
   padding:9px 14px;border-radius:var(--r-md);
   background:var(--bg-2);
@@ -63,4 +67,4 @@ svg{fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-l
 }
 .toast--err{border-color:rgba(225,29,72,.45);box-shadow:var(--sh-pop),0 0 0 3px rgba(225,29,72,.10)}
 .toast--ok{border-color:rgba(13,148,136,.45);box-shadow:var(--sh-pop),0 0 0 3px rgba(13,148,136,.10)}
-@keyframes toastIn{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:none}}
+@keyframes toastIn{from{opacity:0;transform:translateY(-8px) scale(.97)}to{opacity:1;transform:none}}

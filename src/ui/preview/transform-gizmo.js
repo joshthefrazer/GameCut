@@ -30,7 +30,7 @@ export class Gizmo {
   /** Rebuild for the current selection, or hide. */
   sync(t) {
     const sel = this.store.selectedClips
-      .filter(({ track }) => track.kind !== 'audio')
+      .filter(({ track, clip }) => track.kind !== 'audio' && clip.type !== 'effect')
       .filter(({ clip }) => t >= clip.start && t < clip.start + clip.duration);
 
     if (sel.length !== 1) { this.detach(); return; }

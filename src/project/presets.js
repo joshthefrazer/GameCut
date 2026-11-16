@@ -19,6 +19,9 @@ export const EXPORT_PRESETS = [
   { id: 'short4k', name: '4K · Shorts',        scale: 2,    fps: 60, vBitrate: 40_000_000, aBitrate: 256_000, tracksSource: true },
   { id: 'short',   name: '1080p · Shorts',     scale: 1,    fps: 60, vBitrate: 14_000_000, aBitrate: 192_000 },
   { id: 'draft',   name: 'Draft · 720p30',     scale: 0.667, fps: 30, vBitrate: 5_000_000, aBitrate: 128_000 },
+  // Small enough to send in a Discord chat: the bitrate is worked out from the
+  // length so the whole file lands under the cap.
+  { id: 'discord', name: 'Discord · under 10 MB', scale: 0.667, fps: 30, vBitrate: 2_000_000, aBitrate: 96_000, sizeCap: 9_400_000 },
   // Whatever you say it is. `scale` and `fps` are placeholders the dialog
   // replaces from the controls; nothing reads them from here.
   { id: 'custom',  name: 'Custom',             scale: 1,    fps: 60, vBitrate: 30_000_000, aBitrate: 320_000, custom: true },
@@ -53,3 +56,36 @@ export const DEFAULT_BINS = [
   { id: 'video', name: 'Video files', color: '#2563eb' },
   { id: 'audio', name: 'Audio files', color: '#059669' },
 ];
+
+/**
+ * The project size that keeps a recording at the resolution it was made at.
+ *
+ * The project canvas used to stay 1920x1080 whatever was imported, so a 1440p
+ * or 4K recording was scaled down the moment it touched the timeline and the
+ * export could never be sharper than that. This picks the matching canvas:
+ * same shape, the next standard size up (1080p / 1440p / 4K by the long edge).
+ *
+ * `keepShape` leaves the project's own shape alone and only raises its
+ * resolution (used when the person has already chosen a shape). Returns null
+ * when nothing should change: footage at or under 1080p, or a shape that is
+ * not one of the standard ones (ultrawide, 4:3, ...), which stays letterboxed
+ * inside whatever canvas the person picked.
+ */
+export function projectForFootage(w, h, current, { keepShape = false } = {}) {
+  if (!(w > 0 && h > 0)) return null;
+  const r = w / h;
+  const shapes = [['16:9', 16 / 9], ['9:16', 9 / 16], ['1:1', 1], ['4:5', 4 / 5]];
+  const hit = shapes.find(([, ar]) => Math.abs(r / ar - 1) < 0.03);
+  if (!hit) return null;
+  const shape = keepShape ? current.aspect : hit[0];
+  if (keepShape && shape !== hit[0]) return null;
+
+  const long = Math.max(w, h);
+  const tier = long >= 3200 ? 2 : long >= 2300 ? 1 : 0;       // 0=1080p 1=1440p 2=4K
+  const base = { '16:9': [1920, 1080], '9:16': [1080, 1920], '1:1': [1080, 1080], '4:5': [1080, 1350] }[shape];
+  if (!base) return null;
+  const k = [1, 4 / 3, 2][tier];
+  const next = { aspect: shape, width: Math.round(base[0] * k / 2) * 2, height: Math.round(base[1] * k / 2) * 2 };
+  if (next.aspect === current.aspect && next.width <= current.width && next.height <= current.height) return null;
+  return next;
+}

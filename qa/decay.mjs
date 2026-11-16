@@ -10,7 +10,7 @@ import { _electron as electron } from 'playwright';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { rm } from 'node:fs/promises';
 
-const ROOT = '/home/claude/gamecut';
+const ROOT = (await import('node:path')).resolve(import.meta.dirname, '..');
 const PROFILE = `/tmp/gc-decay-${process.pid}`;
 await rm(PROFILE, { recursive: true, force: true });
 

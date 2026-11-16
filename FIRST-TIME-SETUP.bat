@@ -40,6 +40,8 @@ if not exist "node_modules\" (
     pause
     exit /b 1
   )
+  rem Electron 44+ fetches its own program on first use; get it now, not mid-launch.
+  call node node_modules\electron\install.js
 ) else (
   echo   [2/3] Build tools already installed.
 )

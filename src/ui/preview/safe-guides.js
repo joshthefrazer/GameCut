@@ -50,4 +50,23 @@ export function drawGuides(svg, { w, h, aspect, guides, grid }) {
     });
     label.textContent = '9:16 SAFE';
   }
+
+  /*
+   * Phone app overlays on a vertical project: where TikTok, Shorts and Reels
+   * put their buttons, the caption and the top tabs. Taken as the union of
+   * the three, so something kept out of the shaded parts is clear on all of
+   * them. Captions and titles belong in the clear middle.
+   */
+  if (aspect === '9:16') {
+    const zone = (x, y, zw, zh, label) => {
+      add('rect', { x: x * w, y: y * h, width: zw * w, height: zh * h, fill: 'rgba(255,90,60,.14)', stroke: 'rgba(255,90,60,.55)', 'stroke-width': 1, 'stroke-dasharray': '6 5' });
+      const t = add('text', { x: x * w + 8, y: y * h + 18, fill: 'rgba(255,170,150,.95)', 'font-size': Math.round(h * 0.014), 'font-family': 'Inter, system-ui, sans-serif', 'font-weight': 700 });
+      t.textContent = label;
+    };
+    zone(0, 0, 1, 0.085, 'APP TABS');
+    zone(0.845, 0.36, 0.155, 0.5, 'BUTTONS');
+    zone(0, 0.79, 0.845, 0.21, 'NAME · CAPTION · SOUND');
+    const t = add('text', { x: w / 2, y: h * 0.11, fill: 'rgba(198,255,61,.9)', 'font-size': Math.round(h * 0.013), 'font-family': 'Inter, system-ui, sans-serif', 'font-weight': 700, 'text-anchor': 'middle' });
+    t.textContent = 'SAFE FOR TIKTOK · SHORTS · REELS';
+  }
 }

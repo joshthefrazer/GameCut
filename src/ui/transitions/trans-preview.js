@@ -55,6 +55,7 @@ export async function grabCutFrames(j, { store, comp }) {
     // is still this clip, which beats a coloured rectangle.
     if (!src && asset?.thumb) {
       const img = new Image();
+      img.crossOrigin = 'anonymous';
       img.src = asset.thumb;
       try { await img.decode(); src = img; } catch { src = null; }
     }

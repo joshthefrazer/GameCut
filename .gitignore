@@ -23,3 +23,16 @@ Thumbs.db
 
 # The built website IS committed — GitHub Pages serves it from docs/.
 # Do not add docs/ here.
+
+# Encoder probe output (qa/probe) - machine-specific, not source.
+probe-result.json
+
+# Encoder diagnostics: a throwaway Electron and the reports it writes.
+.probe-electron/
+encoder-probe*.json
+probe-result.json
+gc-probe*.log
+
+# Working folders that are not part of the project.
+Claude outputs/
+_release*/

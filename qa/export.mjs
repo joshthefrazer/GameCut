@@ -8,8 +8,10 @@ import { _electron as electron } from 'playwright';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { rm, writeFile, stat } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
+import { waitFor } from './wait.mjs';
+import { patchClick } from './reveal.mjs';
 
-const ROOT = '/home/claude/gamecut';
+const ROOT = (await import('node:path')).resolve(import.meta.dirname, '..');
 const OUT = process.argv[2] || '/tmp';
 const MP4 = `${OUT}/export-test.mp4`;
 const FRAME = `${OUT}/export-frame.png`;
@@ -31,6 +33,7 @@ const app = await electron.launch({
   args: ['.', '--no-sandbox', `--user-data-dir=${PROFILE}`], cwd: ROOT, timeout: 60_000,
 });
 const win = await app.firstWindow();
+patchClick(win);
 win.on('pageerror', (e) => log('pageerror', e.message));
 win.on('console', (m) => { if (m.type() === 'error') log('console.error', m.text()); });
 await win.waitForLoadState('domcontentloaded');
@@ -46,7 +49,7 @@ await sleep(2200);
 async function enterEditor(page) {
   await page.waitForSelector('#homeNew', { timeout: 20000 });
   await page.click('#homeNew');
-  await page.waitForFunction(() =>
+  await waitFor(page, () =>
     !document.getElementById('app').classList.contains('is-home'), null, { timeout: 20000 });
   await new Promise(r => setTimeout(r, 500));
 }
@@ -173,13 +176,22 @@ await step('frames actually decode and are not blank', async () => {
   // Decode a frame from the middle and look at it. A valid-but-empty file —
   // black, or one flat colour — would pass every structural check above.
   // Sampled mid-timeline, where the clips definitely have content.
-  execFileSync('ffmpeg', ['-v', 'error', '-y', '-ss', String(projectDuration / 2),
+  // (Inside the picture clip: the sound can run longer than the picture.)
+  execFileSync('ffmpeg', ['-v', 'error', '-y', '-ss', String(Math.min(projectDuration / 2, 2.5)),
                           '-i', MP4, '-frames:v', '1', FRAME], { stdio: 'ignore' });
   const colours = parseInt(execFileSync('python3', ['-c',
     `from PIL import Image; im=Image.open("${FRAME}").convert("RGB").resize((64,36)); print(len(set(im.getdata())))`,
   ], { encoding: 'utf8' }).trim(), 10);
   if (colours < 8) throw new Error(`exported frame has ${colours} distinct colours — it is blank`);
-  console.log(`     ${frames} frames, mid-frame has ${colours} distinct colours`);
+  // And the very first frame: the decoder opens fresh video elements for an
+  // export, and a check that mistook "still starting to load" for "file gone"
+  // skipped them, so files opened on black.
+  execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', MP4, '-frames:v', '1', FRAME], { stdio: 'ignore' });
+  const first = parseInt(execFileSync('python3', ['-c',
+    `from PIL import Image; im=Image.open("${FRAME}").convert("RGB").resize((64,36)); print(len(set(im.getdata())))`,
+  ], { encoding: 'utf8' }).trim(), 10);
+  if (first < 8) throw new Error(`the first exported frame has ${first} distinct colours — the file opens on black`);
+  console.log(`     ${frames} frames, mid-frame has ${colours} distinct colours, first frame ${first}`);
 });
 
 /**
@@ -445,7 +457,7 @@ await step('a high bitrate is honoured, not silently capped', async () => {
       s += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
     }
     return { cfg, b64: btoa(s) };
-  }, ASKED, { timeout: 180_000 });
+  }, ASKED);
 
   if (!r.b64) throw new Error('the high-bitrate render produced nothing');
   if (!r.cfg) throw new Error('the renderer never reported which encoder it configured');
@@ -461,6 +473,21 @@ await step('a high bitrate is honoured, not silently capped', async () => {
     throw new Error(`configured codec ${r.cfg.codec} is level ${(idc / 10).toFixed(1)}, `
       + 'which cannot carry 80 Mbps — the level is being chosen from the resolution alone');
   }
+
+  // Linux has no hardware H.264 encoder, so this is the software path — and
+  // it must SAY so, because on that path the bitrate is not honoured.
+  if (r.cfg.path !== 'software' && r.cfg.hardwareAcceleration !== 'prefer-hardware') {
+    throw new Error(`unexpected encoder path ${r.cfg.path} / ${r.cfg.hardwareAcceleration}`);
+  }
+  if (r.cfg.path === 'software') {
+    if (r.cfg.honours !== false) throw new Error('the software path claims to honour the bitrate');
+    if (!/can't control the file size/.test(r.cfg.note || '')) {
+      throw new Error(`the software fallback was not reported in plain words: "${r.cfg.note}"`);
+    }
+  } else if (r.cfg.bitrateMode !== 'constant') {
+    throw new Error(`hardware configured in ${r.cfg.bitrateMode} mode — only 'constant' honours the bitrate`);
+  }
+  console.log(`     path: ${r.cfg.path} (${r.cfg.hardwareAcceleration}, ${r.cfg.bitrateMode || 'default'} mode)`);
 
   const buf = Buffer.from(r.b64, 'base64');
   await writeFile(MP4_HI, buf);
@@ -478,6 +505,62 @@ await step('a high bitrate is honoured, not silently capped', async () => {
   console.log(`     configured ${r.cfg.codec} at ${r.cfg.bitrate / 1e6} Mbps · file says level `
     + `${(Number(v.level) / 10).toFixed(1)} · ${(buf.length / 1024).toFixed(0)} KB `
     + `vs ${(baseline / 1024).toFixed(0)} KB at 4 Mbps (this fixture cannot absorb more)`);
+});
+
+/**
+ * The hardware path, as the owner's PC has it.
+ *
+ * There is no hardware encoder here, so one is simulated the way his Intel GPU
+ * behaves under Electron 44: it takes 1080p60 only in 'constant' mode and only
+ * up to a ceiling (120 Mbps here). The encoding itself still runs on this
+ * machine's encoder, so the smoke test and a real render both happen.
+ *
+ * What it proves: the hardware path is chosen first, in constant mode; a
+ * request above the ceiling lands AT the ceiling (found by asking), not at the
+ * old loop's halving (300 → 150 → 75); and nothing is said about it unless it
+ * matters.
+ */
+await step('hardware is tried first, in constant mode, and capped at its real ceiling', async () => {
+  const r = await win.evaluate(async () => {
+    const m = await import('app://gamecut/src/export/render-export.js');
+    const real = VideoEncoder.isConfigSupported.bind(VideoEncoder);
+    const configure = VideoEncoder.prototype.configure;
+    const seen = [];
+    VideoEncoder.isConfigSupported = async (c) => {
+      if (c.hardwareAcceleration === 'prefer-hardware') {
+        seen.push(c.bitrateMode);
+        if (c.bitrateMode !== 'constant' || c.bitrate > 120e6) return { supported: false, config: c };
+        const x = await real({ ...c, hardwareAcceleration: 'no-preference' });
+        return { ...x, config: c };
+      }
+      return real(c);
+    };
+    VideoEncoder.prototype.configure = function (c) {
+      return configure.call(this, c.hardwareAcceleration === 'prefer-hardware'
+        ? { ...c, hardwareAcceleration: 'no-preference' } : c);
+    };
+    try {
+      const big = await m.planVideoEncoder({ width: 1920, height: 1080, fps: 60, bitrate: 300e6 });
+      const ok = await m.planVideoEncoder({ width: 1920, height: 1080, fps: 60, bitrate: 80e6 });
+      return { big, ok, seen: [...new Set(seen)],
+               noteBig: m.encoderNote(big, { width: 1920, height: 1080, fps: 60 }),
+               noteOk: m.encoderNote(ok, { width: 1920, height: 1080, fps: 60 }) };
+    } finally {
+      VideoEncoder.isConfigSupported = real;
+      VideoEncoder.prototype.configure = configure;
+    }
+  });
+  if (r.ok?.path !== 'hardware') throw new Error(`80 Mbps went to ${r.ok?.path}, not the hardware encoder`);
+  if (r.ok.config.bitrateMode !== 'constant') throw new Error(`hardware configured in ${r.ok.config.bitrateMode} mode`);
+  if (r.ok.bitrate !== 80e6 || r.ok.capped) throw new Error(`80 Mbps became ${r.ok.bitrate / 1e6}`);
+  if (r.noteOk) throw new Error(`a note for an export that went exactly as asked: "${r.noteOk}"`);
+  if (r.big?.path !== 'hardware') throw new Error(`300 Mbps fell back to ${r.big?.path} instead of capping`);
+  if (!(r.big.bitrate > 115e6 && r.big.bitrate <= 120e6)) {
+    throw new Error(`300 Mbps on a 120 Mbps encoder became ${r.big.bitrate / 1e6} Mbps — `
+      + 'the real ceiling should be found, not a halving');
+  }
+  if (!/tops out at 1[12]\d Mbps/.test(r.noteBig)) throw new Error(`cap not explained: "${r.noteBig}"`);
+  console.log(`     300 → ${r.big.bitrate / 1e6} Mbps on ${r.big.codec}; modes asked: ${r.seen.join(',')}`);
 });
 
 await step('cancelling mid-render returns nothing', async () => {

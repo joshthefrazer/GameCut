@@ -104,11 +104,25 @@
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left;
 }
 
+/* Warnings above the tiles: only shown when something real will happen. */
+.xp-warns{flex:none;display:flex;flex-direction:column}
+.xp-warns:empty{display:none}
+.xp-encnote{flex:none;margin-top:0;margin-bottom:10px}
+.xp-encnote[hidden]{display:none}
+
+/* Advanced: the things nobody needs to see to post a clip ------ */
+.xp-adv{flex:none;margin:0 16px 10px}
+.xp-adv>summary{
+  cursor:pointer;font-size:11.5px;font-weight:600;color:var(--txt-2);
+  padding:4px 0;list-style-position:inside;
+}
+.xp-adv>summary:hover{color:var(--txt-0)}
+
 /* Frame-exact toggle ------------------------------------------ */
 .xp-exact{
   flex:none;                       /* see .xp-custom — same reason */
   display:flex;gap:10px;align-items:flex-start;
-  margin:0 16px 4px;padding:10px 12px;
+  margin:6px 0 4px;padding:10px 12px;
   border:1px solid var(--glass-line);border-radius:var(--r-md);
   background:var(--well);cursor:pointer;
 }

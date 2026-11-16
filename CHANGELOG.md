@@ -8,6 +8,235 @@ one.
 Write them for the person using GameCut, not for yourself: "you can drag the
 ends of a clip to trim it" rather than "added trim handles to clip-renderer".
 
+## 2.0.5
+
+Faster exports.
+
+- Export waits on your graphics card's encoder and decoder the moment they
+  are ready, instead of on short timers that Windows stretches to ~15 ms each.
+- Your recordings are decoded on the graphics card when it can.
+- Graphics cards that refuse "constant bitrate" now encode in variable mode
+  instead of the whole export falling back to the processor.
+- The progress line says what is doing the work: "graphics card encoding" or
+  "processor (slower) encoding", and the same for decoding.
+
+## 2.0.4
+
+Bug-fix pass.
+
+- Smaller windows: the top bar no longer pushes the app wider than the
+  window, so Export, the inspector and the media panel stay on screen on a
+  laptop or a window that is not maximised. The tools on the picture wrap
+  instead of overlapping.
+- Keys like S, Space and T sometimes did nothing at first: the project name
+  box was quietly taking the focus. It now only takes it when you click it.
+- Exports of MKV recordings now use the same fast, frame-exact decoding as
+  MP4s.
+- Two clips of the same recording on screen at once export quickly.
+
+## 2.0.3
+
+- Find the HUD: a piece that was joined from several (three bars stacked in
+  a corner) has a Split button, and Shift+click on the picture keeps just the
+  part under the pointer.
+- Recordings with several sound tracks (Medal, OBS): Strike listens to a few
+  moments of every track. Silent tracks are left out, a track already inside
+  the first one (OBS's mic track) is left out, and the rest are mixed — so a
+  Medal clip whose first track is empty still has sound.
+- Fixed: no sound from Medal clips (and other recordings with several sound
+  tracks). 2.0.1 started using only the first track, which is the full mix in
+  OBS but can be empty, or just the game, in Medal. Strike now listens to a few
+  moments of every track: silent tracks are left out, a track already inside
+  the first one (OBS's mic track) is left out, and the rest are mixed.
+- Adding a clip from Media when the playhead is over another clip: it goes in
+  after it, as before, but the timeline now scrolls to show where it went and
+  says so. With a long recording on the timeline it used to land off screen,
+  so it looked like nothing happened.
+
+## 2.0.2
+
+More sound and export fixes.
+
+- MKV recordings (OBS's default) now keep their sound however long they are:
+  it is read straight out of the file, plays in step with the picture, and
+  goes into the export. Long MKVs used to export silent.
+- Exports decode your MP4 footage frame by frame instead of jumping around in
+  it: several times faster on OBS recordings, and every frame is the right
+  one — no more frozen or repeated frames.
+
+## 2.0.1
+
+Sound and export fixes.
+
+- No more crackle when game sound, voice, music and effects play together:
+  the mix is kept from clipping, in the preview and in exports.
+- Sound that is still being prepared when you press Play now comes in by
+  itself once it is ready, instead of staying silent until you press Play again.
+- The picture is held back by your headphones' or speakers' delay, so sound
+  and picture line up (most noticeable on Bluetooth).
+- OBS recordings with more than one sound track use track 1 (the full mix)
+  instead of adding every track together, which doubled the mic.
+- Exports of OBS recordings are faster and smoother: Strike no longer goes
+  back to the last keyframe for a difference of less than a frame.
+
+## 2.0.0
+
+GameCut is now **Strike** — the biggest update yet. Your projects come with you.
+
+- A new name and a new look: a new logo, new fonts, and four themes in
+  Settings (Strike, Pitch black, Neon night, Daylight).
+- Edit · Library · Export along the top. Library shows every animation big
+  and moving.
+- 61 animations, each with its own sound: kill counters that count by
+  themselves, headshots, ACE, multi-kills, rank ups, scoreboards, speedrun
+  timers, versus screens, cinematic bars, polls, alerts, comments, subscribe
+  and like buttons, and more. Click one to drop it at the playhead, or drag
+  it onto a lane.
+- Customize: select an animation to change its words, colours, speed and
+  sound. Swap it for another and it keeps its place and timing.
+- Smart Zoom (Effects, or Alt+Z) finds the loud hits and the kills and
+  punches in on each one — Smooth, Snap, Bounce or Impact shake, with a
+  whoosh if you want it. The zooms sit on their own Zoom lane.
+- Quick look: press Q to see the frame under the playhead at full export
+  quality.
+- S flashes the cut on the timeline so you see it happen.
+- Make vertical (on the preview): one click turns a gameplay recording into
+  a 9:16 short — Game + cam, Cam on top, a cam bubble, the whole picture over
+  a blurred fill, or a centre crop. Tell it which corner your facecam is in.
+- Sound pads: twelve sounds on twelve keys. Press Play and record and hit the
+  keys while it plays; the whole take is one undo. New sounds: crowd cheer,
+  air horn, rewind and camera click.
+- Captions 2.0: Highlight box and One word at a time looks, keywords
+  coloured, "um" and "uh" left out, and captions kept clear of the phone
+  apps' buttons. Vertical projects show those safe zones on the preview.
+- Clip Inbox on the home screen: new recordings from the folders OBS, Medal
+  and NVIDIA save to show up by themselves. Open one, or make a quick short.
+- Thumbnail maker: pick a frame, add big words and an arrow, save a
+  1280×720 PNG.
+- Export has a "Small for Discord" choice that stays under 10 MB.
+- Fixed: the extra tall and square versions in Export now sit on a blurred
+  copy of the picture instead of black bars.
+- A new home screen: pick what you are making (a short, a YouTube video, a
+  montage) and start.
+- Fixed: closing Strike without doing anything no longer saves an empty
+  "edited video". Old empty projects can be cleared from the home screen.
+- A short tour the first time you open the editor (Ctrl+K "tour" to see it
+  again).
+
+## 1.9.0
+
+Easier to find your way around, and a lot of small things that add up.
+
+- Lanes made for the job: the Lane button (and the + on each group) adds a
+  Video, Facecam, Text, Voice, Music or SFX lane. A Voice lane cleans up
+  speech by itself; a Music lane dips whenever someone talks.
+- Drag a lane by its dot to move it up or down. Right-click a lane to give it
+  a colour, rename it, duplicate it, or switch voice clean-up and dipping on
+  and off.
+- Fade by dragging: hover a clip and drag the dots on its top corners inwards
+  to fade the picture and sound in or out.
+- History (Ctrl+H): every change you made, in a list. Click any step to go
+  back to it; later steps stay there to redo.
+- Jump anywhere: click the timecode under the preview and type 1:23, or type
+  a time into Ctrl+K. Up and Down arrows jump to the previous and next cut.
+- Colour labels and names for clips (right-click), rename by double-clicking
+  the name in the Inspector, and hover any clip to see its length, speed and
+  fades.
+- Shift+Delete deletes and closes the gap, whatever the Ripple switch says.
+  "Select this and everything after it" is in the right-click menu.
+- Save the frame under the playhead as a full-size PNG (camera button on the
+  preview, or Ctrl+Shift+S) — thumbnails in one click.
+- Settings (Ctrl+,): choose an accent colour, a compact layout, and whether
+  buttons show hover hints. A short "What's new" tour opens once after an
+  update.
+
+## 1.8.0
+
+A redesign. Everything below is new or rebuilt.
+
+- A cleaner layout: a slim rail on the left opens Media, Text, Graphics, Cuts
+  and Effects in a drawer you can close. The right side is one inspector with
+  tabs (Picture, Motion, Timing, Sound). Messages pop up over the preview,
+  where you are looking.
+- Ctrl+K searches everything: actions, clips, media, effects. Type what you
+  want to do and press Enter.
+- Motion for every clip: pick how a clip arrives, leaves and moves while it is
+  on screen, and see a preview by hovering a tile. One-click combos too.
+- A new timeline: tracks are grouped (Text & Graphics, Video, Audio) and can
+  be folded, lanes fit the window, and there are Select, Razor (B) and Hand (H)
+  tools. Dropping a clip on another one either slides things over or puts it
+  on a new layer, and the timeline shows you which before you let go. Linked
+  crop layers stay in sync with their footage, so the video no longer goes out
+  of step when you edit.
+- Effects you drop on the timeline: punch-in zoom (Z), shake, flash and more,
+  applied to everything under them.
+- Speed ramps in one click (hit, smooth, rush), and Copy look / Paste look
+  (Ctrl+Alt+C / Ctrl+Alt+V) between clips.
+- Smart edits: find the highlights in a long recording, build a highlight
+  reel, cut to the beat of a song.
+- Auto-captions: GameCut listens to your clip and writes what you say on
+  screen, each word lighting up as it is said. It runs on your PC; the speech
+  model (about 80 MB) is downloaded once, the first time.
+- Smart crop: "Find the HUD" boxes the minimap, kill feed and scoreboard for
+  you; click anything on the picture to cut it out; and "Follow it as it
+  moves" keeps a crop on a player or a car for the whole clip.
+- Auto-vertical turns a 16:9 clip into 9:16 that follows the action, and
+  Stabilize takes the shake out of handheld footage.
+- Voice clean-up and auto-duck (music dips when you talk).
+- Brand kit: set your font, colours and logo once and new text uses them.
+- Version history: go back to any earlier state of a project (clock button,
+  top bar).
+- Export TikTok, square and YouTube versions in one go, saved beside your
+  main file.
+- Compare view: drag a divider over the preview to see before and after.
+- Smooth 4K preview: 1440p and 4K clips can get a light copy for editing, so
+  playback stays smooth. Your export still uses the original.
+
+## 1.7.0
+
+- Exports finally keep the quality you pick. At 60 fps GameCut was quietly
+  falling back to a slow encoder that ignored the bitrate setting (and refused
+  high ones with a "bitrate limit" error). It now uses your graphics card at
+  60 and 120 fps, up to 4K, and the file comes out at the bitrate you chose.
+- Long, high-bitrate exports no longer run out of memory at the end. You pick
+  where to save first, and the video is written to disk as it renders. If you
+  cancel, or something goes wrong, no half-finished file is left behind.
+- Big Medal and OBS recordings export with their sound. Files of several GB
+  used to come out silent; their audio is now read in small pieces instead of
+  loading the whole recording. This also works when you reopen a project.
+- Transitions between clips no longer make an export crawl, and a clip whose
+  file has moved is skipped (and named) instead of freezing the render.
+- Glow and other effects on a large graphic now survive a 4K export.
+- Graphics work again: an added image or sticker used to be invisible and
+  could not be moved. It now lands on top of your footage and can be dragged,
+  animated and styled. Graphics with the Shadow look no longer vanish.
+- Custom fonts come back when you reopen a project.
+- What you hear in the preview matches the export, including volume under
+  fades.
+- One drag is one undo step, and every undo shows a message with a Redo
+  button. Locked tracks stay locked, and Ripple delete really closes the gap.
+- Lots of timeline fixes: clips drop where your mouse is, splitting and
+  trimming behave, and keyboard shortcuts no longer fire on the Home screen or
+  while a dialog is open.
+- Freeze frame: press Shift+F (or right-click a clip, or use the button in
+  the crop screen) and the video pauses on that exact frame for a couple of
+  seconds, then plays on. The pause keeps the clip's crop and look, its sound
+  stops with it, and you can drag the end of the still to make it longer.
+- Fixed sound that stuttered on imported videos, in the preview and in exports.
+- After exporting a vertical video, an "Upload to TikTok" button opens the
+  upload page with your file ready to drag in.
+- Your footage keeps its resolution. The first recording you add now sets the
+  project to match it (1440p, 4K, or a vertical phone clip), so nothing is
+  shrunk to 1080p before it reaches the export. Undo puts the old size back.
+- The preview is as sharp as the space it is shown in. A new Auto quality (the
+  default) matches your screen, including laptops with display scaling, and
+  still drops a step by itself if playback gets heavy.
+- The Box crop tool works: the button switches, the box can be moved and
+  resized from any edge, and double-click applies it.
+- Text has real animations: typewriter, per-letter and per-word entrances,
+  exits, glitch, shake and more, with a live preview, plus saved looks and
+  saved texts you can reuse.
+
 ## 1.6.0
 
 - Video clips can be mixed. The Audio tab used to work only on music and SFX

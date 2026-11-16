@@ -7,7 +7,7 @@ import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-const ROOT = '/home/claude/gamecut';
+const ROOT = (await import('node:path')).resolve(import.meta.dirname, '..');
 const PORT = 5196;
 const server = spawn('node', ['server.js', String(PORT)], { cwd: ROOT, stdio: 'pipe' });
 await sleep(700);

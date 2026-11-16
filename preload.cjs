@@ -12,6 +12,27 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 const MENU_CHANNELS = ['menu:import', 'menu:export', 'menu:undo', 'menu:redo'];
 
+/**
+ * Main-process handlers answer { error } instead of throwing, because a
+ * thrown error reaches the page as "Error invoking remote method 'x': Error:
+ * …", which is not a sentence anyone should see. This turns the answer back
+ * into a rejection whose message is just the plain-words reason.
+ */
+const orThrow = (r) => {
+  if (r && typeof r === 'object' && typeof r.error === 'string') throw new Error(r.error);
+  return r;
+};
+
+/** A chunk as its own compact copy, not a view onto some much larger buffer. */
+function bytesOf(chunk) {
+  if (chunk instanceof ArrayBuffer) return new Uint8Array(chunk);
+  if (ArrayBuffer.isView(chunk)) {
+    const u = new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength);
+    return u.byteLength === chunk.buffer.byteLength ? u : u.slice();
+  }
+  throw new Error('Nothing to write');
+}
+
 contextBridge.exposeInMainWorld('gamecut', {
   isDesktop: true,
   platform: process.platform,
@@ -76,6 +97,8 @@ contextBridge.exposeInMainWorld('gamecut', {
     if (!paths.length) return {};
     return ipcRenderer.invoke('media:register', paths);
   },
+  /** Save a frozen frame (PNG bytes) as a picture file the project can keep. */
+  saveStill: (bytes) => ipcRenderer.invoke('media:still', bytesOf(bytes)).then(orThrow),
   pathFor: (file) => {
     try { return webUtils.getPathForFile(file) || null; } catch { return null; }
   },
@@ -102,12 +125,70 @@ contextBridge.exposeInMainWorld('gamecut', {
     return () => ipcRenderer.removeListener('update:state', h);
   },
 
+  /** Clip Inbox: new recordings in watched folders (inbox.cjs). */
+  inbox: Object.freeze({
+    list: () => ipcRenderer.invoke('inbox:list'),
+    addFolder: () => ipcRenderer.invoke('inbox:addFolder'),
+    addPath: (p) => ipcRenderer.invoke('inbox:addPath', String(p || '')),
+    removeFolder: (p) => ipcRenderer.invoke('inbox:removeFolder', String(p || '')),
+    seen: () => ipcRenderer.invoke('inbox:seen'),
+    used: (p, project) => ipcRenderer.invoke('inbox:used', String(p || ''), String(project || '')),
+    onChanged: (fn) => {
+      const h = () => fn();
+      ipcRenderer.on('inbox:changed', h);
+      return () => ipcRenderer.removeListener('inbox:changed', h);
+    },
+  }),
+
   /** Reveal a saved file in Explorer / Finder, selected. */
   revealFile: (p) => ipcRenderer.invoke('shell:revealFile', String(p || '')),
 
   /** Native save dialog → absolute path, or null if cancelled. */
   saveAs: (opts) => ipcRenderer.invoke('dialog:saveAs', opts),
   writeFile: (p, data) => ipcRenderer.invoke('fs:writeFile', p, data),
+
+  /**
+   * Where an export is written, as it is made.
+   *
+   *   open({ suggestedName, title }) → { token, path } | null (cancelled)
+   *   write(token, chunk, position)  → true
+   *   close(token)                   → { ok: true, path, bytes } | { ok: false, reason }
+   *   abort(token)                   → undefined; the half-written file is deleted
+   *
+   * The page never names a folder; the person picks the file in a save dialog
+   * that remembers where they last exported to. Failures reject with an Error
+   * whose message says why in words ("The disk is full").
+   */
+  /** Smooth-editing copies of heavy clips; see proxy:* in electron-main. */
+  models: Object.freeze({
+    status: (id) => ipcRenderer.invoke('models:status', String(id || '')),
+    download: (id) => ipcRenderer.invoke('models:download', String(id || '')),
+    cancel: (id) => ipcRenderer.invoke('models:cancel', String(id || '')),
+    onProgress: (fn) => {
+      const h = (_e, p) => { try { fn(p); } catch { /* listener error stays in the page */ } };
+      ipcRenderer.on('models:progress', h);
+      return () => ipcRenderer.removeListener('models:progress', h);
+    },
+  }),
+
+  proxies: Object.freeze({
+    find: (src) => ipcRenderer.invoke('proxy:find', String(src || '')),
+    open: (src) => ipcRenderer.invoke('proxy:open', String(src || '')).then(orThrow),
+  }),
+
+  exportSink: Object.freeze({
+    open: (opts) => ipcRenderer.invoke('sink:open', {
+      suggestedName: String(opts?.suggestedName || ''), title: String(opts?.title || ''),
+    }).then(orThrow).then(r => (r && r.token ? { token: r.token, path: r.path } : null)),
+    openBeside: (opts) => ipcRenderer.invoke('sink:openBeside', {
+      beside: String(opts?.beside || ''), suffix: String(opts?.suffix || ''),
+    }).then(orThrow).then(r => (r && r.token ? { token: r.token, path: r.path } : null)),
+    write: (token, chunk, position) => ipcRenderer.invoke('sink:write', String(token || ''),
+      bytesOf(chunk), Number(position)).then(orThrow).then(() => true),
+    close: (token) => ipcRenderer.invoke('sink:close', String(token || '')),
+    abort: (token) => ipcRenderer.invoke('sink:abort', String(token || '')).then(() => undefined),
+  }),
+
 
   /**
    * Subscribe to an application-menu command. Returns an unsubscribe function.

@@ -1,10 +1,53 @@
+import { freezeFrame } from './edit/freeze-frame.js';
 import { zoomAt, zoomFit } from './ui/timeline/zoom.js';
 import { bus } from './core/events.js';
 
+/**
+ * Input types you type INTO. Everything else that is an <input> — a slider, a
+ * checkbox, a colour swatch — is a control you click, and must not swallow the
+ * editor's keys. Treating every INPUT as "typing" meant that touching a slider
+ * once (which leaves it focused) silently switched off S, Delete, Space and the
+ * rest until you happened to click somewhere else.
+ */
+const TEXT_TYPES = new Set(['', 'text', 'search', 'email', 'number', 'password', 'url', 'tel',
+  'date', 'time', 'datetime-local', 'month', 'week']);
+
 const typing = () => {
   const el = document.activeElement;
-  return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+  if (!el) return false;
+  if (el.isContentEditable || el.tagName === 'TEXTAREA') return true;
+  // A focused <select> owns its arrow keys (and letters jump to options), so
+  // it counts as typing too — the arrows used to be preventDefault'ed out from
+  // under it.
+  if (el.tagName === 'SELECT') return true;
+  if (el.tagName === 'INPUT') return TEXT_TYPES.has((el.getAttribute('type') || '').toLowerCase());
+  return false;
 };
+
+/** A focused control that uses the arrow keys itself (a slider). */
+const arrowOwner = () => {
+  const el = document.activeElement;
+  if (!el) return false;
+  if (el.tagName === 'INPUT' && (el.type === 'range')) return true;
+  return el.getAttribute?.('role') === 'slider';
+};
+
+/**
+ * True when the editor is not what you are looking at.
+ *
+ * On the projects screen the last project is still loaded underneath, so Ctrl+A
+ * then Delete there selected and deleted every clip of a saved project you
+ * could not even see. The same was true behind the Export dialog, the Help
+ * sheet and the Updates panel. Anything shown as a modal dialog
+ * (aria-modal="true") that is actually on screen counts.
+ */
+export function editorCovered() {
+  if (document.getElementById('app')?.classList.contains('is-home')) return true;
+  for (const d of document.querySelectorAll('[aria-modal="true"]')) {
+    if (d.getClientRects().length) return true;
+  }
+  return false;
+}
 
 export function initShortcuts({ store, cmds, history, playback, timeline, preview, help }) {
   window.addEventListener('keydown', (e) => {
@@ -16,6 +59,10 @@ export function initShortcuts({ store, cmds, history, playback, timeline, previe
       return;
     }
     if (typing()) return;
+    // A control that handled the key itself (a slider stepping its value) has
+    // said so; doing something else with the same press would be two actions.
+    if (e.defaultPrevented) return;
+    if (editorCovered()) return;
     const mod = e.ctrlKey || e.metaKey;
     const fps = store.doc.fps;
 
@@ -26,9 +73,21 @@ export function initShortcuts({ store, cmds, history, playback, timeline, previe
     }
     if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); history.redo(); return; }
     if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); cmds.duplicateSelected(); return; }
+    if (mod && e.altKey && e.key.toLowerCase() === 'c') {
+      e.preventDefault();
+      const s = store.selectedClips;
+      if (s.length) cmds.copyLook(s[0].clip.id); else bus.emit('toast', { msg: 'Select the clip whose look you want to copy.' });
+      return;
+    }
+    if (mod && e.altKey && e.key.toLowerCase() === 'v') { e.preventDefault(); cmds.pasteLook(store.rt.selection); return; }
+    if (mod && e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); bus.emit('frame:save'); return; }
+    if (mod && e.key.toLowerCase() === 'h') { e.preventDefault(); bus.emit('history:open'); return; }
+    if (mod && e.key === ',') { e.preventDefault(); bus.emit('settings:open'); return; }
     if (mod && e.key.toLowerCase() === 'a') {
       e.preventDefault();
-      store.select(store.doc.tracks.flatMap(t => t.clips.map(c => c.id)));
+      // Clips on a locked track (or locked themselves) are not yours to edit,
+      // so they are not part of "everything".
+      store.select(cmds.selectableIds());
       return;
     }
     if (mod) return;
@@ -47,20 +106,48 @@ export function initShortcuts({ store, cmds, history, playback, timeline, previe
         }
         break;
       }
-      case 'ArrowLeft':
-        e.preventDefault(); nudge(e.shiftKey ? -fps : -1); break;
-      case 'ArrowRight':
-        e.preventDefault(); nudge(e.shiftKey ? fps : 1); break;
-      case 'ArrowUp': case 'ArrowDown':
-        e.preventDefault(); break;
+      /*
+       * Left / Right always move the PLAYHEAD — one frame, or a second with
+       * Shift. They used to move the selected clip instead whenever anything
+       * was selected, and since clicking a clip selects it, the arrows turned
+       * into "shove my clip by a frame" exactly when you were trying to find the
+       * frame to cut on. Moving clips is Alt + arrows.
+       */
+      case 'ArrowLeft': case 'ArrowRight': {
+        if (arrowOwner()) return;
+        e.preventDefault();
+        const dir = e.key === 'ArrowLeft' ? -1 : 1;
+        const frames = dir * (e.shiftKey ? Math.round(fps) : 1);
+        if (e.altKey) {
+          if (!cmds.nudgeSelected(frames) && !store.rt.selection.length) {
+            bus.emit('toast', { msg: 'Select a clip first — Alt + arrows move it a frame at a time.' });
+          }
+          bus.emit('inspector:refresh');
+        } else {
+          playback.pause();
+          playback.step(frames);
+        }
+        break;
+      }
+      // Up / Down jump the playhead to the previous / next cut.
+      case 'ArrowUp': case 'ArrowDown': {
+        if (arrowOwner()) return;
+        e.preventDefault();
+        const to = cmds.nextEdit(store.rt.playhead, e.key === 'ArrowDown' ? 1 : -1);
+        if (to != null) { playback.pause(); playback.seek(to); }
+        break;
+      }
       case 'Home':
         playback.pause(); playback.seek(0); break;
       case 'End':
         playback.pause(); playback.seek(store.rt.duration); break;
       case 'Delete': case 'Backspace':
-        e.preventDefault(); cmds.removeSelected(); break;
+        e.preventDefault(); cmds.removeSelected({ ripple: e.shiftKey }); break;
       case 'Escape':
-        store.select([]); break;
+        // Out of Razor or Hand first; a second Escape clears the selection.
+        if (store.ui.tool && store.ui.tool !== 'select') bus.emit('timeline:tool', 'select');
+        else store.select([]);
+        break;
       case '+': case '=':
         zoomAt(store, 1.25, timeline.L.W / 2); timeline.syncZoomUI(); timeline.repaint(); break;
       case '-': case '_':
@@ -73,23 +160,22 @@ export function initShortcuts({ store, cmds, history, playback, timeline, previe
         else if (k === 'm') { cmds.addMarker(store.rt.playhead); }
         else if (k === 'l') { document.getElementById('btnLoop').click(); }
         else if (k === 'n') { document.getElementById('btnMagnet').click(); }
-        else if (k === 'b') { document.getElementById('btnBeatGrid').click(); }
+        else if (k === 'b' && e.shiftKey) { document.getElementById('btnBeatGrid').click(); }
+        else if (k === 'b') { bus.emit('timeline:tool', store.ui.tool === 'razor' ? 'select' : 'razor'); }
+        else if (k === 'v') { bus.emit('timeline:tool', 'select'); }
+        else if (k === 'h') { bus.emit('timeline:tool', store.ui.tool === 'hand' ? 'select' : 'hand'); }
         else if (k === 'i') { e.preventDefault(); document.getElementById('filePicker').click(); }
+        else if (e.key === ']') { window.gc?.smart?.jumpMarker(1); }
+        else if (e.key === '[') { window.gc?.smart?.jumpMarker(-1); }
+        else if (k === 'q') { e.preventDefault(); bus.emit('quicklook'); }
+        else if (k === 'a' && e.shiftKey) { e.preventDefault(); window.gc?.animLib?.setMode(window.gc.animLib.mode === 'library' ? 'edit' : 'library'); }
+        else if (k === 'z' && e.altKey) { e.preventDefault(); bus.emit('smartzoom:open'); }
+        else if (k === 'z' && !e.shiftKey) { e.preventDefault(); const c = cmds.addEffect('zoom', store.rt.playhead); if (c) store.select([c.id]); }
         else if (k === 'z' && e.shiftKey) { zoomFit(store, timeline.L.W); timeline.syncZoomUI(); timeline.repaint(); }
         // F is fullscreen everywhere else; it used to force a redundant repaint.
+        else if (k === 'f' && e.shiftKey) { e.preventDefault(); freezeFrame({ store, cmds }); }
         else if (k === 'f') { e.preventDefault(); preview?.toggleFullscreen?.(); }
       }
     }
   });
-
-  /** Arrow keys nudge the selection when there is one, else the playhead. */
-  function nudge(frames) {
-    const step = frames / store.doc.fps;
-    const sel = store.selectedClips;
-    if (!sel.length) { playback.pause(); playback.step(frames); return; }
-    history.begin('Nudge', 'nudge');
-    for (const { clip } of sel) clip.start = Math.max(0, clip.start + step);
-    history.commit();
-    bus.emit('inspector:refresh');
-  }
 }

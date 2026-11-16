@@ -1,0 +1,9 @@
+/* Strike's typefaces, shipped with the app (the editor never fetches anything).
+   Unbounded — titles and modes · Inter — everything you read · JetBrains Mono — timecodes.
+   All three are under the SIL Open Font License (assets/fonts/LICENSE-*). */
+@font-face{font-family:"Unbounded";font-style:normal;font-weight:700;font-display:swap;src:url("../assets/fonts/unbounded-latin-700-normal.woff2") format("woff2")}
+@font-face{font-family:"Unbounded";font-style:normal;font-weight:800;font-display:swap;src:url("../assets/fonts/unbounded-latin-800-normal.woff2") format("woff2")}
+@font-face{font-family:"Unbounded";font-style:normal;font-weight:900;font-display:swap;src:url("../assets/fonts/unbounded-latin-900-normal.woff2") format("woff2")}
+@font-face{font-family:"Inter";font-style:normal;font-weight:100 900;font-display:swap;src:url("../assets/fonts/inter-latin-wght-normal.woff2") format("woff2")}
+@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:500;font-display:swap;src:url("../assets/fonts/jetbrains-mono-latin-500-normal.woff2") format("woff2")}
+@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:700;font-display:swap;src:url("../assets/fonts/jetbrains-mono-latin-700-normal.woff2") format("woff2")}

@@ -17,7 +17,7 @@ import { rm } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { generateKeyPairSync, createHash, sign as cryptoSign, randomBytes } from 'node:crypto';
 
-const ROOT = '/home/claude/gamecut';
+const ROOT = (await import('node:path')).resolve(import.meta.dirname, '..');
 const problems = [];
 const log = (t, m) => { problems.push(`${t}: ${m}`); console.log(`  !! ${t}: ${m}`); };
 const step = async (name, fn) => {

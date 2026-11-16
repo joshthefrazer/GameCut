@@ -3,6 +3,7 @@ import { assets } from '../../media/asset-store.js';
 import { keyTimes } from '../../engine/keyframes.js';
 import { shortTime } from '../../core/time.js';
 import { TH, alpha as hexA } from '../theme.js';
+import { envelope } from '../../engine/layers/effects.js';
 
 const imgCache = new Map();
 function thumbFor(assetId) {
@@ -32,10 +33,11 @@ function rr(ctx, x, y, w, h, r) {
  * On the light theme clip bodies are near-opaque: a translucent block on a white
  * lane reads as washed-out and its white label stops being legible.
  */
-export function drawClip(ctx, { clip, track, rect, full, selected, pps, L }) {
+export function drawClip(ctx, { clip, track, rect, full, selected, pps, L, hover = false, conflict = false }) {
   const { x, y, w, h } = rect;
   if (w <= 0.5) return;
-  const [c1, c2] = CLIP_COLORS[clip.type] || CLIP_COLORS.video;
+  // A colour label wins over the clip's type colour.
+  const [c1, c2] = clip.label ? [clip.label, mix(clip.label, '#ffffff', 0.3)] : (CLIP_COLORS[clip.type] || CLIP_COLORS.video);
   const r = 5;
   const dim = track.hidden || track.muted;
 
@@ -54,6 +56,8 @@ export function drawClip(ctx, { clip, track, rect, full, selected, pps, L }) {
   if (clip.type === 'video' || clip.type === 'image') drawFilmstrip(ctx, clip, rect, full, h);
   if (clip.type === 'audio' || (clip.type === 'video' && h > 44)) drawWaveform(ctx, clip, rect, full, pps);
   if (clip.type === 'text') drawTextPreview(ctx, clip, rect);
+  if (clip.type === 'anim') drawAnimPreview(ctx, clip, rect);
+  if (clip.type === 'effect') drawEnvelope(ctx, clip, rect, full);
   if (clip.type === 'shape') {
     ctx.fillStyle = hexA(clip.shape?.fill || c1, .9);
     ctx.fillRect(x + 4, y + h - 7, Math.max(0, w - 8), 3);
@@ -66,6 +70,12 @@ export function drawClip(ctx, { clip, track, rect, full, selected, pps, L }) {
   const hh = Math.min(15, h * .34);
   ctx.fillStyle = TH.clipHeader;
   ctx.fillRect(x, y, w, hh);
+  if (clip.label) {
+    // A colour label shows even over the picture strip: the header takes the colour.
+    ctx.fillStyle = hexA(clip.label, .82);
+    ctx.fillRect(x, y, w, hh);
+    ctx.fillRect(x, y + h - 3, w, 3);
+  }
   if (w > 34) {
     ctx.save();
     ctx.beginPath(); ctx.rect(x + 5, y, Math.max(0, w - 34), hh); ctx.clip();
@@ -107,7 +117,59 @@ export function drawClip(ctx, { clip, track, rect, full, selected, pps, L }) {
     ctx.fillRect(x, y, w, h);
   }
 
+  // Dropped here it would cover another clip, so it goes on a lane of its own.
+  if (conflict) {
+    ctx.fillStyle = 'rgba(251,191,36,.30)';
+    ctx.fillRect(x, y, w, h);
+    if (w > 70) {
+      ctx.fillStyle = '#fbbf24';
+      ctx.font = '700 10px system-ui, -apple-system, sans-serif';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('↑ new layer', x + 6, y + h - 8);
+    }
+  }
+
+  // A chain: this clip follows another (a crop of it, its sound).
+  if ((clip.linkTo || clip.badgeFor) && w > 46) {
+    const hh2 = Math.min(15, h * .34);
+    drawChain(ctx, x + w - (w > 64 ? 46 : 14), y + hh2 / 2);
+  }
+
   ctx.restore();
+
+  // Hover: the trim handles, wide enough to see and to grab.
+  if ((hover || selected) && !clip.locked && !track.locked && full.w > 6) {
+    const hw = Math.min(8, Math.max(3, full.w / 4));
+    ctx.save();
+    ctx.fillStyle = selected ? 'rgba(255,255,255,.92)' : 'rgba(255,255,255,.6)';
+    for (const hx of [full.x, full.x + full.w - hw]) {
+      if (hx + hw < x - 1 || hx > x + w + 1) continue;
+      rr(ctx, hx, y + 2, hw, h - 4, 3); ctx.fill();
+      ctx.fillStyle = 'rgba(8,16,32,.55)';
+      ctx.fillRect(hx + hw / 2 - .5, y + h / 2 - 6, 1, 12);
+      ctx.fillStyle = selected ? 'rgba(255,255,255,.92)' : 'rgba(255,255,255,.6)';
+    }
+    ctx.restore();
+  }
+
+  // Fade dots on the top corners — drag them in to fade.
+  if ((hover || selected) && !clip.locked && !track.locked && clip.type !== 'effect' && full.w >= 46 && h >= 26) {
+    const hy = y + Math.min(15, h * .34);
+    const fi = Math.min(full.w / 2 - 4, Math.max(12, (clip.fadeIn || 0) * pps));
+    const fo = Math.min(full.w / 2 - 4, Math.max(12, (clip.fadeOut || 0) * pps));
+    ctx.save();
+    for (const [hx, on] of [[full.x + fi, clip.fadeIn > 0], [full.x + full.w - fo, clip.fadeOut > 0]]) {
+      if (hx < x - 4 || hx > x + w + 4) continue;
+      ctx.beginPath();
+      ctx.arc(hx, hy, 4.2, 0, Math.PI * 2);
+      ctx.fillStyle = on ? '#ffffff' : 'rgba(255,255,255,.75)';
+      ctx.fill();
+      ctx.lineWidth = 1.4;
+      ctx.strokeStyle = 'rgba(8,16,32,.8)';
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
 
   // Border / selection
   rr(ctx, x + .5, y + .5, w - 1, h - 1, r);
@@ -119,9 +181,6 @@ export function drawClip(ctx, { clip, track, rect, full, selected, pps, L }) {
     ctx.lineWidth = 2.5;
     rr(ctx, x - 1, y - 1, w + 2, h + 2, r + 1);
     ctx.stroke();
-    // trim grips
-    ctx.fillStyle = TH.selEdge;
-    for (const gx of [x + 3, x + w - 5]) { rr(ctx, gx, y + h / 2 - 7, 2, 14, 1); ctx.fill(); }
   } else {
     ctx.strokeStyle = hexA(c1, .85);
     ctx.lineWidth = 1;
@@ -203,6 +262,29 @@ function drawTextPreview(ctx, clip, rect) {
   ctx.restore();
 }
 
+/** An animation: a bolt, then the words it shows (or its name). */
+function drawAnimPreview(ctx, clip, rect) {
+  const top = Math.min(15, rect.h * .34);
+  if (rect.h - top < 10 || rect.w < 22) return;
+  const p = clip.anim?.p || {};
+  const words = p.label || p.title || p.name || p.msg || '';
+  const cy = rect.y + top + (rect.h - top) / 2;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(rect.x + 3, rect.y + top, rect.w - 6, rect.h - top); ctx.clip();
+  ctx.fillStyle = 'rgba(6,8,15,.82)';
+  const bx = rect.x + 7, s = Math.min(9, (rect.h - top) * 0.32);
+  ctx.beginPath();
+  ctx.moveTo(bx + s * 0.6, cy - s); ctx.lineTo(bx, cy + s * 0.15); ctx.lineTo(bx + s * 0.45, cy + s * 0.15);
+  ctx.lineTo(bx + s * 0.3, cy + s); ctx.lineTo(bx + s * 0.95, cy - s * 0.2); ctx.lineTo(bx + s * 0.5, cy - s * 0.2);
+  ctx.closePath(); ctx.fill();
+  if (words && rect.w > 40) {
+    ctx.font = '600 11px Inter, system-ui, sans-serif';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(words), bx + s + 6, cy);
+  }
+  ctx.restore();
+}
+
 /**
  * Fades as a ramp, the way every NLE draws them: a light wedge under a crisp
  * hypotenuse. The earlier full-height gradient wash bleached the clip's label
@@ -244,4 +326,50 @@ function drawFades(ctx, clip, rect, pps) {
     const w = Math.min(clip.fadeOut * pps, rect.w);
     if (w > 2) ramp(rect.x + rect.w, rect.x + rect.w - w);
   }
+}
+
+function drawChain(ctx, cx, cy) {
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,.9)';
+  ctx.lineWidth = 1.3;
+  for (const dx of [-2.6, 2.6]) {
+    ctx.beginPath();
+    ctx.ellipse(cx + dx, cy, 3.2, 2, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** An effect clip draws its own strength over time: the shape of the hit. */
+function drawEnvelope(ctx, clip, rect, full) {
+  const top = Math.min(15, rect.h * .34);
+  const y0 = rect.y + top + 2, y1 = rect.y + rect.h - 3;
+  if (y1 - y0 < 5 || full.w < 4) return;
+  const kind = clip.effect?.kind || 'zoom';
+  const amt = clip.effect?.amount ?? 0.6;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(rect.x, y0, rect.w, y1 - y0); ctx.clip();
+  ctx.beginPath();
+  ctx.moveTo(full.x, y1);
+  const n = Math.max(8, Math.min(120, Math.round(full.w / 3)));
+  for (let i = 0; i <= n; i++) {
+    const lx = full.x + (full.w * i) / n;
+    const v = envelope(kind, (clip.duration * i) / n, clip.duration, clip.effect?.style) * (0.35 + 0.65 * amt);
+    ctx.lineTo(lx, y1 - v * (y1 - y0));
+  }
+  ctx.lineTo(full.x + full.w, y1);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255,255,255,.28)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,.9)';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** Blend two #rrggbb colours (t = share of b). */
+function mix(a, b, t) {
+  const p = (h) => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  const A = p(a), B = p(b);
+  return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * t).toString(16).padStart(2, '0')).join('');
 }

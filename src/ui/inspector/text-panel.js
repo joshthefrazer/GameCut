@@ -1,9 +1,10 @@
 import { numField, row, group } from '../widgets/numeric-drag.js';
 import { fontList, STOCK_FONTS } from '../../media/fonts.js';
 import { bus } from '../../core/events.js';
+import { askText } from '../widgets/ask.js';
 import {
-  TEXT_PRESETS, TEXT_ANIMS, TEXT_SWATCHES,
-  savedLooks, saveLook, deleteLook, lookFrom,
+  TEXT_PRESETS, TEXT_IN, TEXT_OUT, TEXT_LOOPS, TEXT_UNITS, TEXT_SWATCHES,
+  savedLooks, saveLook, deleteLook, lookFrom, saveTextEntry,
 } from '../../project/text-presets.js';
 
 /**
@@ -20,7 +21,7 @@ import {
  * that is what gets stored, because that is what survives a change of
  * resolution.
  */
-export function buildTextPanel({ clip, root, store, cmds, comp, rerender }) {
+export function buildTextPanel({ clip, root, store, cmds, comp, rerender, playback }) {
   const s = clip.text;
 
   /* A live edit repaints immediately; the committed value is what undo sees. */
@@ -37,14 +38,69 @@ export function buildTextPanel({ clip, root, store, cmds, comp, rerender }) {
   ta.spellcheck = false;
   ta.placeholder = 'Type here. Enter starts a new line.';
   ta.addEventListener('input', () => live('text', ta.value));
-  ta.addEventListener('change', () => set('text', ta.value, 'Edit text'));
+  ta.addEventListener('change', () => {
+    // A caption keeps a time for each word. Fixing a misheard word keeps them;
+    // adding or removing words spreads the times over the line again.
+    const n = ta.value.trim().split(/\s+/).filter(Boolean).length;
+    if (Array.isArray(s.words) && s.words.length && n !== s.words.length) {
+      const a = s.words[0].s, b = s.words[s.words.length - 1].e, step = (b - a) / Math.max(1, n);
+      const words = Array.from({ length: n }, (_, i) => ({ s: a + i * step, e: a + (i + 1) * step }));
+      cmds.batch('Edit caption', () => { set('text', ta.value, 'Edit text'); set('words', words, 'Word timing'); });
+    } else set('text', ta.value, 'Edit text');
+  });
   // The editor's single-key shortcuts must not fire while typing words.
   ta.addEventListener('keydown', e => e.stopPropagation());
   const wide = document.createElement('div');
   wide.className = 'row row--wide';
   wide.appendChild(ta);
   gW.body.appendChild(wide);
+
+  // Keep these words and the look they are in, to put back in one click later.
+  const keepText = document.createElement('button');
+  keepText.className = 'fontdrop';
+  keepText.textContent = 'Save these words & look';
+  keepText.title = 'Keeps the words and how they look. Find them again in the Text drawer.';
+  keepText.addEventListener('click', async () => {
+    const words = String(s.text || '').trim();
+    if (!words) { bus.emit('toast', { msg: 'Type some words first.', kind: 'err' }); return; }
+    const name = await askText({ title: 'Save this text', label: 'Give it a name you will recognise', value: words.split('\n')[0].slice(0, 28) });
+    if (!name) return;
+    saveTextEntry(name, words, lookFrom(s));
+    bus.emit('textlib');
+    bus.emit('toast', { msg: `Saved "${name}" — it is in the Text drawer`, kind: 'ok' });
+  });
+  const keepRow = document.createElement('div');
+  keepRow.className = 'row row--wide';
+  keepRow.appendChild(keepText);
+  gW.body.appendChild(keepRow);
   root.appendChild(gW);
+
+  /* ── Auto-caption word highlight ───────────────────────────── */
+  if (Array.isArray(s.words) && s.words.length) {
+    const gS = group('Spoken words');
+    const note = document.createElement('p');
+    note.className = 'insp-note';
+    note.textContent = 'Each word lights up as it is said. Pick the colour, or switch it off.';
+    gS.body.appendChild(note);
+    gS.body.appendChild(swatchRow('Said now', 'hiColor'));
+    gS.body.appendChild(row('Pop', ...[['1', 'None'], ['1.08', 'A little'], ['1.14', 'Big']].map(([v, label]) => {
+      const b = document.createElement('button');
+      b.className = 'chip-btn' + (String(s.hiPop ?? 1.12) === v || (v === '1.14' && s.hiPop == null) ? ' is-on' : '');
+      b.textContent = label;
+      b.addEventListener('click', () => { set('hiPop', +v, 'Word pop'); comp.render(); rerender(); });
+      return b;
+    })));
+    const off = document.createElement('button');
+    off.className = 'fontdrop';
+    off.id = 'btnWordsOff';
+    off.textContent = 'Stop highlighting words in this caption';
+    off.addEventListener('click', () => { set('words', null, 'Word highlight off'); comp.render(); rerender(); });
+    const offRow = document.createElement('div');
+    offRow.className = 'row row--wide';
+    offRow.appendChild(off);
+    gS.body.appendChild(offRow);
+    root.appendChild(gS);
+  }
 
   /* ── Looks ─────────────────────────────────────────────────── */
   const gL = group('Looks');
@@ -100,8 +156,8 @@ export function buildTextPanel({ clip, root, store, cmds, comp, rerender }) {
   const save = document.createElement('button');
   save.className = 'fontdrop';
   save.textContent = 'Save this look';
-  save.addEventListener('click', () => {
-    const name = prompt('Name this look', 'My look');
+  save.addEventListener('click', async () => {
+    const name = await askText({ title: 'Save this look', label: 'It joins the row above, for every project', value: 'My look' });
     if (!name) return;
     saveLook(name, lookFrom(s));
     paintGallery();
@@ -113,25 +169,7 @@ export function buildTextPanel({ clip, root, store, cmds, comp, rerender }) {
   gL.body.appendChild(saveRow);
   root.appendChild(gL);
 
-  /* ── Entrance ──────────────────────────────────────────────── */
-  const gA = group('Entrance');
-  const anims = document.createElement('div');
-  anims.className = 'chips';
-  for (const a of TEXT_ANIMS) {
-    const b = document.createElement('button');
-    b.className = 'chip-btn' + ((s.anim || 'none') === a.id ? ' is-on' : '');
-    b.textContent = a.name;
-    b.addEventListener('click', () => { set('anim', a.id, 'Entrance'); comp.render(); rerender(); });
-    anims.appendChild(b);
-  }
-  gA.body.appendChild(row('How it arrives', anims));
-  if ((s.anim || 'none') !== 'none') {
-    gA.body.appendChild(row('How long',
-      numField({ value: s.animDur ?? 0.35, min: 0.05, max: 5, step: .05, decimals: 2, suffix: 's',
-        onInput: v => live('animDur', v),
-        onCommit: v => set('animDur', v, 'Entrance length') })));
-  }
-  root.appendChild(gA);
+  /* Motion lives in its own tab now (see motion-panel.js). */
 
   /* ── Font ──────────────────────────────────────────────────── */
   const gF = group('Font');
@@ -343,7 +381,7 @@ export function buildTextPanel({ clip, root, store, cmds, comp, rerender }) {
 }
 
 /** CSS that approximates a text style, for the little Aa on a look button. */
-function previewStyle(st) {
+export function previewStyle(st) {
   const out = {
     // Always a fallback: a look naming a font this machine does not have
     // (Impact is not on Linux, for one) otherwise renders the chip as the
