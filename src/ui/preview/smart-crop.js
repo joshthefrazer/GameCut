@@ -232,7 +232,11 @@ export function magicSelect(img, u, v, tol = 22) {
  * mask the brush makes, so the renderer treats both the same.
  */
 export function maskPng(items, box, softPx = 1) {
-  const { mw, mh } = items[0];
+  // Pieces can come at different sizes (colour select works on a small copy of
+  // the frame, the outline model on a bigger one): draw at the sharpest one and
+  // read each piece at its own size.
+  const top = items.reduce((a, b) => (b.mw > a.mw ? b : a), items[0]);
+  const { mw, mh } = top;
   const x0 = Math.floor(box.x * mw), y0 = Math.floor(box.y * mh);
   const x1 = Math.ceil((box.x + box.w) * mw), y1 = Math.ceil((box.y + box.h) * mh);
   const w = Math.max(1, x1 - x0), h = Math.max(1, y1 - y0);
@@ -240,9 +244,12 @@ export function maskPng(items, box, softPx = 1) {
   c.width = w; c.height = h;
   const g = c.getContext('2d');
   const im = g.createImageData(w, h);
+  const at = (it, x, y) => (it.mw === mw && it.mh === mh)
+    ? it.bits[y * mw + x]
+    : it.bits[Math.min(it.mh - 1, Math.floor((y + 0.5) / mh * it.mh)) * it.mw + Math.min(it.mw - 1, Math.floor((x + 0.5) / mw * it.mw))];
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     let on = 0;
-    for (const it of items) if (it.bits[(y + y0) * mw + (x + x0)]) { on = 1; break; }
+    for (const it of items) if (at(it, x + x0, y + y0)) { on = 1; break; }
     if (on) { const i = (y * w + x) * 4; im.data[i] = im.data[i + 1] = im.data[i + 2] = 255; im.data[i + 3] = 255; }
   }
   g.putImageData(im, 0, 0);

@@ -1,5 +1,6 @@
 import { bus } from '../../core/events.js';
 import { findStill, magicSelect, maskPng } from './smart-crop.js';
+import { OUTLINE_MB, outlineStatus, outlineRunning, ensureOutline, cancelOutlineDownload, lookAt, outlineAt, stepOutline } from './outline.js';
 import { sampleFrames } from '../../edit/frame-analysis.js';
 import { assets } from '../../media/asset-store.js';
 import { askText } from '../widgets/ask.js';
@@ -120,6 +121,8 @@ export function openCropStudio({ clip, source, store, cmds, comp, onApply }) {
   let aspect = 0;                // box tool: 0 = free, else width ÷ height in source pixels
   let zoom = 1, panX = 0, panY = 0, fitZoom = 1;
   let cursor = null;             // {x, y} in view pixels, for the brush ring
+  // Click to outline. state: 'unknown' | 'absent' (not downloaded) | 'starting' | 'ready' | 'error' | 'none' (no desktop app)
+  const ol = { state: 'unknown', img: null, busy: false, last: null, device: null, lookMs: 0, closed: false };
 
   /**
    * Which way the very first stroke goes decides where the mask starts.
@@ -209,6 +212,11 @@ export function openCropStudio({ clip, source, store, cmds, comp, onApply }) {
       <aside class="cropst__smart" id="cstSmart">
         <button class="cst cst--go cropst__find" id="cstFindStill">Find what stays still</button>
         <p class="cropst__note" id="cstSmartNote">Click anything on the picture to select it — a map, a counter, a player, any part of the screen. Or press the button for suggestions of what stays put; they are only numbered, never named.</p>
+        <div class="cropst__ol" id="cstOl">
+          <button class="cst cst--sm" id="cstOlGet" hidden title="Downloads a small outlining model once (about ${OUTLINE_MB} MB). After that it works offline and nothing leaves this computer.">Get Click to outline (${OUTLINE_MB} MB, once)</button>
+          <div class="capd__bar" id="cstOlBar" hidden><i></i></div>
+          <p class="cropst__note" id="cstOlNote"></p>
+        </div>
         <div class="cropst__found" id="cstFound"></div>
         <div class="cropst__out" id="cstOut2">
           <b>How to cut it</b>
@@ -587,9 +595,14 @@ export function openCropStudio({ clip, source, store, cmds, comp, onApply }) {
     cv.__frame = { x: panX / dpr, y: panY / dpr, w: w / dpr, h: h / dpr };
     cv.__box = rect ? { ...rect } : null;
     cv.__visible = visible;    // likewise: lets a test read the box
-    cv.__found = found.map(f => ({ name: f.name, on: f.on, box: { ...f.box } }));
+    cv.__found = found.map(f => ({ name: f.name, on: f.on, box: { ...f.box }, outlined: !!f.outlined, points: f.points?.length || 0, pick: f.pick ?? null, sizes: f.options?.length || 0 }));
+    cv.__outline = { state: ol.state, device: ol.device, lookMs: ol.lookMs, busy: ol.busy };
     hint.textContent = tool === 'smart'
-      ? (found.length ? 'Click a piece to tick or untick it · Shift+click to keep just one part of it · click anything else to select it too · Enter to cut' : 'Click anything on the picture to select it, or press Find what stays still')
+      ? (found.length
+        ? (ol.state === 'ready'
+          ? 'Click anything else to outline it too · [ and ] make the outline smaller or bigger · Ctrl+click adds a missed bit, Alt+click takes one away · click a piece to untick it · Enter to cut'
+          : 'Click a piece to tick or untick it · Shift+click to keep just one part of it · click anything else to select it too · Enter to cut')
+        : (ol.state === 'ready' ? 'Click anything on the picture to outline it' : 'Click anything on the picture to select it, or press Find what stays still'))
       : tool === 'box'
       ? (rect
         ? 'Drag the box to move it, the handles to resize · Shift keeps it square · Enter to crop · scroll to zoom'
@@ -650,7 +663,13 @@ export function openCropStudio({ clip, source, store, cmds, comp, onApply }) {
         splitItem(hitItem, pick);
         return;
       }
+      // Click to outline: Ctrl+click adds a missed bit to the last outline, Alt+click takes one away.
+      if ((e.ctrlKey || e.metaKey || e.altKey) && ol.last && found.includes(ol.last) && ol.img) {
+        outlineClick(u, v, e.altKey ? 'sub' : 'add');
+        return;
+      }
       if (hitItem && !e.altKey) { hitItem.on = !hitItem.on; paintFound(); paint(); return; }
+      if (ol.state === 'ready' && ol.img) { outlineClick(u, v, 'new'); return; }
       const sel = magicSelect(analysisImage(), u, v);
       if (!sel) { bus.emit('toast', { msg: 'That ran into the whole picture — click inside something with a clear edge.', kind: 'err' }); return; }
       if (sel.box.w * sel.box.h < 0.0004) { bus.emit('toast', { msg: 'That is too small to cut out — zoom in and click again.', kind: 'err' }); return; }
@@ -756,6 +775,7 @@ export function openCropStudio({ clip, source, store, cmds, comp, onApply }) {
     el.classList.toggle('is-box', tool === 'box');
     el.classList.toggle('is-smart', tool === 'smart');
     cv.style.cursor = '';
+    if (tool === 'smart') prepareOutline(false);
     paint();
   }
   el.classList.toggle('is-box', tool === 'box');
@@ -801,6 +821,21 @@ export function openCropStudio({ clip, source, store, cmds, comp, onApply }) {
         b.title = 'Break this into the pieces it was joined from, to keep just one';
         b.addEventListener('click', (ev) => { ev.preventDefault(); ev.stopPropagation(); splitItem(f, null); });
         row.appendChild(b);
+      }
+      // An outlined piece: step between the outlines the model offered for the click.
+      if (f.options?.length > 1) {
+        for (const [step, label, tip] of [[-1, '−', 'Smaller outline: just the part you clicked ( [ )'], [1, '+', 'Bigger outline: more of the thing around it ( ] )']]) {
+          const b = document.createElement('button');
+          b.className = 'cropst__split';
+          b.type = 'button';
+          b.textContent = label;
+          b.title = tip;
+          b.dataset.olstep = String(step);
+          const next = f.pick + step;
+          b.disabled = next < 0 || next >= f.options.length;
+          b.addEventListener('click', (ev) => { ev.preventDefault(); ev.stopPropagation(); ol.last = f; resizeOutline(f, step); });
+          row.appendChild(b);
+        }
       }
       row.querySelector('.cropst__nm').addEventListener('dblclick', async (ev) => {
         ev.preventDefault();
@@ -854,6 +889,112 @@ export function openCropStudio({ clip, source, store, cmds, comp, onApply }) {
     } finally { btn.disabled = false; }
   }
   el.querySelector('#cstFindStill').addEventListener('click', findWhatStaysStill);
+
+  /* ── Click to outline anything (optional model, see outline.js) ── */
+  // (`ol`, the outline state, is declared with the rest of the state at the top.)
+  const olNote = el.querySelector('#cstOlNote');
+  const olGet = el.querySelector('#cstOlGet');
+  const olBar = el.querySelector('#cstOlBar');
+  const olSay = (msg, frac = null) => {
+    olNote.textContent = msg;
+    olBar.hidden = frac == null;
+    if (frac != null) olBar.firstElementChild.style.width = `${Math.round(frac * 100)}%`;
+  };
+  const olHelp = () => 'Click to outline is on: click anything and Strike traces its exact edge. Got just part of it? Press ] for a bigger outline ([ for smaller), or Ctrl+click a missed bit to add it, Alt+click a bit to take it away.';
+  async function prepareOutline(download) {
+    if (ol.state === 'ready' || ol.state === 'starting' || ol.state === 'none') return;
+    if (!download && ol.state === 'absent') return;
+    const prev = ol.state;
+    ol.state = 'starting';
+    olGet.hidden = true;
+    try {
+      if (!outlineRunning()) {
+        if (!download) {
+          const st = await outlineStatus();
+          if (!st.available) { ol.state = 'none'; olSay(''); return; }
+          if (!st.ready) {
+            ol.state = 'absent'; olGet.hidden = false;
+            olSay(`Want exact outlines of anything — a player, a textured map, an item? Get Click to outline: a small model, about ${OUTLINE_MB} MB, downloaded once. It runs on this computer; nothing is uploaded. Without it, clicking selects by colour.`);
+            return;
+          }
+        }
+        olSay(download ? 'Downloading Click to outline…' : 'Starting Click to outline…', download ? 0 : null);
+        const r = await ensureOutline({
+          download,
+          onProgress: (p) => {
+            if (ol.closed) return;
+            if (p.phase === 'download') olSay(`Downloading Click to outline… ${Math.round(p.bytes / 1e6)} of ~${Math.round(p.total / 1e6)} MB`, p.frac);
+            else olSay('Starting Click to outline…');
+          },
+        });
+        ol.device = r?.device || null;
+      }
+      if (ol.closed) return;
+      olSay('Looking at the picture…');
+      const t0 = performance.now();
+      ol.img = await lookAt(still, fw, fh);
+      ol.lookMs = Math.round(performance.now() - t0);
+      if (ol.closed) return;
+      ol.state = 'ready';
+      olSay(olHelp());
+      noteEl.textContent = 'Click anything on the picture to outline it. Or press the button for suggestions of what stays put; they are only numbered, never named.';
+    } catch (err) {
+      if (ol.closed) return;
+      if (err?.notDownloaded) { ol.state = 'absent'; olGet.hidden = false; olSay(''); return; }
+      if (String(err?.message) === 'cancelled') { ol.state = prev === 'unknown' ? 'absent' : prev; olGet.hidden = false; olSay('Download cancelled.'); return; }
+      ol.state = 'error';
+      olGet.hidden = false;
+      olGet.textContent = 'Try Click to outline again';
+      olSay(`Click to outline could not start (${err?.message || err}). Clicking selects by colour instead.`);
+    } finally {
+      paint();
+    }
+  }
+  olGet.addEventListener('click', () => { if (ol.state === 'error') ol.state = 'absent'; prepareOutline(true); });
+
+  /** Bigger / smaller: switch an outlined piece to the next outline the model offered. */
+  function resizeOutline(piece, step) {
+    if (!piece || !stepOutline(piece, step)) return false;
+    bitsCache.delete(piece);
+    paintFound(); paint();
+    return true;
+  }
+
+  /**
+   * One click turned into an outline. `mode`: 'new' starts a new piece; 'add'
+   * and 'sub' refine the last outlined piece with one more click.
+   */
+  async function outlineClick(u, v, mode) {
+    if (ol.busy || !ol.img) return;
+    ol.busy = true;
+    cv.style.cursor = 'progress';
+    const item = mode === 'new' ? null : ol.last;
+    const points = [...(item?.points || []), { x: u, y: v, add: mode !== 'sub' }];
+    try {
+      const r = await outlineAt(ol.img.id, points);
+      if (ol.closed) return;
+      if (!r || r.area < 0.0004) { bus.emit('toast', { msg: 'Nothing was outlined there — zoom in and click again, or Ctrl+click to add to it.', kind: 'err' }); return; }
+      if (r.area > 0.92) bus.emit('toast', { msg: 'That outlined almost the whole picture. Alt+click the parts you do not want.', ms: 4200 });
+      if (item) {
+        Object.assign(item, { bits: r.bits, mw: r.mw, mh: r.mh, box: r.box, points, score: r.score, options: r.options, pick: r.pick });
+        bitsCache.delete(item);
+      } else {
+        const n = found.filter(f => f.id.startsWith('sel')).length + 1;
+        const piece = { id: 'sel' + n, name: n === 1 ? 'Selection' : `Selection ${n}`, box: r.box, bits: r.bits, mw: r.mw, mh: r.mh,
+          on: true, outlined: true, points, score: r.score, options: r.options, pick: r.pick };
+        found.push(piece);
+        ol.last = piece;
+        if (smartOut === 'box' && found.length === 1) setOut('shape');
+      }
+      paintFound(); paint();
+    } catch (err) {
+      if (!ol.closed && !err?.busy) bus.emit('toast', { msg: `Could not outline that: ${err.message}`, kind: 'err' });
+    } finally {
+      ol.busy = false;
+      cv.style.cursor = '';
+    }
+  }
+  if (tool === 'smart') prepareOutline(false);
 
   el.addEventListener('click', (e) => {
     const b = e.target.closest('button');
@@ -928,7 +1069,10 @@ export function openCropStudio({ clip, source, store, cmds, comp, onApply }) {
     if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); apply(); return; }
     if (e.code === 'Space') { spaceDown = true; el.classList.add('is-panning'); e.preventDefault(); }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.stopPropagation(); stepBack(); }
-    if (e.key === '[' || e.key === ']') {
+    if ((e.key === '[' || e.key === ']') && tool === 'smart' && ol.last?.options && found.includes(ol.last)) {
+      e.preventDefault();
+      resizeOutline(ol.last, e.key === ']' ? 1 : -1);
+    } else if (e.key === '[' || e.key === ']') {
       e.preventDefault();
       const v = Math.max(8, Math.min(400, (+sizeInput.value) * (e.key === '[' ? 0.8 : 1.25)));
       sizeInput.value = Math.round(v);
@@ -963,6 +1107,8 @@ export function openCropStudio({ clip, source, store, cmds, comp, onApply }) {
   /* ── Finishing ─────────────────────────────────────────────── */
 
   function close() {
+    ol.closed = true;
+    if (ol.state === 'starting' && !outlineRunning()) cancelOutlineDownload();
     window.removeEventListener('keydown', onKey, true);
     window.removeEventListener('keyup', onKeyUp, true);
     window.removeEventListener('resize', resize);
