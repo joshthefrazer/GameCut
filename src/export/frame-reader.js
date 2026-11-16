@@ -27,7 +27,13 @@ export const READER_STATS = { used: false, hardware: false };
 export const resetReaderStats = () => { READER_STATS.used = false; READER_STATS.hardware = false; };
 
 export class Mp4FrameReader {
-  static async open(asset) {
+  /**
+   * `software`: skip the graphics card's decoder and ask for the processor's.
+   * Used for the second retry after a reader failed, since a decoder that keeps
+   * falling over on the graphics card is often fine on the processor (H.264;
+   * Electron has no software HEVC decoder, and then this returns null as before).
+   */
+  static async open(asset, { software = false } = {}) {
     try {
       if (typeof VideoDecoder === 'undefined' || !asset?.url || asset.missing) return null;
       const src = byteSourceFor({ url: asset.url, bytes: asset.bytes || 0 });
@@ -53,9 +59,16 @@ export class Mp4FrameReader {
       };
       // The graphics card's decoder when there is one; otherwise whatever works.
       let hw = false;
-      try { hw = (await VideoDecoder.isConfigSupported({ ...config, hardwareAcceleration: 'prefer-hardware' })).supported; } catch { hw = false; }
+      if (!software) {
+        try { hw = (await VideoDecoder.isConfigSupported({ ...config, hardwareAcceleration: 'prefer-hardware' })).supported; } catch { hw = false; }
+      }
       if (hw) config.hardwareAcceleration = 'prefer-hardware';
-      else if (!(await VideoDecoder.isConfigSupported(config)).supported) return null;
+      else if (software) {
+        let sw = false;
+        try { sw = (await VideoDecoder.isConfigSupported({ ...config, hardwareAcceleration: 'prefer-software' })).supported; } catch { sw = false; }
+        if (sw) config.hardwareAcceleration = 'prefer-software';
+        else if (!(await VideoDecoder.isConfigSupported(config)).supported) return null;
+      } else if (!(await VideoDecoder.isConfigSupported(config)).supported) return null;
       READER_STATS.hardware = READER_STATS.hardware || hw;
       READER_STATS.used = true;
       return new Mp4FrameReader(src, tr, config);
@@ -71,7 +84,13 @@ export class Mp4FrameReader {
     this.ts = track.timescale;
     this.offset = track.offset || 0;
     // Decode order is file order; each knows when it is shown (µs).
-    this.samples = track.samples.map(s => ({ ...s, t: Math.round((s.cts / this.ts + this.offset) * 1e6) }));
+    //
+    // Worked out once per recording, not once per reader. A reader is made for
+    // every CLIP, and a montage of fifty cuts from one two-hour recording has
+    // fifty clips: copying a million-entry index for each of them cost seconds
+    // and hundreds of MB apiece. The list is only ever read, so they share it.
+    this.samples = track.mapped
+      || (track.mapped = track.samples.map(s => ({ ...s, t: Math.round((s.cts / this.ts + this.offset) * 1e6) })));
     this.queue = [];        // decoded frames, in presentation order
     this.next = 0;          // next sample index to feed
     this.err = null;

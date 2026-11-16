@@ -123,12 +123,10 @@ export function drawVisualClip(ctx, clip, src, W, H, t, alpha) {
     try {
       const cf = Math.max(W / sw, H / sh), cw = sw * cf, ch = sh * cf;
       const bw = 40, bh = Math.max(4, Math.round(40 * ch / Math.max(1, cw)));
-      const b = backdropAt(bw, bh);
-      b.imageSmoothingQuality = 'high';
-      b.drawImage(src, sx, sy, sw, sh, 0, 0, bw, bh);
+      const bc = softBackdrop(src, sx, sy, sw, sh, bw, bh);
       ctx.save();
       ctx.globalAlpha = alpha;
-      ctx.drawImage(b.canvas, 0, 0, bw, bh, (W - cw) / 2, (H - ch) / 2, cw, ch);
+      ctx.drawImage(bc, 0, 0, bw, bh, (W - cw) / 2, (H - ch) / 2, cw, ch);
       ctx.fillStyle = 'rgba(0,0,0,.4)';
       ctx.fillRect(0, 0, W, H);
       ctx.restore();
@@ -228,10 +226,8 @@ export function drawVisualClip(ctx, clip, src, W, H, t, alpha) {
   if (clip.backdrop) {
     try {
       const bw = 40, bh = Math.max(4, Math.round(40 * dh / Math.max(1, dw)));
-      const b = backdropAt(bw, bh);
-      b.imageSmoothingQuality = 'high';
-      b.drawImage(src, sx, sy, sw, sh, 0, 0, bw, bh);
-      ctx.drawImage(b.canvas, 0, 0, bw, bh, -dw / 2, -dh / 2, dw, dh);
+      const bc = softBackdrop(src, sx, sy, sw, sh, bw, bh);
+      ctx.drawImage(bc, 0, 0, bw, bh, -dw / 2, -dh / 2, dw, dh);
       ctx.fillStyle = `rgba(0,0,0,${Math.max(0, Math.min(0.85, clip.backdrop))})`;
       ctx.fillRect(-dw / 2, -dh / 2, dw, dh);
     } catch { /* frame not ready */ }
@@ -252,6 +248,46 @@ function backdropAt(w, h) {
   if (!backdropCanvas) backdropCanvas = document.createElement('canvas');
   if (backdropCanvas.width !== w || backdropCanvas.height !== h) { backdropCanvas.width = w; backdropCanvas.height = h; }
   return backdropCanvas.getContext('2d');
+}
+
+/**
+ * The picture as a 40-pixel-wide smear, for the blurred fill behind a vertical layout.
+ *
+ * It used to be drawn straight from the full-size frame onto a 40-pixel canvas.
+ * Measured on a real export (qa/export-bench.mjs, --scene vblur against vcover),
+ * the blurred background alone cost about 14 ms a frame, more than decoding the
+ * footage. The suspected cause: Chromium keeps canvases that small on the
+ * processor rather than giving them a graphics-card surface, so every frame the
+ * whole 1080p picture was read BACK from the graphics card just to be shrunk.
+ *
+ * So it takes two steps. The first shrinks on the graphics card to a canvas big
+ * enough to stay there (at least 130×130 pixels); the second shrinks that one to
+ * the 40 pixels, which then reads back a few dozen kilobytes instead of eight
+ * megabytes. The picture it ends up with is the same smear.
+ *
+ * NOT YET MEASURED after the change: re-run the same two scenes. If vblur does
+ * not move, the cause is something else and this is just two cheap draws.
+ */
+let midCanvas = null;
+function softBackdrop(src, sx, sy, sw, sh, bw, bh) {
+  // Test switch, never set by the app: qa/speed-test.mjs turns it on to time the old one-step shrink.
+  if (globalThis.__strikeLegacyBackdrop) {
+    const old = backdropAt(bw, bh);
+    old.imageSmoothingQuality = 'high';
+    old.drawImage(src, sx, sy, sw, sh, 0, 0, bw, bh);
+    return old.canvas;
+  }
+  const mw =Math.max(130, Math.round(Math.sqrt(24000 * sw / Math.max(1, sh))));
+  const mh = Math.max(130, Math.round(mw * sh / Math.max(1, sw)));
+  if (!midCanvas) midCanvas = document.createElement('canvas');
+  if (midCanvas.width !== mw || midCanvas.height !== mh) { midCanvas.width = mw; midCanvas.height = mh; }
+  const m = midCanvas.getContext('2d');
+  m.imageSmoothingQuality = 'high';
+  m.drawImage(src, sx, sy, sw, sh, 0, 0, mw, mh);
+  const b = backdropAt(bw, bh);
+  b.imageSmoothingQuality = 'high';
+  b.drawImage(midCanvas, 0, 0, mw, mh, 0, 0, bw, bh);
+  return b.canvas;
 }
 
 /**

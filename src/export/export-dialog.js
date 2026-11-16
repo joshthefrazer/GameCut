@@ -702,7 +702,9 @@ export function initExport({ store, playback }) {
           let r;
           try { r = await xs.close(d.token); } catch (e) { throw saveError(e); }
           if (!r?.ok) throw saveError(r?.reason || 'The video could not be saved.');
-          return { path: r.path || d.path, bytes: r.bytes };
+          // The chosen name was in use (open in a player, being synced): the
+          // main process saved it beside it instead of losing the render.
+          return { path: r.path || d.path, bytes: r.bytes, renamed: !!(r.path && r.path !== d.path), wanted: d.path };
         },
         abort: () => Promise.resolve().then(() => xs.abort(d.token)).catch(() => {}),
       };
@@ -813,6 +815,10 @@ export function initExport({ store, playback }) {
       const phase = root.querySelector('#xpPhase');
       if (phase) phase.textContent = 'Saving';
       const saved = await dest.finish(result instanceof Uint8Array ? result : null);
+      if (saved.renamed) {
+        const base = (p) => String(p).split(/[\\/]/).pop();
+        warnings = [...warnings, `"${base(saved.wanted)}" was open in another program, so Strike saved the video as "${base(saved.path)}" instead.`];
+      }
 
       // The other shapes, one after another, saved beside the first file.
       const more = [];

@@ -3,6 +3,7 @@ import { Compositor } from '../engine/compositor.js';
 import { assets } from '../media/asset-store.js';
 import { dequeued } from './wait.js';
 import { mixTimeline, audibleClips } from '../audio/graph.js';
+import { junctions, transitionSpan } from '../engine/transitions.js';
 
 /**
  * Offline renderer: timeline → MP4 (H.264 video; AAC audio where the machine
@@ -368,7 +369,7 @@ export function exportSupport() {
  */
 export async function renderToMp4({
   store, width, height, fps, vBitrate, aBitrate, onProgress, shouldCancel,
-  frameAccuracy = 'fast', sink = null,
+  frameAccuracy = 'fast', sink = null, profile = null,
 }) {
   const support = exportSupport();
   if (!support.ok) throw new Error(support.reason);
@@ -467,12 +468,39 @@ export async function renderToMp4({
     ...(audioCodec ? { audio: { codec: audioCodec.muxer, numberOfChannels: 2, sampleRate: 48000 } } : {}),
   });
 
-  let encodeError = null;
-  const videoEncoder = new VideoEncoder({
-    output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
-    error: (e) => { encodeError = e; },
-  });
-  videoEncoder.configure({ ...plan.config, codec: plan.codec });
+  /*
+   * The video encoder, which can be started again.
+   *
+   * A hardware encoder can fail in the middle of a long export — the graphics
+   * driver resets, the machine sleeps, another program takes the encoder — and
+   * until now that threw the whole render away. The error is remembered here;
+   * the loop below notices it, makes a new encoder with the same settings and
+   * carries on from the first frame the old one never handed back. `lastOutTs`
+   * is the newest picture the muxer already has, so nothing is written twice and
+   * timestamps keep rising.
+   */
+  let encoderErr = null;          // set by the CURRENT encoder's error callback
+  let lastOutTs = -1;             // µs timestamp of the newest chunk given to the muxer
+  let restarts = 0;
+  let needKey = false;            // the next picture must be a keyframe (a new encoder starts one)
+  let videoEncoder = null;
+  const makeEncoder = () => {
+    const generation = restarts;
+    const enc = new VideoEncoder({
+      output: (chunk, meta) => {
+        if (enc !== videoEncoder) return;            // a retired encoder's late output
+        lastOutTs = Math.max(lastOutTs, chunk.timestamp);
+        // The file's codec description (the avcC box) is the FIRST encoder's, so
+        // a restarted encoder's own copy is not offered to the muxer. Same settings,
+        // same machine, so it matches; this just makes sure of it.
+        muxer.addVideoChunk(chunk, generation > 0 && meta ? { ...meta, decoderConfig: undefined } : meta);
+      },
+      error: (e) => { if (enc === videoEncoder) encoderErr = encoderErr || e; },
+    });
+    enc.configure({ ...plan.config, codec: plan.codec });
+    return enc;
+  };
+  videoEncoder = makeEncoder();
 
   /* ── Audio: mixed and encoded a stretch at a time, alongside the picture ─
      The whole mix used to be one OfflineAudioContext the length of the video
@@ -530,11 +558,73 @@ export async function renderToMp4({
     if (!readers.has(clip.id)) readers.set(clip.id, await Mp4FrameReader.open(a));
     return readers.get(clip.id);
   };
+
+  /*
+   * One picture for a clip, from its reader — and a second chance when the reader fails.
+   *
+   * A decoder can stumble mid-recording (a damaged frame, the graphics card
+   * resetting). A reader that failed used to be thrown away for the rest of the
+   * export and its clip handed to the <video> player, which seeks on every frame
+   * and is many times slower. Now the first failure starts a fresh reader at the
+   * right keyframe, the second one asks for the processor's decoder instead, and
+   * only a clip that fails three times goes to the player — with a note in the
+   * result, so a slow or imperfect clip is never a surprise.
+   */
+  const failures = new Map();      // clipId -> times its reader failed
+  let usedPlayer = false;
+  const pictureFor = async (clip, st) => {
+    let r = await readerFor(clip);
+    while (r) {
+      try {
+        // Test hook (qa/speed-test.mjs): fail this many reads to exercise the retry. Never set by the app.
+        if (globalThis.__strikeFailReader > 0) { globalThis.__strikeFailReader--; throw new Error('test: simulated decoder failure'); }
+        return await r.canvasAt(st);
+      } catch (e) {
+        r.close();
+        const n = (failures.get(clip.id) || 0) + 1;
+        failures.set(clip.id, n);
+        console.warn(`[export] frame reader failed (${n}) for ${clip.name || clip.id}`, e);
+        if (n > 2) {
+          readers.set(clip.id, null);
+          if (!usedPlayer) {
+            usedPlayer = true;
+            warnings.push('Part of your footage could not be read the fast way, so Strike used a slower method for it. '
+              + 'The picture is the same, but the render took longer.');
+          }
+          return null;
+        }
+        const a = assets.get(clip.assetId);
+        r = await Mp4FrameReader.open(a, { software: n === 2 });
+        readers.set(clip.id, r);
+      }
+    }
+    return null;
+  };
+  /*
+   * How long each clip's reader must stay open.
+   *
+   * A transition is centred on its cut, so the OUTGOING clip is still drawn for
+   * half the transition after its own end (see engine/transitions.js). The reader
+   * used to be closed 0.05 s after the clip's end and marked finished for good,
+   * so for the rest of every transition that clip fell back to the <video>
+   * player: a seek per frame, each one re-decoding from the last keyframe. That
+   * is the "exports with transitions crawl" slowness, and when a seek never
+   * settled the export sat on a five-second timeout for a single frame.
+   */
+  const holdUntil = new Map();
+  for (const j of junctions(store.doc)) {
+    const span = transitionSpan(j.prev, j.next);
+    if (span) holdUntil.set(j.prev.id, Math.max(holdUntil.get(j.prev.id) ?? 0, span.to));
+  }
+  const allClips = new Map();
+  for (const tr of store.doc.tracks) for (const c of tr.clips) allClips.set(c.id, c);
   const retire = (t) => {
     for (const [id, r] of readers) {
       if (!r) continue;
-      const c = store.doc.tracks.flatMap(x => x.clips).find(x => x.id === id);
-      if (!c || c.start + c.duration < t - 0.05) { r.close(); readers.set(id, null); }
+      const c = allClips.get(id);
+      // (__strikeLegacyRetire is a test switch for qa/speed-test.mjs: the old rule, no transition hold.)
+      const end = c ? (globalThis.__strikeLegacyRetire ? c.start + c.duration : Math.max(c.start + c.duration, holdUntil.get(id) ?? 0)) : -Infinity;
+      if (!c || end < t - 0.05) { r.close(); readers.set(id, null); }
     }
   };
   const srcTime = (clip, t) => {
@@ -543,14 +633,65 @@ export async function renderToMp4({
     return Math.min(raw, Math.max(0, (a?.duration || Infinity) - 1 / 60));
   };
 
+  /*
+   * Where the time goes. Filled in only when the caller passes `profile`
+   * (the benchmark does; the dialog does not), so a normal export pays for one
+   * `performance.now()` per stage and nothing else.
+   */
+  const stage = profile ? (profile.ms = { audio: 0, decode: 0, fallback: 0, render: 0, encode: 0, backpressure: 0, drain: 0 }) : null;
+  let tick = 0;
+  const lap = (name) => {
+    if (!stage) return;
+    const n = performance.now();
+    stage[name] += n - tick;
+    tick = n;
+  };
+  const wallStart = performance.now();
+
+  /**
+   * Replace a failed encoder and say which frame to carry on from.
+   *
+   * Gives up (and throws the encoder's own error) after three restarts, so a
+   * machine that cannot encode at all still fails promptly with a real message
+   * rather than looping.
+   */
+  const restartEncoder = () => {
+    const why = encoderErr;
+    if (restarts >= 3) throw why;
+    restarts++;
+    encoderErr = null;
+    try { if (videoEncoder.state !== 'closed') videoEncoder.close(); } catch { /* already gone */ }
+    videoEncoder = makeEncoder();
+    needKey = true;
+    console.warn('[export] video encoder failed; restarted it', why);
+    if (restarts === 1) {
+      warnings.push('The video encoder stopped part-way through. Strike restarted it and carried on, '
+        + 'so the picture may change slightly at that point.');
+    }
+    // Pictures the old encoder never handed back are gone: make them again. The
+    // readers have moved on past them, so each is reopened where it is next needed.
+    for (const r of readers.values()) r?.close();
+    readers.clear();
+    return lastOutTs < 0 ? 0 : Math.min(totalFrames, Math.round(lastOutTs / frameDur) + 1);
+  };
+
   try {
-    for (let i = 0; i < totalFrames; i++) {
+    let i = 0;
+    for (;;) {
+    while (i < totalFrames) {
       if (shouldCancel?.()) return null;
-      if (encodeError) throw encodeError;
+      // Test hook (qa/speed-test.mjs): pretend the encoder failed at this frame, once. Never set by the app.
+      if (globalThis.__strikeFailEncoderAt === i && !encoderErr) {
+        globalThis.__strikeFailEncoderAt = -1;
+        encoderErr = new Error('test: simulated encoder failure');
+      }
+      if (encoderErr) i = restartEncoder();
       failIfWriteFailed();
 
       const t = i / fps;
+      if (stage) tick = performance.now();
       if (audio) await audio.until(t + 2);
+      lap('audio');
 
       /**
        * Walk the source to this frame.
@@ -569,35 +710,61 @@ export async function renderToMp4({
       const needed = comp.clipsNeededAt(t);
       const clips = [];
       comp.pool.overrides.clear();
+      /*
+       * Layers that show the SAME moment of the SAME recording share one decode.
+       * A vertical short with a facecam cut out of the gameplay, or a replay laid
+       * over the live shot, is two clips of one file at one instant: decoding the
+       * picture twice (and copying it twice) was pure waste. The key is the
+       * source time to a tenth of a millisecond, so clips that merely overlap in
+       * time but sit at different places in the file never share.
+       */
+      const shared = new Map();
       for (const c of needed) {
-        const r = await readerFor(c);
-        let pic = null;
-        if (r) {
-          try { pic = await r.canvasAt(srcTime(c, t)); } catch (e) { console.warn('frame reader failed; using the player', e); readers.set(c.id, null); r.close(); }
+        const st = srcTime(c, t);
+        const key = `${c.assetId}|${Math.round(st * 1e4)}`;
+        let pic = globalThis.__strikeNoShare ? null : (shared.get(key) || null);   // (test switch: the old one-decode-per-layer)
+        if (!pic) {
+          pic = await pictureFor(c, st);
+          if (pic) shared.set(key, pic);
         }
         if (pic) comp.pool.overrides.set(c.id, pic); else clips.push(c);
       }
+      lap('decode');
       if (clips.length) {
         if (i === 0 || frameAccuracy === 'exact') await comp.pool.seekExact(clips, t);
         else corrections += await comp.pool.streamTo(clips, t, { tolerance: tol });
       }
+      lap('fallback');
 
       comp.render(t, false);
+      lap('render');
 
       const frame = new VideoFrame(canvas, {
         timestamp: Math.round(i * frameDur),
         duration: Math.round(frameDur),
       });
-      videoEncoder.encode(frame, { keyFrame: i % GOP === 0 });
+      let queued = true;
+      try {
+        videoEncoder.encode(frame, { keyFrame: needKey || i % GOP === 0 });
+        needKey = false;
+      } catch (e) {
+        // The encoder closed itself between the check above and now.
+        queued = false;
+        encoderErr = encoderErr || e;
+      }
       frame.close();
+      lap('encode');
+      // Not queued: the top of the loop restarts the encoder and winds `i` back.
+      if (!queued) continue;
 
       // Backpressure: without this the queue grows until memory runs out on a
       // long timeline — the encoder's queue, and the disk's.
-      while (videoEncoder.encodeQueueSize > 8) {
+      while (videoEncoder.encodeQueueSize > 8 && !encoderErr) {
         await dequeued(videoEncoder);
-        if (encodeError) throw encodeError;
       }
+      lap('backpressure');
       if (sink) await drain(48 * 1024 * 1024);
+      lap('drain');
 
       if (i % 5 === 0 || i === totalFrames - 1) {
         // Frames a second, so a slow render says why it is slow rather than
@@ -610,10 +777,24 @@ export async function renderToMp4({
           fastDecode: READER_STATS.used, gpuDecode: READER_STATS.hardware, gpuEncode: plan?.path === 'hardware',
         });
       }
+      i++;
     }
 
-    await videoEncoder.flush();
-    if (encodeError) throw encodeError;
+    if (stage) tick = performance.now();
+    try { await videoEncoder.flush(); } catch (e) { encoderErr = encoderErr || e; }
+    // Failed while finishing: start again and redo whatever it had not handed back.
+    if (!encoderErr) break;
+    i = restartEncoder();
+    }
+    if (profile) {
+      lap('backpressure');
+      profile.frames = totalFrames;
+      profile.loopMs = performance.now() - wallStart;
+      profile.corrections = corrections;
+      profile.path = plan.path;
+      profile.readers = [...readers.values()].filter(Boolean).length;
+      profile.readerStats = { ...READER_STATS };
+    }
     if (corrections) {
       // Not a failure — the backstop doing its job. Worth seeing, because a
       // high count means the machine could not follow the source and the

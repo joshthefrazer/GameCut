@@ -911,16 +911,38 @@ ipcMain.handle('sink:close', async (e, token) => {
     await fsp.rm(s.partial, { force: true }).catch(() => {});
     return { ok: false, reason: plainError(err) };
   }
+  let finalPath = s.path;
   try {
     await renameReplacing(s.partial, s.path);
   } catch (err) {
-    await fsp.rm(s.partial, { force: true }).catch(() => {});
-    return { ok: false, reason: plainError(err, { replacing: true }) };
+    /*
+     * The finished video must never be thrown away because of its NAME.
+     *
+     * This is the last step of a render that may have taken twenty minutes. If
+     * the chosen file is open in a player or being synced or scanned, Windows
+     * refuses to replace it — and the old code deleted the finished render and
+     * reported "couldn't save". Now it is saved beside it under a free name
+     * ("name (2).mp4"), and if even that fails the finished file is KEPT where
+     * it is and the message says where.
+     */
+    const ext = path.extname(s.path);
+    const stem = s.path.slice(0, s.path.length - ext.length);
+    let moved = null;
+    for (let n = 2; n < 30 && !moved; n++) {
+      const alt = `${stem} (${n})${ext}`;
+      if (fs.existsSync(alt)) continue;
+      try { await fsp.rename(s.partial, alt); moved = alt; } catch { /* try the next name */ }
+    }
+    if (!moved) {
+      return { ok: false, reason: `${plainError(err, { replacing: true })}. Your finished video was kept as "${s.partial}" — rename it to .mp4 to use it.` };
+    }
+    finalPath = moved;
+    exportedPaths.add(moved);
   }
   let bytes = s.bytes;
-  try { bytes = (await fsp.stat(s.path)).size; } catch { /* keep the count */ }
-  writtenPaths.add(samePath(s.path));
-  return { ok: true, path: s.path, bytes };
+  try { bytes = (await fsp.stat(finalPath)).size; } catch { /* keep the count */ }
+  writtenPaths.add(samePath(finalPath));
+  return { ok: true, path: finalPath, bytes };
 });
 
 ipcMain.handle('sink:abort', async (e, token) => {
@@ -1305,7 +1327,10 @@ async function installUpdate(bundlePath) {
     // expects to replace the main process should say so out loud.
     if (!abs || !isServable(abs, staging)) { refused.push(rel); continue; }
     await fsp.mkdir(path.dirname(abs), { recursive: true });
-    await fsp.writeFile(abs, typeof body === 'string' ? body : String(body), 'utf8');
+    // Binary files (fonts, sounds, the captions model runtime) travel as base64;
+    // written as text they would arrive corrupted.
+    if (body && typeof body === 'object' && typeof body.b64 === 'string') await fsp.writeFile(abs, Buffer.from(body.b64, 'base64'));
+    else await fsp.writeFile(abs, typeof body === 'string' ? body : String(body), 'utf8');
     written.push(rel);
   }
 
