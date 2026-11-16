@@ -14,16 +14,18 @@ import { patchClick } from './reveal.mjs';
 
 const OUT = `${ROOT}/qa/out`;
 const GAME = `${OUT}/game-hud.mp4`;
-// Moving world: a scrolling test pattern. Still pieces: a static rgb pattern
-// (200×200 at 30,30) and static bars (360×90 at 890,30). Badge: an
+// Moving world: a scrolling test pattern. Still pieces: a gridded square
+// (200×200 at 30,30) and a strip of three bars with gaps of moving picture
+// between them, like a kill feed (360 wide, 30..112 at x 890). Badge: an
 // orange box (240×120 at 520,520) that also never moves.
+// (The square used to be ffmpeg's rgbtestsrc, which newer ffmpeg animates, so it was not still.)
 execFileSync('ffmpeg', ['-v', 'error', '-y',
   '-f', 'lavfi', '-i', 'testsrc2=size=1800x1000:rate=30',
-  '-f', 'lavfi', '-i', 'rgbtestsrc=size=200x200:rate=30',
-  '-f', 'lavfi', '-i', 'smptebars=size=360x90:rate=30',
+  '-f', 'lavfi', '-i', 'color=c=0x2255aa:size=200x200:rate=30,drawgrid=w=40:h=40:t=4:c=0xf0f0f0',
+  '-f', 'lavfi', '-i', 'smptebars=size=360x22:rate=30',
   '-f', 'lavfi', '-i', 'color=c=0xff8800:size=240x120:rate=30',
   '-filter_complex',
-  "[0]crop=1280:720:'200+180*sin(t*1.7)':'120+100*cos(t*1.3)'[bg];[bg][1]overlay=30:30[a];[a][2]overlay=890:30[b];[b][3]overlay=520:520:shortest=1",
+  "[2]split=3[s1][s2][s3];[0]crop=1280:720:'200+180*sin(t*1.7)':'120+100*cos(t*1.3)'[bg];[bg][1]overlay=30:30[a];[a][s1]overlay=890:30[b1];[b1][s2]overlay=890:60[b2];[b2][s3]overlay=890:90[b];[b][3]overlay=520:520:shortest=1",
   '-t', '5', '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', GAME]);
 
 // A green box gliding across a still picture, for "Follow it as it moves".

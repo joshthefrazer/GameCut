@@ -124,19 +124,46 @@ export function findStill(still, frames) {
   if (movingPx < sd.length * 0.25) {
     return { items: [], reason: 'The picture hardly moves in this clip, so what stays still cannot be told apart from the rest. Click what you want instead, or draw a box around it.' };
   }
-  // Sharp and still.
+  // Sharp and still: the detail of a piece (letters, icons, lines).
   const bits = new Uint8Array(w * h);
   for (let i = 0; i < bits.length; i++) bits[i] = e[i] > 20 && sd[i] < 7 ? 1 : 0;
   // Join letters and icons into whole pieces, then tidy the outline.
   const joined = morph(morph(bits, w, h, 3), w, h, -1);
-  const comps = components(joined, w, h, Math.max(8, (w * h) / 3000));
-  let boxes = comps.map(c => ({
-    x: c.x0 / w, y: c.y0 / h, w: (c.x1 - c.x0 + 1) / w, h: (c.y1 - c.y0 + 1) / h,
-    n: c.n, members: c.members,
-  })).map(b => ({ ...b, parts: [b] })).filter(b => {
+  /*
+   * Also whole still REGIONS, not only their sharp bits. A panel with flat areas
+   * inside (a map with plain ground, a striped badge, a bar) used to come back
+   * as a few fragments around its edges, because only sharp pixels counted.
+   * Still pixels are opened first, so specks of moving picture that happened
+   * to match across the samples drop out; a region is kept only if it holds
+   * some detail (below), so a still black bar or a flat border is not offered.
+   */
+  const stillPx = new Uint8Array(w * h);
+  for (let i = 0; i < stillPx.length; i++) stillPx[i] = sd[i] < 7 ? 1 : 0;
+  const solid = morph(morph(stillPx, w, h, -2), w, h, 2);
+  const union = new Uint8Array(w * h);
+  for (let i = 0; i < union.length; i++) union[i] = joined[i] | solid[i];
+  const comps = components(union, w, h, Math.max(8, (w * h) / 3000));
+  const toBox = (c) => ({ x: c.x0 / w, y: c.y0 / h, w: (c.x1 - c.x0 + 1) / w, h: (c.y1 - c.y0 + 1) / h, n: c.n, members: c.members });
+  const inside = new Uint8Array(w * h);
+  let boxes = comps.map(c => {
+    let detail = 0;
+    for (const p of c.members) detail += bits[p];
+    const b = { ...toBox(c), detail: detail / c.n };
+    /*
+     * Its parts: the separate still regions it is made of. Lines of a kill feed
+     * sit so close that their details join into one piece; Split (or
+     * Shift+click) still has to be able to keep just one line.
+     */
+    for (const p of c.members) inside[p] = solid[p];
+    const subs = components(inside, w, h, Math.max(8, (w * h) / 3000))
+      .filter(s => (s.x1 - s.x0 + 1) * (s.y1 - s.y0 + 1) / (w * h) > 0.001);
+    for (const p of c.members) inside[p] = 0;
+    b.parts = subs.length > 1 ? subs.map(toBox) : [b];
+    return b;
+  }).filter(b => {
     const area = b.w * b.h;
     const density = b.n / (b.w * w * b.h * h);
-    return area > 0.0015 && area < 0.3 && b.w * w >= 6 && b.h * h >= 5 && density > 0.18;
+    return area > 0.0015 && area < 0.3 && b.w * w >= 6 && b.h * h >= 5 && density > 0.18 && b.detail > 0.03;
   });
   // Pieces that nearly touch are one thing (a kill feed is several lines).
   const pad = 0.012;
