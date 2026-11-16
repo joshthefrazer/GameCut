@@ -346,27 +346,31 @@ export class Compositor {
 
     if (starved && this._painted) return false;
 
-    this.#paintLayers(ctx, layers, W, H, t);
-
     /*
      * Compare view: the left of the divider is the picture without effects,
      * looks or motion; the right is the finished picture. Preview only — an
      * export never has `compare` set.
+     *
+     * The finished picture is painted straight into its own canvas. It used to
+     * be painted on the preview and then copied off it, but the preview canvas
+     * is `desynchronized`, and reading it back in the same task can return the
+     * frame from before, so the "finished" half showed the picture without
+     * effects (qa/features.mjs "Compare", failing since 2.0.5).
      */
     const cmp = this.compare;
     if (cmp?.on && !this.fixedSize) {
       if (!this._cmp || this._cmp.width !== W || this._cmp.height !== H) {
         this._cmp = document.createElement('canvas'); this._cmp.width = W; this._cmp.height = H;
       }
-      const cc = this._cmp.getContext('2d');
-      cc.globalCompositeOperation = 'copy';
-      cc.drawImage(this.canvas, 0, 0);
+      this.#paintLayers(this._cmp.getContext('2d'), layers, W, H, t);
       this.bypass = true;
       try { this.#paintLayers(ctx, layers, W, H, t); } finally { this.bypass = false; }
       const x = Math.round(Math.max(0, Math.min(1, cmp.x ?? 0.5)) * W);
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.globalAlpha = 1;
       ctx.drawImage(this._cmp, x, 0, W - x, H, x, 0, W - x, H);
+    } else {
+      this.#paintLayers(ctx, layers, W, H, t);
     }
 
     this._painted = true;
@@ -394,7 +398,7 @@ export class Compositor {
           : { ...clip, motion: { ...(clip.motion || {}), ...mp.patch } };
         mt = mp.t;
       }
-      if (clip.type === 'effect') { if (!this.bypass) applyEffect(ctx, this.canvas, clip, t, W, H); continue; }
+      if (clip.type === 'effect') { if (!this.bypass) applyEffect(ctx, ctx.canvas, clip, t, W, H); continue; }
       if (clip.type === 'text') {
         if (this.bypass) clip = { ...clip, text: { ...clip.text, anim: 'none', animOut: 'none', animLoop: 'none' } };
         drawTextClip(ctx, clip, W, H, mt, alpha);
