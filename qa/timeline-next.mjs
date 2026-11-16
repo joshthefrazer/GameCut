@@ -230,7 +230,8 @@ await step('Alt + arrows stop at the next clip instead of sliding under it', asy
 
 await step('double-clicking a lane name renames it', async () => {
   await fresh();
-  const name = win.locator('#trackHeaders .th .th__name', { hasText: 'Music' }).first();
+  // Any audio lane will do (the default music lane has been called "Beat" since 2.0, so a fixed name went stale).
+  const name = win.locator('#trackHeaders .th .th__name', { hasText: /^(Music|Beat)$/ }).first();
   await name.dblclick();
   await win.keyboard.press('Control+a');
   await win.keyboard.type('Beat drop');

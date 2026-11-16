@@ -24,8 +24,13 @@ const ICON = {
  * "front", because the top of the list is always in front in the picture.
  * Double-click a lane's name to rename it.
  */
+let lastClick = null;   // { id, at }: the last click on a lane, to spot a double-click across redraws
+let renaming = null;    // { id, value }: a lane being renamed, kept across redraws
+let redrawing = false;
+
 export function renderTrackHeaders(root, store, L, cmds, menu = null, { fold } = {}) {
-  root.innerHTML = `<div class="th-spacer">Tracks</div>`;
+  redrawing = true;
+  try { root.innerHTML = `<div class="th-spacer">Tracks</div>`; } finally { redrawing = false; }
   const wrap = document.createElement('div');
   wrap.className = 'th-wrap';
   wrap.style.transform = `translateY(${-store.ui.scrollY}px)`;
@@ -107,6 +112,16 @@ export function renderTrackHeaders(root, store, L, cmds, menu = null, { fold } =
       const flag = b.dataset.flag;
       cmds.setTrackFlag(track.id, flag, !track[flag]);
     } else {
+      /*
+       * Double-click to rename, counted per LANE rather than per element: the
+       * first click makes the lane active, which redraws every header, so the
+       * second click lands on a new element and the browser never fires
+       * `dblclick`. Renaming only ever worked on the lane that was already active.
+       */
+      const now = performance.now();
+      const again = lastClick && lastClick.id === track.id && now - lastClick.at < 450 && e.target.closest('.th__name');
+      lastClick = again ? null : { id: track.id, at: now };
+      if (again) { startRename(track.id); return; }
       store.setRT({ activeTrack: track.id });
     }
   };
@@ -115,28 +130,46 @@ export function renderTrackHeaders(root, store, L, cmds, menu = null, { fold } =
     const name = e.target.closest('.th__name');
     const row = e.target.closest('.th');
     if (!name || !row) return;
-    const track = store.doc.tracks.find(t => t.id === row.dataset.track);
-    if (!track) return;
+    startRename(row.dataset.track);
+  };
+
+  /*
+   * The rename box. It survives the headers being redrawn (selecting the lane,
+   * playback, an edit elsewhere): a redraw used to wipe it, which is also why a
+   * double-click on a lane that was not yet selected never managed to rename it.
+   * `renaming` holds what has been typed so far; the box is put back after every redraw.
+   */
+  function startRename(trackId, typed = null) {
+    if (root.querySelector('.th__rename')) return;
+    const name = root.querySelector(`.th[data-track="${CSS.escape(trackId)}"] .th__name`);
+    const track = store.doc.tracks.find(t => t.id === trackId);
+    if (!name || !track) { renaming = null; return; }
     const input = document.createElement('input');
     input.className = 'th__rename';
-    input.value = track.name;
+    input.value = typed ?? track.name;
     input.setAttribute('aria-label', 'Lane name');
     name.replaceWith(input);
-    input.focus(); input.select();
+    input.focus();
+    if (typed == null) input.select(); else input.setSelectionRange(input.value.length, input.value.length);
+    renaming = { id: trackId, value: input.value };
     let done = false;
     const finish = (keep) => {
       if (done) return; done = true;
+      renaming = null;
       const v = input.value.trim();
       if (keep && v && v !== track.name) cmds.renameTrack(track.id, v.slice(0, 40));
       else renderTrackHeaders(root, store, L, cmds, menu, { fold });
     };
+    input.addEventListener('input', () => { if (renaming && !done) renaming.value = input.value; });
     input.addEventListener('keydown', (ev) => {
       ev.stopPropagation();
       if (ev.key === 'Enter') finish(true);
       if (ev.key === 'Escape') finish(false);
     });
-    input.addEventListener('blur', () => finish(true));
-  };
+    // Losing focus because the headers are being redrawn is not "done".
+    input.addEventListener('blur', () => { if (!redrawing) finish(true); });
+  }
+  if (renaming) startRename(renaming.id, renaming.value);
 
   /* Drag a lane's grip up or down to reorder it among lanes of its kind. */
   root.onpointerdown = (e) => {
