@@ -402,10 +402,13 @@ await check('add an animation, close: it is kept', async () => {
 });
 
 await check('Clip Inbox lists a new recording; Open in editor and Quick short use it where it is', async () => {
-  const { mkdir, copyFile } = await import('node:fs/promises');
+  const { mkdir, copyFile, utimes } = await import('node:fs/promises');
   const dir = `/tmp/gc-inbox-${process.pid}`;
   await mkdir(`${dir}/Game`, { recursive: true });
   await copyFile(`${ROOT}/qa/fixtures/test-clip.mp4`, `${dir}/Game/clutch 2026-10-20.mp4`);
+  // A copy keeps the original's modified time on Windows; a new recording is new.
+  const soon = new Date(Date.now() + 60_000);
+  await utimes(`${dir}/Game/clutch 2026-10-20.mp4`, soon, soon);
   const { app, w } = await open();
   const listed = await w.evaluate(async (d) => { await window.gamecut.inbox.addPath(d); await window.gc.inbox.refresh(); return window.gc.inbox.data.items.map(i => ({ name: i.name, isNew: i.isNew })); }, dir);
   if (!listed.some(i => i.name === 'clutch 2026-10-20.mp4' && i.isNew)) { await close(app); throw new Error(JSON.stringify(listed)); }
