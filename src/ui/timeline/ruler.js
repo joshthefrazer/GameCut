@@ -92,11 +92,18 @@ export function drawRuler(ctx, store, L) {
  * The In / Out range (I and O): a band on the ruler, a faint wash down the
  * lanes, and an "IN" / "OUT" flag at each end. Only one end set shows that end.
  */
+const accCache = { v: '', at: 0 };
 function drawRange(ctx, store, L) {
   const r = store.doc.range;
   if (!r || (r.in == null && r.out == null)) return;
   const { RH, W } = L;
-  const acc = getComputedStyle(document.documentElement).getPropertyValue('--acc').trim() || '#c6ff3d';
+  // Read the accent colour once a second, not on every repaint (that forces a style lookup each frame).
+  const now = performance.now();
+  if (!accCache.v || now - accCache.at > 1000) {
+    accCache.v = getComputedStyle(document.documentElement).getPropertyValue('--acc').trim() || '#c6ff3d';
+    accCache.at = now;
+  }
+  const acc = accCache.v;
   const xi = r.in != null ? L.t2x(r.in) : null;
   const xo = r.out != null ? L.t2x(r.out) : null;
   const a = Math.max(-2, xi ?? -2), b = Math.min(W + 2, xo ?? W + 2);

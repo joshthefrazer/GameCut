@@ -453,6 +453,21 @@ export function initContextMenu({ store, cmds, playback }) {
     if (store.doc.markers.length) {
       items.push({ label: `Clear all markers (${store.doc.markers.length})`, on: () => cmds.clearMarkers() });
     }
+    // In and Out, right where you clicked (I / O do the same at the playhead).
+    const tools = window.gc?.editTools;
+    if (tools) {
+      items.push({ sep: true });
+      items.push({ label: 'Mark In here', key: 'I', on: () => tools.setMark('in', t) });
+      items.push({ label: 'Mark Out here', key: 'O', on: () => tools.setMark('out', t) });
+      const r = store.doc.range;
+      if (r && (r.in != null || r.out != null)) {
+        if (tools.fullRange()) {
+          items.push({ label: 'Lift In to Out (leave the gap)', on: () => tools.removeRange(false) });
+          items.push({ label: 'Extract In to Out (close the gap)', on: () => tools.removeRange(true) });
+        }
+        items.push({ label: 'Clear In and Out', key: 'Alt+X', on: () => tools.clearMarks() });
+      }
+    }
     items.push({ sep: true });
     items.push({ label: 'Set beat 1 here', on: () => {
       store.doc.beatOffset = t;

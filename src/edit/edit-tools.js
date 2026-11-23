@@ -154,6 +154,10 @@ export function initEditTools({ store, cmds, history, playback }) {
 
   /* ── Shuttle: J / K / L ────────────────────────────────────── */
   let rate = 0, raf = 0, last = 0, chip = null;
+  // The shuttle's own exact position: the playhead snaps to whole frames, so adding a
+  // small step to it each screen refresh could round back to the same frame forever
+  // (J at 1× in a 30 fps project on a 60 Hz screen never moved).
+  let pos = 0, own = false;
   const showChip = () => {
     chip ||= (() => {
       const host = document.getElementById('previewViewport') || document.getElementById('previewPanel') || document.body;
@@ -178,12 +182,17 @@ export function initEditTools({ store, cmds, history, playback }) {
     playback.pause();
     cancelAnimationFrame(raf);
     last = performance.now();
+    pos = store.rt.playhead;
     const tick = (now) => {
       if (!rate) return;
       const dt = Math.min(0.1, (now - last) / 1000); last = now;
-      const t = store.rt.playhead + dt * rate;
-      if (t <= 0 || t >= store.rt.duration) { playback.seek(Math.max(0, Math.min(store.rt.duration, t))); stopShuttle(); return; }
-      playback.seek(t, { fromUser: false });
+      pos += dt * rate;
+      own = true;
+      try {
+        if (pos <= 0 || pos >= store.rt.duration) { playback.seek(Math.max(0, Math.min(store.rt.duration, pos))); own = false; stopShuttle(); return; }
+        // Only ask for a new picture when the frame actually changes.
+        if (Math.abs(q(pos) - store.rt.playhead) > 1e-6) playback.seek(pos, { fromUser: false });
+      } finally { own = false; }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -200,7 +209,13 @@ export function initEditTools({ store, cmds, history, playback }) {
     runShuttle();
   }
   // Anything else that starts or stops playback ends the shuttle.
-  store.on?.('rt', () => { if (rate === 1 && !store.rt.playing) { rate = 0; showChip(); } });
+  store.on?.('rt', () => {
+    if (rate === 1 && !store.rt.playing) { rate = 0; showChip(); }
+    // Play pressed (button or Space) during a fast or backwards shuttle: normal play wins.
+    if (rate !== 0 && rate !== 1 && store.rt.playing) stopShuttle();
+  });
+  // Dragging the playhead, a click on the ruler, Home / End… during a shuttle stops it.
+  store.on?.('playhead', () => { if (rate !== 0 && rate !== 1 && !own) stopShuttle(); });
 
   /* ── Go to a time ──────────────────────────────────────────── */
   /** "1:23", "83", "1:23.12" (frames after the dot), "1:02:03", "2m5s", "+2" / "-1.5" (from the playhead). */
