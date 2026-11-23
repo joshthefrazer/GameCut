@@ -187,6 +187,25 @@ await step('J K L: L plays, L again goes 2× (picture only), K stops, J goes bac
   if (Math.abs(f1 - (2 + fr)) > 1e-3 || Math.abs(f2 - (2 - fr)) > 1e-3) throw new Error(`frame step: ${f1}, ${f2}`);
 });
 
+await step('J at 1× moves in a 30 fps project; pressing Play during a 2× shuttle hands over to normal play', async () => {
+  await fresh(); await importFiles([CLIP]);
+  await ev(() => window.gc.cmds.setResolution({ fps: 30 }));
+  await playheadTo(3);
+  await keyAt('j');
+  await sleep(700);
+  const p = await ev(() => window.gc.store.rt.playhead);
+  await keyAt('k');
+  if (!(p < 2.6)) throw new Error('J at 1× did not move back: ' + p);
+  await keyAt('l', 1); await keyAt('l');
+  if ((await ev(() => window.gc.editTools.rate)) !== 2) throw new Error('not at 2×');
+  await ev(() => window.gc.playback.play());
+  await sleep(300);
+  const r = await ev(() => ({ rate: window.gc.editTools.rate, playing: window.gc.store.rt.playing }));
+  await ev(() => window.gc.playback.pause());
+  if (r.rate !== 0 || !r.playing) throw new Error('Play did not take over from the shuttle: ' + JSON.stringify(r));
+  await ev(() => window.gc.cmds.setResolution({ fps: 60 }));
+});
+
 await step('Alt+] trims the end of the clip to the playhead, Alt+[ the start', async () => {
   await fresh(); await importFiles([CLIP]);
   await keyAt('Alt+BracketRight', 4);
