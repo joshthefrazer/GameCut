@@ -15,6 +15,7 @@ import { buildKeysStrip } from './keys-strip.js';
 import { buildMotionPanel } from './motion-panel.js';
 import { EFFECTS } from '../../engine/layers/effects.js';
 import { buildAnimPanel } from './anim-panel.js';
+import { COLOR_KEYS, COLOR_PRESETS, BLEND_MODES, defaultColor, presetOf, colorActive } from '../../engine/layers/color.js';
 
 const KF_ICON = `<svg viewBox="0 0 24 24"><path d="M12 3 21 12 12 21 3 12z"/></svg>`;
 
@@ -242,6 +243,7 @@ export function initInspector({ store, cmds, comp, playback }) {
       gX.body.appendChild(kfRow(clip, 'Scale', 'transform.scale'));
       gX.body.appendChild(kfRow(clip, 'Rotation', 'transform.rotation'));
       gX.body.appendChild(kfRow(clip, 'Opacity', 'transform.opacity'));
+      gX.body.appendChild(blendRow(clip));
 
       const reset = document.createElement('button');
       reset.className = 'fontdrop';
@@ -256,6 +258,7 @@ export function initInspector({ store, cmds, comp, playback }) {
       root.appendChild(gX);
     }
 
+    if (clip.type === 'video' || clip.type === 'image') buildColour(clip);
     if (clip.type === 'video' || clip.type === 'image') buildLook(clip);
     if (clip.type === 'video') buildFraming(clip);
     if (clip.crop) buildCrop(clip);
@@ -499,6 +502,104 @@ export function initInspector({ store, cmds, comp, playback }) {
       if (l.fx && same(fx, l.fx)) return l.id;
     }
     return null;
+  }
+
+  /**
+   * Colour: six sliders with 0 in the middle, and preset tiles you pick and
+   * then adjust (src/engine/layers/color.js). Compare (before / after) shows
+   * the footage without it.
+   */
+  function buildColour(clip) {
+    const g = group('Colour', true);
+    g.dataset.group = 'colour';
+    const now = presetOf(clip.color);
+    const tiles = document.createElement('div');
+    tiles.className = 'ctiles';
+    for (const p of COLOR_PRESETS) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'ctile' + (p.id === now ? ' is-on' : '');
+      b.dataset.colour = p.id;
+      b.title = p.note;
+      b.innerHTML = `<i class="ctile__sw ctile__sw--${p.id}"></i><span></span>`;
+      b.querySelector('span').textContent = p.name;
+      b.addEventListener('click', () => {
+        cmds.setClipProp(clip.id, 'color', p.id === 'none' ? null : { ...p.c }, { merge: false, label: `Colour: ${p.name}` });
+        comp.render();
+        rerender();
+      });
+      tiles.appendChild(b);
+    }
+    g.body.appendChild(tiles);
+
+    // "Film fade", not "Fade": the Timing tab already has a Fade (in / out) row.
+    const LABEL = { brightness: 'Brightness', contrast: 'Contrast', saturation: 'Saturation', warmth: 'Warmth', tint: 'Tint', fade: 'Film fade' };
+    const TIP = {
+      brightness: 'Lighter or darker overall',
+      contrast: 'More or less difference between light and dark',
+      saturation: 'More or less colour. All the way left is black and white',
+      warmth: 'Right is warmer (orange), left is cooler (blue)',
+      tint: 'Right is pinker (magenta), left is greener',
+      fade: 'Lifts the blacks to a soft grey, like old film',
+    };
+    const ensure = () => (clip.color ||= defaultColor());
+    for (const k of COLOR_KEYS) {
+      let before = clip.color?.[k] ?? 0;
+      const el = slider({
+        value: before, min: k === 'fade' ? 0 : -1, max: 1, step: 0.01, reset: 0,
+        format: (v) => (v > 0 ? '+' : '') + Math.round(v * 100),
+        onStart: () => { before = clip.color?.[k] ?? 0; },
+        onInput: (v) => { ensure()[k] = v; comp.render(); },
+        onCommit: (v) => {
+          ensure()[k] = before;      // give undo a real "before" (see fxSlide)
+          cmds.setClipProp(clip.id, `color.${k}`, v, { merge: false, label: LABEL[k] });
+          comp.render();
+          for (const t of tiles.children) t.classList.toggle('is-on', t.dataset.colour === presetOf(clip.color));
+        },
+      });
+      el.title = TIP[k] + ' · double-click to reset';
+      el.dataset.colourKey = k;
+      g.body.appendChild(row(LABEL[k], el));
+    }
+    const help = document.createElement('p');
+    help.className = 'insp__help';
+    help.textContent = 'Pick a starting point, then adjust. Double-click a slider to put it back. Copy look (Ctrl+Alt+C) copies the colour too.';
+    g.body.appendChild(help);
+    if (colorActive(clip.color)) {
+      const off = document.createElement('button');
+      off.className = 'fontdrop';
+      off.id = 'btnColourReset';
+      off.textContent = 'Reset colour';
+      off.addEventListener('click', () => {
+        cmds.setClipProp(clip.id, 'color', null, { merge: false, label: 'Reset colour' });
+        comp.render(); rerender();
+      });
+      g.body.appendChild(off);
+    }
+    root.appendChild(g);
+  }
+
+  /** Blend: how this layer mixes with what is under it. */
+  function blendRow(clip) {
+    const sel = document.createElement('select');
+    sel.className = 'sel';
+    sel.id = 'blendMode';
+    sel.title = 'How this layer mixes with what is underneath it';
+    for (const b of BLEND_MODES) {
+      const o = document.createElement('option');
+      o.value = b.id; o.textContent = b.name; o.title = b.note;
+      o.selected = (clip.blend || 'normal') === b.id;
+      sel.appendChild(o);
+    }
+    const note = () => { sel.title = BLEND_MODES.find(b => b.id === sel.value)?.note || ''; };
+    note();
+    sel.addEventListener('change', () => {
+      cmds.setClipProp(clip.id, 'blend', sel.value === 'normal' ? null : sel.value, { merge: false, label: 'Blend: ' + sel.selectedOptions[0].textContent });
+      note();
+      comp.render();
+      sel.blur();
+    });
+    return row('Blend', sel);
   }
 
   function buildLook(clip) {

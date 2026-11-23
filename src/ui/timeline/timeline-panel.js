@@ -292,7 +292,7 @@ export function initTimeline({ store, cmds, history, playback, comp }) {
     ctx.fillText('Drop your recordings here', cx, cy - 10);
     ctx.globalAlpha = .78;
     ctx.font = '12px system-ui, -apple-system, sans-serif';
-    ctx.fillText('or press I to import — your first clip goes straight onto the timeline', cx, cy + 10);
+    ctx.fillText('or press Ctrl+I to import — your first clip goes straight onto the timeline', cx, cy + 10);
     ctx.font = '11.5px system-ui, -apple-system, sans-serif';
     ctx.globalAlpha = .6;
     ctx.fillText('Ctrl+K finds any tool · ? shows what everything does', cx, cy + 30);

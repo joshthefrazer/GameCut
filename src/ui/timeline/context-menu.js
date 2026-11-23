@@ -307,7 +307,7 @@ export function initContextMenu({ store, cmds, playback }) {
     }
     items.push({ label: 'Add a marker here', key: 'M', on: () => cmds.addMarker(t) });
     items.push({ sep: true });
-    items.push({ label: 'Import media…', key: 'I', on: () => document.getElementById('filePicker').click() });
+    items.push({ label: 'Import media…', key: 'Ctrl+I', on: () => document.getElementById('filePicker').click() });
     items.push({ label: 'Select every clip', key: 'Ctrl+A', on: () => store.select(cmds.selectableIds()) });
     show(x, y, items);
   }

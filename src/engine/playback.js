@@ -49,6 +49,9 @@ export class Playback {
     if (this.store.rt.playing) return;
     const rt = this.store.rt;
     if (rt.playhead >= this.store.rt.duration - 1e-3) rt.playhead = 0;
+    // Looping In to Out and outside it: start at In.
+    const r = this.loopRange();
+    if (r && (rt.playhead < r.in - 1e-3 || rt.playhead >= r.out - 1e-3)) rt.playhead = r.in;
 
     const ctx = audioCtx();
     if (ctx.state === 'suspended') ctx.resume();
@@ -72,6 +75,14 @@ export class Playback {
   }
 
   toggle() { this.store.rt.playing ? this.pause() : this.play(); }
+
+  /** In to Out, when looping and both marks are set; otherwise null. */
+  loopRange() {
+    if (!this.store.rt.loop) return null;
+    const r = this.store.doc.range;
+    if (!r || r.in == null || r.out == null || !(r.out - r.in > 1 / (this.store.doc.fps || 30))) return null;
+    return { in: r.in, out: Math.min(r.out, this.store.rt.duration) };
+  }
 
   /** Move the playhead; quantized to the frame grid. */
   seek(t, { fromUser = true } = {}) {
@@ -114,10 +125,13 @@ export class Playback {
     // held back by the same amount to stay with what you hear.
     const lat = Math.min(0.5, Math.max(0, ctx.outputLatency || ctx.baseLatency || 0));
     const t = Math.max(this.anchorTime, this.anchorTime + (ctx.currentTime - this.anchorCtx) - lat);
-    const end = this.store.rt.duration;
+    // Loop with In and Out both set (I / O) plays just that part, over and over.
+    const r = this.loopRange();
+    const end = r && this.anchorTime < r.out ? r.out : this.store.rt.duration;
+    const from = r ? r.in : 0;
 
     if (t >= end) {
-      if (this.store.rt.loop) { this.seek(0); this.audio.start(0); this.anchorCtx = ctx.currentTime; this.anchorTime = 0; }
+      if (this.store.rt.loop) { this.seek(from); this.audio.start(from); this.anchorCtx = ctx.currentTime; this.anchorTime = from; }
       else { this.seek(end); this.pause(); return; }
     } else {
       this.store.rt.playhead = t;

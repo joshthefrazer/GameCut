@@ -18,7 +18,7 @@ export const TIPS = {
   btnUndo:      { t: 'Undo',            d: 'Step back one change. Everything you do is undoable, so try things.', k: 'Ctrl+Z' },
   btnRedo:      { t: 'Redo',            d: 'Put back a change you just undid.', k: 'Ctrl+Shift+Z' },
   btnHome:      { t: 'Projects',        d: 'Save this project and go back to the list of all your projects.' },
-  btnImport:    { t: 'Import media',    d: 'Bring video, music or images in from your computer. They land in the Media panel on the left — nothing is copied or moved, Strike just remembers where the files are.', k: 'I' },
+  btnImport:    { t: 'Import media',    d: 'Bring video, music or images in from your computer. They land in the Media panel on the left — nothing is copied or moved, Strike just remembers where the files are.', k: 'Ctrl+I' },
   btnExport:    { t: 'Export video',    d: 'Turn the timeline into a finished MP4 you can upload.' },
   saveChip:     { t: 'Save state',      d: 'Whether this project has unsaved changes. Strike saves on its own every half minute and again when you close the window — click here (or Ctrl+S) to save this second.', k: 'Ctrl+S' },
   verChip:      { t: 'Version and updates', d: 'Which version you are running. Click for updates, the log of everything that has changed, and a Check now button. New versions arrive on their own and wait until you install them.' },
@@ -44,7 +44,7 @@ export const TIPS = {
   btnPlay:      { t: 'Play / pause',    d: 'Play the timeline from the playhead. The button turns red while it is running.', k: 'Space' },
   btnNextFrame: { t: 'Forward one frame', d: 'Move the playhead forward a single frame. Shift + arrow jumps a second.', k: '→' },
   btnEnd:       { t: 'Go to end',       d: 'Jump the playhead to the end of the last clip.', k: 'End' },
-  btnLoop:      { t: 'Loop',            d: 'Start over automatically when playback reaches the end — handy for matching a cut to music.', k: 'L' },
+  btnLoop:      { t: 'Loop',            d: 'Start over automatically when playback reaches the end — handy for matching a cut to music. With In and Out set (I and O) it loops just that part.', k: 'Shift+L' },
   // No key: M is "add a marker", and has been since markers existed. This
   // used to promise M here as well, so pressing it to silence the preview
   // dropped a flag on the ruler instead.

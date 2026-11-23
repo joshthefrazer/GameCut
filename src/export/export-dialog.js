@@ -9,6 +9,7 @@ import { soundReport } from '../audio/graph.js';
 import { assets } from '../media/asset-store.js';
 import { pendingAudio, onAudioJobs, prioritizeAudio } from '../media/audio-jobs.js';
 import { restoreAssetAudio } from '../media/importer.js';
+import { rangedStore, rangeOf } from './range-doc.js';
 import {
   sourceBitrate, bitrateForPreset, matchSource, clampBitrate, fmtMbps,
   MIN_CUSTOM_BITRATE, MAX_CUSTOM_BITRATE,
@@ -143,6 +144,10 @@ export function initExport({ store, playback }) {
    */
   let custom = { vBitrate: 0, aBitrate: 320_000, fps: 0, scale: 1 };
   let exact = false;
+  /** Export only In to Out (I / O on the timeline). Asked again each time a range exists. */
+  let onlyRange = false;
+  /** The store to render: the whole edit, or a view of just In to Out. */
+  const source = () => (onlyRange && rangeOf(store) ? rangedStore(store) : null) || store;
   /** Extra versions to make in other shapes, by aspect: '9:16', '1:1', '16:9'. */
   let extras = new Set();
 
@@ -397,6 +402,12 @@ export function initExport({ store, playback }) {
 
         <div class="xp-warns" id="xpWarns">${warningsHtml(sup)}</div>
 
+        ${rangeOf(store) ? (() => { const r = rangeOf(store); return `
+        <label class="xp-extra__opt xp-range" id="xpRangeRow">
+          <input type="checkbox" id="xpRange" ${onlyRange ? 'checked' : ''}>
+          <span><b>Only In to Out</b><span>${timecode(r.in, store.doc.fps)} → ${timecode(r.out, store.doc.fps)} · ${r.span.toFixed(1)} s of the ${timecode(dur, store.doc.fps)} edit</span></span>
+        </label>`; })() : ''}
+
         <div class="xp-list" id="xpList">
           ${choicesFor(store).map(choice => {
             const p = EXPORT_PRESETS.find(x => x.id === choice.id);
@@ -458,6 +469,7 @@ export function initExport({ store, playback }) {
       paintEncoderNote();
     }));
     root.querySelector('#xpExact')?.addEventListener('change', (e) => { exact = e.target.checked; });
+    root.querySelector('#xpRange')?.addEventListener('change', (e) => { onlyRange = e.target.checked; });
     root.querySelectorAll('[data-extra]').forEach(el => el.addEventListener('change', () => {
       if (el.checked) extras.add(el.dataset.extra); else extras.delete(el.dataset.extra);
     }));
@@ -659,8 +671,8 @@ export function initExport({ store, playback }) {
   }
 
   /** The edit, re-shaped for another aspect — a view of the store, not a copy of it. */
-  function shapedStore(t) {
-    const doc = structuredClone(store.doc);
+  function shapedStore(t, base = store) {
+    const doc = structuredClone(base.doc);
     doc.width = t.w; doc.height = t.h; doc.aspect = t.ar;
     const portraitOrSquare = t.h >= t.w;
     for (const tr of doc.tracks) for (const c of tr.clips) {
@@ -669,7 +681,7 @@ export function initExport({ store, playback }) {
       const wide = a && a.width > a.height * 1.2;
       if (portraitOrSquare && wide && (c.fit || 'cover') === 'cover' && !c.crop && !c.keys?.['transform.x']) c.fit = 'blur';
     }
-    const shadow = Object.create(store);
+    const shadow = Object.create(base);
     shadow.doc = doc;
     return shadow;
   }
@@ -677,7 +689,7 @@ export function initExport({ store, playback }) {
   function suggestedName() {
     const stamp = new Date().toISOString().slice(0, 10);
     const safe = (store.doc.name || 'Strike').replace(/[^\w\- ]+/g, '').trim() || 'Strike';
-    return `${safe} ${stamp}.mp4`;
+    return `${safe} ${stamp}${onlyRange && rangeOf(store) ? ' (part)' : ''}.mp4`;
   }
 
   /**
@@ -764,9 +776,10 @@ export function initExport({ store, playback }) {
     let encoder = null;
     let warnings = [];
 
+    const src = source();
     try {
       const result = await renderToMp4({
-        store, width: set.w, height: set.h, fps: set.fps,
+        store: src, width: set.w, height: set.h, fps: set.fps,
         vBitrate: set.asked, aBitrate: set.aBitrate,
         frameAccuracy: exact ? 'exact' : 'fast',
         sink: dest.sink,
@@ -832,7 +845,7 @@ export function initExport({ store, playback }) {
         if (ph) ph.textContent = `Making the ${t.suffix} version (${i + 1} of ${targets.length})`;
         try {
           const r = await renderToMp4({
-            store: shapedStore(t), width: t.w, height: t.h, fps: set.fps,
+            store: shapedStore(t, src), width: t.w, height: t.h, fps: set.fps,
             vBitrate: Math.round(set.asked * (t.w * t.h) / (set.w * set.h)), aBitrate: set.aBitrate,
             frameAccuracy: exact ? 'exact' : 'fast',
             sink: { write: (chunk, position) => xs.write(d.token, chunk, position) },

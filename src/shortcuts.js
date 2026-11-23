@@ -12,6 +12,9 @@ import { bus } from './core/events.js';
 const TEXT_TYPES = new Set(['', 'text', 'search', 'email', 'number', 'password', 'url', 'tel',
   'date', 'time', 'datetime-local', 'month', 'week']);
 
+/** The keyboard editing tools (src/edit/edit-tools.js), once main.js has made them. */
+const tools = () => window.gc?.editTools || null;
+
 const typing = () => {
   const el = document.activeElement;
   if (!el) return false;
@@ -83,6 +86,9 @@ export function initShortcuts({ store, cmds, history, playback, timeline, previe
     if (mod && e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); bus.emit('frame:save'); return; }
     if (mod && e.key.toLowerCase() === 'h') { e.preventDefault(); bus.emit('history:open'); return; }
     if (mod && e.key === ',') { e.preventDefault(); bus.emit('settings:open'); return; }
+    // Import moved to Ctrl+I in 3.0: I and O now mark In and Out, as in other editors.
+    if (mod && e.key.toLowerCase() === 'i') { e.preventDefault(); document.getElementById('filePicker').click(); return; }
+    if (mod && e.key.toLowerCase() === 'g') { e.preventDefault(); tools()?.openGoTo(); return; }
     if (mod && e.key.toLowerCase() === 'a') {
       e.preventDefault();
       // Clips on a locked track (or locked themselves) are not yours to edit,
@@ -92,9 +98,28 @@ export function initShortcuts({ store, cmds, history, playback, timeline, previe
     }
     if (mod) return;
 
+    // Alt + [ / ]: trim the clip at the playhead (before [ and ] jump between markers).
+    if (e.altKey && (e.key === '[' || e.key === ']' || e.code === 'BracketLeft' || e.code === 'BracketRight')) {
+      e.preventDefault();
+      tools()?.trimToPlayhead(e.code === 'BracketLeft' || e.key === '[' ? 'in' : 'out');
+      return;
+    }
+    if (e.altKey && e.code === 'KeyX') { e.preventDefault(); tools()?.clearMarks(); return; }
+    // Alt + , / . : slip (Shift for ten frames).
+    if (e.altKey && (e.code === 'Comma' || e.code === 'Period')) {
+      e.preventDefault();
+      tools()?.slip((e.code === 'Comma' ? -1 : 1) * (e.shiftKey ? 10 : 1));
+      return;
+    }
+
     switch (e.key) {
       case ' ':
-        e.preventDefault(); playback.toggle(); break;
+        e.preventDefault();
+        if (tools()?.rate && tools().rate !== 1) { tools().stopShuttle(); break; }
+        tools()?.stopShuttle();
+        playback.toggle(); break;
+      case ',': e.preventDefault(); tools()?.stopShuttle(); playback.step(-1); break;
+      case '.': e.preventDefault(); tools()?.stopShuttle(); playback.step(1); break;
       /* Enter on a selected title starts typing on it, the way renaming works
          in every file manager. `typing()` above means this can never fire while
          the field it opens has focus. */
@@ -158,13 +183,20 @@ export function initShortcuts({ store, cmds, history, playback, timeline, previe
         else if (k === 't') { e.preventDefault(); cmds.addTextClip(store.rt.playhead); }
         else if (k === 'c') { e.preventDefault(); preview?.crop?.toggle?.(); }
         else if (k === 'm') { cmds.addMarker(store.rt.playhead); }
-        else if (k === 'l') { document.getElementById('btnLoop').click(); }
+        // J K L shuttle; loop moved to Shift+L.
+        else if (k === 'l' && e.shiftKey) { document.getElementById('btnLoop').click(); }
+        else if (k === 'l') { e.preventDefault(); tools()?.shuttle(1); }
+        else if (k === 'j') { e.preventDefault(); tools()?.shuttle(-1); }
+        else if (k === 'k') { e.preventDefault(); tools()?.shuttle(0); }
+        else if (k === 'i' && e.shiftKey) { e.preventDefault(); tools()?.goMark('in'); }
+        else if (k === 'o' && e.shiftKey) { e.preventDefault(); tools()?.goMark('out'); }
+        else if (k === 'i') { e.preventDefault(); tools()?.setMark('in'); }
+        else if (k === 'o') { e.preventDefault(); tools()?.setMark('out'); }
         else if (k === 'n') { document.getElementById('btnMagnet').click(); }
         else if (k === 'b' && e.shiftKey) { document.getElementById('btnBeatGrid').click(); }
         else if (k === 'b') { bus.emit('timeline:tool', store.ui.tool === 'razor' ? 'select' : 'razor'); }
         else if (k === 'v') { bus.emit('timeline:tool', 'select'); }
         else if (k === 'h') { bus.emit('timeline:tool', store.ui.tool === 'hand' ? 'select' : 'hand'); }
-        else if (k === 'i') { e.preventDefault(); document.getElementById('filePicker').click(); }
         else if (e.key === ']') { window.gc?.markerNav?.jumpMarker(1); }
         else if (e.key === '[') { window.gc?.markerNav?.jumpMarker(-1); }
         else if (k === 'q') { e.preventDefault(); bus.emit('quicklook'); }

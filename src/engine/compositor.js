@@ -6,6 +6,7 @@ import { transitionAt, transitionPlan } from './transitions.js';
 import { visualMotion, rad } from './motion.js';
 import { applyEffect } from './layers/effects.js';
 import { drawAnimClip, animBox } from './layers/anim-layer.js';
+import { blendOp, colorFilter } from './layers/color.js';
 
 /** Preview renders at most this wide; export re-runs the same code at full res. */
 const PREVIEW_MAX_W = 2560;
@@ -401,12 +402,29 @@ export class Compositor {
       if (clip.type === 'effect') { if (!this.bypass) applyEffect(ctx, ctx.canvas, clip, t, W, H); continue; }
       if (clip.type === 'text') {
         if (this.bypass) clip = { ...clip, text: { ...clip.text, anim: 'none', animOut: 'none', animLoop: 'none' } };
-        drawTextClip(ctx, clip, W, H, mt, alpha);
+        const c = clip;
+        this.#styled(ctx, c, () => drawTextClip(ctx, c, W, H, mt, alpha));
         continue;
       }
       if (this.bypass && clip.fx) clip = { ...clip, fx: null };
-      this.#drawMoving(ctx, clip, src, W, H, t, mt, alpha);
+      const c = clip;
+      this.#styled(ctx, c, () => this.#drawMoving(ctx, c, src, W, H, t, mt, alpha));
     }
+  }
+
+  /**
+   * A layer's colour and blend mode (src/engine/layers/color.js), around
+   * whatever paints it. Compare's "before" side (`bypass`) shows neither.
+   */
+  #styled(ctx, clip, paint) {
+    if (this.bypass) { paint(); return; }
+    const op = blendOp(clip);
+    const f = (clip.type === 'video' || clip.type === 'image') ? colorFilter(clip.color) : '';
+    if (!op && !f) { paint(); return; }
+    ctx.save();
+    if (op) ctx.globalCompositeOperation = op;
+    if (f) ctx.filter = f;
+    try { paint(); } finally { ctx.restore(); }
   }
 
   /**
@@ -436,7 +454,8 @@ export class Compositor {
       ctx.rect(b.cx - b.w / 2 - 2, -H, (b.w + 4) * Math.max(0, mv.wipe), H * 3);
       ctx.clip();
     }
-    if (mv.hue != null) ctx.filter = `hue-rotate(${Math.round(mv.hue)}deg)`;
+    // Keep the layer's own colour filter, if it has one, after the motion's hue turn.
+    if (mv.hue != null) ctx.filter = `hue-rotate(${Math.round(mv.hue)}deg)` + (ctx.filter && ctx.filter !== 'none' ? ' ' + ctx.filter : '');
     paint(a);
     ctx.restore();
   }
@@ -481,7 +500,7 @@ export class Compositor {
     if (plan.under > 0.001) {
       ctx.save();
       if (plan.udx || plan.udy) ctx.translate(plan.udx, plan.udy);
-      drawVisualClip(ctx, outgoing.clip, outgoing.src, W, H, t, outgoing.alpha * plan.under);
+      this.#styled(ctx, outgoing.clip, () => drawVisualClip(ctx, outgoing.clip, outgoing.src, W, H, t, outgoing.alpha * plan.under));
       ctx.restore();
     }
     // At the exact middle of a dip neither side is drawn, so the background
@@ -490,7 +509,7 @@ export class Compositor {
     if (plan.over <= 0.001) return;
     ctx.save();
     if (plan.dx || plan.dy) ctx.translate(plan.dx, plan.dy);
-    drawVisualClip(ctx, incoming.clip, incoming.src, W, H, t, incoming.alpha * plan.over);
+    this.#styled(ctx, incoming.clip, () => drawVisualClip(ctx, incoming.clip, incoming.src, W, H, t, incoming.alpha * plan.over));
     ctx.restore();
   }
 

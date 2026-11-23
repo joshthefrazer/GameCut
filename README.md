@@ -834,8 +834,14 @@ undo step. Ctrl+Z / Ctrl+Shift+Z.
 | click the `⋈` on a cut | pick a transition for that cut |
 | `N` | toggle snapping |
 | `B` | toggle beat grid |
-| `L` | loop |
-| `I` | import |
+| `Shift+L` | loop (In to Out when both are set) |
+| `Ctrl+I` | import |
+| `I` `O` | mark In / Out · `Shift+I` `Shift+O` jump to them · `Alt+X` clear |
+| `J` `K` `L` | play backwards / stop / play forwards (press J or L again for faster) |
+| `,` `.` | one frame back / forward |
+| `Alt+[` `Alt+]` | trim the clip at the playhead to the playhead |
+| `Alt+,` `Alt+.` | slip: an earlier / later part of the recording inside the clip |
+| `Ctrl+G` | go to a time you type |
 | `F` | fullscreen preview |
 | `Del` | delete selection |
 | `Ctrl+D` | duplicate |

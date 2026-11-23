@@ -25,6 +25,7 @@
 <link rel="stylesheet" href="./styles/motion.css">
 <link rel="stylesheet" href="./styles/overhaul.css">
 <link rel="stylesheet" href="./styles/strike.css">
+<link rel="stylesheet" href="./styles/components/tools.css">
 </head>
 <body>
 <div class="aurora" aria-hidden="true"></div>
@@ -132,7 +133,7 @@
       </button>
       <button class="chip chip--ver" id="verChip" title="Version">v—</button>
       <span class="divider-v"></span>
-      <button class="btn btn--ghost" id="btnImport" title="Import media (I)">
+      <button class="btn btn--ghost" id="btnImport" title="Import media (Ctrl+I)">
         <svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
         Import
       </button>
@@ -256,7 +257,7 @@
             <button class="tbtn" id="btnNextFrame" title="Next frame (→)"><svg viewBox="0 0 24 24"><path d="M9 5l8 7-8 7z" fill="currentColor" stroke="none"/></svg></button>
             <button class="tbtn" id="btnEnd" title="Go to end (End)"><svg viewBox="0 0 24 24"><path d="M18 5v14"/><path d="M5 5l10 7-10 7z" fill="currentColor" stroke="none"/></svg></button>
             <span class="divider-v"></span>
-            <button class="tbtn" id="btnLoop" title="Loop playback (L)"><svg viewBox="0 0 24 24"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg></button>
+            <button class="tbtn" id="btnLoop" title="Loop playback (Shift+L). Loops In to Out when both are set"><svg viewBox="0 0 24 24"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg></button>
           </div>
           <div class="transport__right">
             <button class="tbtn" id="btnMute" title="Mute (M)"><svg viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><path d="M16 9a4 4 0 0 1 0 6"/><path d="M19 6.5a8 8 0 0 1 0 11"/></svg></button>

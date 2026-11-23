@@ -986,7 +986,7 @@ export function createCommands(store, history) {
         look.textStyle = structuredClone(style);
       }
       if (clip.type === 'effect') look.effect = structuredClone(clip.effect);
-      Object.assign(look, pick(clip, ['fx', 'motion', 'fit', 'crop', 'flipH', 'flipV']));
+      Object.assign(look, pick(clip, ['fx', 'motion', 'fit', 'crop', 'flipH', 'flipV', 'color', 'blend']));
       look.transform = pick(clip.transform || {}, ['x', 'y', 'scale', 'rotation', 'opacity']);
       lookClipboard = look;
       bus.emit('toast', { msg: `Copied the look of “${clip.name || clip.type}” — select clips and paste it (Ctrl+Alt+V)`, ms: 3200, key: 'look' });
@@ -1011,7 +1011,7 @@ export function createCommands(store, history) {
             if (textToText) c.text = { ...c.text, ...structuredClone(look.textStyle) };
             if (fxToFx) c.effect = structuredClone(look.effect);
             if (picToPic) {
-              for (const k of ['fx', 'fit', 'crop', 'flipH', 'flipV']) {
+              for (const k of ['fx', 'fit', 'crop', 'flipH', 'flipV', 'color', 'blend']) {
                 if (look[k] === undefined) delete c[k]; else c[k] = structuredClone(look[k]);
               }
             }

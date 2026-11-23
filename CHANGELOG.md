@@ -8,6 +8,45 @@ one.
 Write them for the person using GameCut, not for yourself: "you can drag the
 ends of a clip to trim it" rather than "added trim handles to clip-renderer".
 
+## 2.1.0
+
+The first Strike 3.0 update: editing tools you drive yourself, plus a lot of fixes.
+
+- **Colour** for any clip: brightness, contrast, saturation, warmth, tint and
+  film fade, with starting points you pick (Vivid, Punchy, Warm, Cool, Faded, Mono,
+  Dreamy) and then adjust. Picture tab → Colour. Compare shows before / after.
+- **Blend** next to Opacity: Screen for light leaks and flares, Multiply for
+  shadows, Overlay for textures, and more.
+- **In and Out**: I and O mark part of the edit. Loop it (Shift+L), export
+  just that part ("Only In to Out" in Export), or take it out with Lift or
+  Extract (Ctrl+K). Alt+X clears, Shift+I / Shift+O jump to them.
+- **J K L**: play backwards, stop, play forwards; press J or L again to go
+  faster. , and . step one frame.
+- **Trim to the playhead**: Alt+[ and Alt+]. **Slip**: Alt+, and Alt+. show an
+  earlier or later part of the recording inside a clip without moving it.
+- **Go to a time**: Ctrl+G, or click the time under the preview, and type
+  1:23, 83, 2m5s or +2.
+- **Subtitle files**: save captions as .srt or .vtt, or bring in an .srt you
+  already have (buttons in the Auto-captions box).
+- **Click to outline anything** in Crop → Smart: click a thing and Strike traces
+  its exact edge. ] and [ make the outline bigger or smaller, Ctrl+click adds a
+  missed bit, Alt+click takes one away. Uses a small optional download (14 MB,
+  once); without it, clicking still selects by colour.
+- **Find what stays still** finds whole panels now, not just their edges, and
+  never guesses names: pieces are numbered.
+- Keys that moved: **Import is Ctrl+I** and **Loop is Shift+L**. A card says so
+  the first time you open the editor.
+- Fixed: Compare showed the footage without effects on both sides.
+- Fixed: double-clicking a lane name only renamed the lane that was already
+  selected.
+- Fixed: making a smooth-editing copy of a 1440p or 4K clip stopped at about
+  80% and never finished. The same stall could freeze an export where a clip
+  runs to the very end of its recording.
+- Fixed: an export whose file name was in use is saved as "name (2).mp4"
+  instead of being thrown away.
+- Smart Zoom, the highlight reel, find-the-beat, auto-vertical and stabilize
+  were removed: Strike 3.0 is about tools you control.
+
 ## 2.0.5
 
 Faster exports.

@@ -323,6 +323,9 @@ export function initCaptions({ store, cmds, history }) {
           <div class="capd__status" id="capStatus" aria-live="polite"></div>
         </div>
         <div class="capd__foot">
+          <button class="btn btn--ghost btn--sm" data-capfile="import" title="Already have subtitles? Lay an .srt or .vtt file down on the Captions lane, in the look picked above">Bring in .srt / .vtt</button>
+          <button class="btn btn--ghost btn--sm" data-capfile="save" title="Save the captions as an .srt file, for YouTube and other sites that take subtitle files">Save as .srt</button>
+          <span style="flex:1"></span>
           <button class="btn btn--ghost" data-close>Cancel</button>
           <button class="btn btn--primary" id="btnCapGo" ${api ? '' : 'disabled'}>${st?.ready ? 'Make captions' : 'Download & make captions'}</button>
         </div>
@@ -391,6 +394,11 @@ export function initCaptions({ store, cmds, history }) {
     const l = e.target.closest('[data-look]');
     if (l) { look = l.dataset.look; for (const b of el.querySelectorAll('[data-look]')) b.classList.toggle('is-on', b === l); return; }
     if (e.target.closest('#btnCapGo')) go();
+    const f = e.target.closest('[data-capfile]');
+    if (f && !running) {
+      if (f.dataset.capfile === 'import') { el.hidden = true; bus.emit('captions:file', { action: 'import', look }); }
+      else bus.emit('captions:file', { action: 'save' });
+    }
   });
   el.addEventListener('change', (e) => {
     if (e.target.id === 'capKeys') opts.keywords = e.target.checked;

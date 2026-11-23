@@ -81,8 +81,47 @@ export function drawRuler(ctx, store, L) {
     ctx.fillRect(x - .5, RH - 12, 1, L.H - RH + 12);
   }
 
+  drawRange(ctx, store, L);
+
   ctx.fillStyle = TH.edge;
   ctx.fillRect(0, RH - 1, W, 1);
+  ctx.restore();
+}
+
+/**
+ * The In / Out range (I and O): a band on the ruler, a faint wash down the
+ * lanes, and an "IN" / "OUT" flag at each end. Only one end set shows that end.
+ */
+function drawRange(ctx, store, L) {
+  const r = store.doc.range;
+  if (!r || (r.in == null && r.out == null)) return;
+  const { RH, W } = L;
+  const acc = getComputedStyle(document.documentElement).getPropertyValue('--acc').trim() || '#c6ff3d';
+  const xi = r.in != null ? L.t2x(r.in) : null;
+  const xo = r.out != null ? L.t2x(r.out) : null;
+  const a = Math.max(-2, xi ?? -2), b = Math.min(W + 2, xo ?? W + 2);
+  ctx.save();
+  if (b > a) {
+    ctx.globalAlpha = 0.22;
+    ctx.fillStyle = acc;
+    ctx.fillRect(a, 2, b - a, RH - 3);
+    ctx.globalAlpha = 0.06;
+    ctx.fillRect(a, RH, b - a, L.H - RH);
+  }
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = acc;
+  ctx.font = '700 9px ui-monospace, SFMono-Regular, Menlo, monospace';
+  ctx.textBaseline = 'top';
+  if (xi != null && xi > -10 && xi < W + 10) {
+    ctx.fillRect(Math.round(xi) - 1, 0, 2, L.H);
+    ctx.textAlign = 'left';
+    ctx.fillText('IN', Math.round(xi) + 3, 2);
+  }
+  if (xo != null && xo > -10 && xo < W + 10) {
+    ctx.fillRect(Math.round(xo) - 1, 0, 2, L.H);
+    ctx.textAlign = 'right';
+    ctx.fillText('OUT', Math.round(xo) - 3, 2);
+  }
   ctx.restore();
 }
 

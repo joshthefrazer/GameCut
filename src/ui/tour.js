@@ -11,7 +11,7 @@ import { bus } from '../core/events.js';
 const KEY = 'strike.tourDone';
 
 const STOPS = [
-  { sel: '#tabMedia', t: 'Bring in your clips', d: 'Drop recordings anywhere on the window, or press I. The first one goes straight onto the timeline.' },
+  { sel: '#tabMedia', t: 'Bring in your clips', d: 'Drop recordings anywhere on the window, or press Ctrl+I. The first one goes straight onto the timeline.' },
   { sel: '#tabAnim', t: 'Animations, ready to go', d: 'Kill counters, headshots, titles, subscribe buttons — 61 of them, each with its own sound. Click one to drop it at the playhead.' },
   { sel: '#timelinePanel', t: 'Cut on the timeline', d: 'S splits at the playhead, Delete removes, drag to move. Q shows any frame at full quality.' },
   { sel: '#modes', t: 'Edit · Library · Export', d: 'Library shows every animation big and moving. Export makes the video file when you are done.' },

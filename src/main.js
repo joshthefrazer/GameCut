@@ -33,6 +33,9 @@ import { initLayouts } from './ui/layouts/layouts-panel.js';
 import { initInbox } from './ui/inbox/inbox.js';
 import { initThumbnails } from './ui/thumbs/thumbnail-maker.js';
 import { initMarkerNav } from './edit/marker-nav.js';
+import { initEditTools } from './edit/edit-tools.js';
+import { initCaptionFiles } from './captions/caption-files.js';
+import { initWhatsNew } from './ui/whats-new.js';
 import { initVersions } from './ui/versions.js';
 import { initProxies } from './media/proxies.js';
 import { initCaptions } from './captions/captions.js';
@@ -81,6 +84,7 @@ const tour = initTour();
 const pads = initPads({ store, cmds, playback });
 const layouts = initLayouts({ store, cmds, comp });
 const markerNav = initMarkerNav({ store, playback });
+const editTools = initEditTools({ store, cmds, history, playback });
 const proxies = initProxies({ store, comp });
 const desktop = initDesktop({ history });
 const updates = initUpdates({ store });
@@ -111,6 +115,8 @@ initExport({ store, playback });
 const library = createLibrary({ store, comp, history });
 const versions = initVersions({ library });
 const captions = initCaptions({ store, cmds, history });
+const captionFiles = initCaptionFiles({ store, cmds, history });
+const whatsNew = initWhatsNew({ library });
 const qol = initQol({ store, cmds, history, playback, comp, timeline });
 
 /** Everything that has to be told the document was swapped out. */
@@ -313,4 +319,4 @@ home.show();
 // over "What are you making?". The first-run tour covers the keys instead.
 
 /* Expose for console poking during development. */
-Object.assign(window, { gc: { store, history, cmds, comp, playback, timeline, preview, transport, desktop, library, home, help, transitions, updates, assets, graphics, palette, markerNav, versions, proxies, captions, qol, animLib, tour, pads, layouts, inbox, thumbs } });
+Object.assign(window, { gc: { store, history, cmds, comp, playback, timeline, preview, transport, desktop, library, home, help, transitions, updates, assets, graphics, palette, markerNav, editTools, versions, proxies, captions, captionFiles, whatsNew, qol, animLib, tour, pads, layouts, inbox, thumbs } });
