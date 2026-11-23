@@ -114,6 +114,7 @@ export class Mp4FrameReader {
     });
     this.dec.configure(this.config);
     this.flushed = false;
+    this.flushDone = false;
   }
 
   /** Restart from the last keyframe at or before `us`. */
@@ -134,7 +135,24 @@ export class Mp4FrameReader {
   async #feed() {
     const S = this.samples;
     if (this.next >= S.length) {
-      if (!this.flushed) { this.flushed = true; await this.dec.flush(); }
+      /*
+       * End of the file: ask the decoder for its last frames, but do NOT wait
+       * for that here. A hardware decoder has only a few frames to lend, and
+       * the queue may be holding them (frames after the one asked for); a
+       * flush awaited at this point waited for frames that could only come
+       * once we let go of the ones we hold — forever. That hang is why a
+       * 1440p/4K "smooth preview copy" stopped at ~80% and never finished.
+       * `frameAt` keeps handing frames back while the flush completes.
+       */
+      if (!this.flushed) {
+        this.flushed = true;
+        this.flushDone = false;
+        const dec = this.dec;
+        dec.flush().then(
+          () => { if (dec === this.dec) this.flushDone = true; },
+          (e) => { if (dec === this.dec) { this.flushDone = true; if (dec.state !== 'closed') this.err = this.err || e; } },
+        ).finally(() => { const w = this.wake; this.wake = null; w?.(); });
+      }
       return false;
     }
     const first = this.next;
@@ -181,8 +199,10 @@ export class Mp4FrameReader {
       const more = await this.#feed();
       if (!more) {
         // Fed and flushed: whatever is in the queue is all there is.
-        await yieldNow();
-        break;
+        if (this.flushDone) { await yieldNow(); break; }
+        // Still flushing: let frames come back (the top of the loop returns used ones).
+        await this.#nextFrame();
+        continue;
       }
       // Let the decoder hand frames back.
       if (!this.queue.some(f => f.timestamp > us)) await this.#nextFrame();
