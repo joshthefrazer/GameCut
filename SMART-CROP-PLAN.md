@@ -65,10 +65,23 @@ Crop window (`src/ui/preview/crop-studio.js`), finders (`src/ui/preview/smart-cr
    * **Done in code (unrun):** `electron-main.cjs` has an `'outline-small'` entry in `MODELS`, pinned to an exact commit, with expected file sizes and SHA-256 for both
      big files. Downloads are verified: a wrong or damaged file is deleted and the user sees "The download was damaged, so it was thrown away. Please try again."
      Same `models:status / download / progress` calls as the speech model. Original saved in `_removed-for-3.0/before/electron-main.cjs`.
-   * **Not built yet:** the worker (Transformers.js `SamModel` + `AutoProcessor`, WebGPU with wasm fallback), the crop-window click UI (click = add, Alt-click = take away,
-     live outline, first-use download prompt), and the spike below.
-   * **Spike (needs running, only when you allow it):** encoder and decoder time on the Iris Xe (wasm vs WebGPU), memory use, overlap with the true object on ~30 game
-     screenshots you choose, and confirming the SAM calls in the vendored Transformers.js 4.3.1.
+   * **Built and tested overnight 2026-11-16** **[measured]** (commit "Smart crop: Click to outline anything"):
+     `src/ui/preview/outline-worker.js` (the model, off the main thread), `src/ui/preview/outline.js` (page side), crop window Smart tool:
+     a "Get Click to outline (14 MB, once)" button; then **click = outline**, **`]` / `[` = bigger / smaller outline** (the model offers part / whole),
+     **Ctrl+click = add a missed bit**, **Alt+click = take a bit away**, −/+ buttons on each piece. Without the model, click still selects by colour.
+   * **Spike results on your laptop** (`qa/outline.mjs`, synthetic pictures with a known answer, other tests running at the same time):
+
+     | Picture | First outline (IoU) | Best with `[`/`]` | Each click |
+     |---|---|---|---|
+     | textured round map | 0.97 | 0.97 | ~0.3 s |
+     | figure on a busy background (click on the body) | 0.54 (just the body) | **0.96** | ~0.25 s |
+     | interface bar with text | 0.92 | 0.92 | ~0.27 s |
+
+     "Looking at the picture" (once per crop-window opening) took **5–7 s** while other tests were running, so a quiet-machine measurement is still needed.
+     The **GPU was no faster** (similar look time, clicks ~2× slower: no fast 8-bit maths on WebGPU), so it runs on the CPU. Download 13.8 MB in 4–14 s;
+     a damaged file is caught and re-downloaded (tested).
+   * **Next for it:** measure "looking" on a quiet machine; if it stays above ~2 s, try the fp16 model on the GPU (bigger download) or look at the
+     picture in the background as soon as the crop window opens; test on ~30 real game screenshots you choose.
 5. **Find what stays still** (done, optional): numbered suggestions of things that don't move. Kept only as a convenience; it can be removed if you never use it.
 
 ### 3.2 Follow (the tracker) 2.0
@@ -92,7 +105,7 @@ WebCodecs frame service, never on the page's main thread.
 |---|---|---|---|
 | **SC-0** Done | no guessed names, "anything" wording | — | now |
 | **SC-1** | exact fast frames in a worker; per-frame, colour-aware tracking with confidence, auto-hold, Continue from here, cache | WebCodecs frame service | A/B |
-| **SC-2** | Click-select 2.0 (preview, tolerance, add/subtract, feather); **segmentation spike** (size, speed, licence) then "Click to outline anything" if it passes | frame service; model download path | B/D |
+| **SC-2** | ~~segmentation spike~~ and **"Click to outline anything" — done 2026-11-16**; still to do: Click-select 2.0 (preview, tolerance, feather) | frame service | B/D |
 | **SC-3** | vector masks, scale/rotation tracking, Stick to it, saved pieces | Engine 3 layer model, masks (T3), tracker port (T8) | D/E |
 
 ## 5. How we'll test it

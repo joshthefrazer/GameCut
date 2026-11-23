@@ -122,7 +122,7 @@ export function openCropStudio({ clip, source, store, cmds, comp, onApply }) {
   let zoom = 1, panX = 0, panY = 0, fitZoom = 1;
   let cursor = null;             // {x, y} in view pixels, for the brush ring
   // Click to outline. state: 'unknown' | 'absent' (not downloaded) | 'starting' | 'ready' | 'error' | 'none' (no desktop app)
-  const ol = { state: 'unknown', img: null, busy: false, last: null, device: null, lookMs: 0, closed: false };
+  const ol = { state: 'unknown', img: null, busy: false, last: null, device: null, lookMs: 0, closed: false, pending: null };
 
   /**
    * Which way the very first stroke goes decides where the mask starts.
@@ -670,6 +670,13 @@ export function openCropStudio({ clip, source, store, cmds, comp, onApply }) {
       }
       if (hitItem && !e.altKey) { hitItem.on = !hitItem.on; paintFound(); paint(); return; }
       if (ol.state === 'ready' && ol.img) { outlineClick(u, v, 'new'); return; }
+      // Still looking at the picture (a few seconds): keep the click and outline it when ready,
+      // rather than quietly doing a colour select instead.
+      if (ol.state === 'starting' && outlineRunning()) {
+        ol.pending = { u, v };
+        olSay('Looking at the picture… your click will be outlined in a moment.');
+        return;
+      }
       const sel = magicSelect(analysisImage(), u, v);
       if (!sel) { bus.emit('toast', { msg: 'That ran into the whole picture — click inside something with a clear edge.', kind: 'err' }); return; }
       if (sel.box.w * sel.box.h < 0.0004) { bus.emit('toast', { msg: 'That is too small to cut out — zoom in and click again.', kind: 'err' }); return; }
@@ -937,6 +944,7 @@ export function openCropStudio({ clip, source, store, cmds, comp, onApply }) {
       if (ol.closed) return;
       ol.state = 'ready';
       olSay(olHelp());
+      if (ol.pending) { const p = ol.pending; ol.pending = null; outlineClick(p.u, p.v, 'new'); }
       noteEl.textContent = 'Click anything on the picture to outline it. Or press the button for suggestions of what stays put; they are only numbered, never named.';
     } catch (err) {
       if (ol.closed) return;
