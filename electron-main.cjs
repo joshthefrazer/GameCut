@@ -11,6 +11,7 @@
  */
 
 const { app, BrowserWindow, Menu, dialog, shell, ipcMain, protocol, session } = require('electron');
+const { fileBody } = require('./file-body.cjs');
 const path = require('path');
 const fs = require('fs');
 const fsp = require('fs/promises');
@@ -267,7 +268,7 @@ function isServable(abs, root = ROOT) {
 
 function serve(filePath) {
   const ext = path.extname(filePath).toLowerCase();
-  const body = fs.createReadStream(filePath);
+  const body = fileBody(filePath);
   return new Response(body, {
     status: 200,
     headers: {
@@ -339,7 +340,7 @@ async function serveMedia(request) {
    * hour-long recording is entirely this code path.
    */
   if (!m) {
-    return new Response(fs.createReadStream(abs), {
+    return new Response(fileBody(abs), {
       status: 200,
       headers: { 'Content-Length': String(st.size), 'Content-Type': type,
                  'Accept-Ranges': 'bytes', ...MEDIA_HEADERS },
@@ -350,7 +351,7 @@ async function serveMedia(request) {
   if (!(start >= 0) || start > end) {
     return new Response('Bad range', { status: 416, headers: { 'Content-Range': `bytes */${st.size}` } });
   }
-  return new Response(fs.createReadStream(abs, { start, end }), {
+  return new Response(fileBody(abs, { start, end }), {
     status: 206,
     headers: {
       'Content-Range': `bytes ${start}-${end}/${st.size}`,
@@ -1089,7 +1090,7 @@ async function serveModel(request) {
   try { st = await fsp.stat(file); } catch { return new Response('Not found', { status: 404, headers: HEAD }); }
   if (!st.isFile()) return new Response('Not found', { status: 404, headers: HEAD });
   const ext = path.extname(file).toLowerCase();
-  return new Response(fs.createReadStream(file), {
+  return new Response(fileBody(file), {
     status: 200,
     headers: { ...HEAD, 'Content-Length': String(st.size),
       'Content-Type': ext === '.json' ? 'application/json' : 'application/octet-stream' },
@@ -1647,6 +1648,11 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 process.on('uncaughtException', (err) => {
+  // Quiet tests: never a box on the screen of whoever is using the computer; the runner reads this line.
+  if (QA_QUIET) {
+    try { if (process.env.STRIKE_QA_ERRLOG) fs.appendFileSync(process.env.STRIKE_QA_ERRLOG, '[main-process error] ' + String(err?.stack || err).replace(/\s*\n\s*/g, ' | ') + '\n'); } catch { /* the log is a nicety */ }
+    return;
+  }
   // Surface it instead of dying silently behind a blank window.
   try {
     dialog.showErrorBox('Strike — unexpected error', String(err?.stack || err));

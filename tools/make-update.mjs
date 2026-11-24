@@ -26,7 +26,7 @@ const ROOT = path.resolve(import.meta.dirname, '..');
 const DIRS = ['src', 'styles', 'vendor', 'assets'];
 const FILES = ['index.html'];
 /** Changing any of these means the .exe has to be rebuilt. */
-const NATIVE = ['electron-main.cjs', 'preload.cjs', 'package.json'];
+const NATIVE = ['electron-main.cjs', 'file-body.cjs', 'preload.cjs', 'package.json'];
 const STAMP = path.join(ROOT, 'dist', '.native-hash');
 
 const version = process.argv[2] || new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '');

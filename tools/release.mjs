@@ -70,7 +70,7 @@ const FILES = ['index.html'];
  * and it would have made the flag useless in the other direction too: an
  * `needsInstaller: true` on every single release trains people to ignore it.
  */
-const SHELL = ['electron-main.cjs', 'preload.cjs', 'update-config.json', 'updater.cjs'];
+const SHELL = ['electron-main.cjs', 'file-body.cjs', 'preload.cjs', 'update-config.json', 'updater.cjs'];
 /**
  * SHELL, plus everything that changes what the INSTALLER looks like or calls
  * itself. None of this reaches an existing install — an icon is not code — but

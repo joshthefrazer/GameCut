@@ -68,6 +68,7 @@
       "preload.cjs",
       "updater.cjs",
       "inbox.cjs",
+      "file-body.cjs",
       "update-config.json",
       "index.html",
       "src/**/*",

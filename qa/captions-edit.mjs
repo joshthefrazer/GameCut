@@ -152,7 +152,8 @@ await step('Esc closes the editor; the inspector of a caption offers to open it'
   const id = (await caps())[0].id;
   await ev((id) => window.gc.store.select([id]), id); await sleep(250);
   await ev(() => document.querySelector('#inspectorRoot [data-itab="text"]')?.click()); await frame();
-  const btn = await ev(() => !!document.getElementById('btnEditCaptions'));
+  let btn = false;
+  for (let i = 0; i < 40 && !btn; i++) { btn = await ev(() => !!document.getElementById('btnEditCaptions')); if (!btn) await sleep(125); }
   if (!btn) throw new Error('no "Edit all captions" button on a caption');
   await ev(() => document.getElementById('btnEditCaptions').click()); await frame();
   if (await ev(() => document.getElementById('captionEditor').hidden)) throw new Error('the button did not open the editor');
