@@ -163,8 +163,22 @@ const ISOLATION_HEADERS = {
    machine. Chromium's own background services (component/variations updates,
    crash upload, speech) are the only things that would otherwise dial out, so
    they are switched off here rather than left to default. */
+/*
+ * Quiet test mode (STRIKE_QA_QUIET=1, set only by qa/run-quiet.mjs): the
+ * automated tests run while you use the computer. No sound, the window opens
+ * off-screen without taking focus, and Chromium is told not to slow down a
+ * window nobody can see (the tests still need it painting at full speed).
+ * Never set by the app itself.
+ */
+const QA_QUIET = process.env.STRIKE_QA_QUIET === '1';
 app.commandLine.appendSwitch('disable-features',
-  'ComponentUpdater,OptimizationHints,MediaRouter,Translate,SpeechRecognition');
+  'ComponentUpdater,OptimizationHints,MediaRouter,Translate,SpeechRecognition'
+  + (QA_QUIET ? ',CalculateNativeWinOcclusion' : ''));
+if (QA_QUIET) {
+  app.commandLine.appendSwitch('mute-audio');
+  app.commandLine.appendSwitch('disable-renderer-backgrounding');
+  app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+}
 app.commandLine.appendSwitch('disable-background-networking');
 app.commandLine.appendSwitch('disable-component-update');
 app.commandLine.appendSwitch('disable-domain-reliability');
@@ -478,7 +492,17 @@ function createWindow() {
     },
   });
 
+  if (QA_QUIET) {
+    // Past the right edge of every screen; and a test's "centre the window" keeps it there.
+    const { screen } = require('electron');
+    const offX = Math.max(...screen.getAllDisplays().map(d => d.bounds.x + d.bounds.width)) + 400;
+    const park = () => win.setPosition(offX, 0);
+    win.center = park;
+    win.focus = () => {};
+    win.once('ready-to-show', () => { park(); win.showInactive(); });
+  }
   win.once('ready-to-show', () => {
+    if (QA_QUIET) return;
     win.show();
     if (isDev) win.webContents.openDevTools({ mode: 'detach' });
   });
