@@ -61,6 +61,14 @@ function follow(frames, box, R) {
   let vx = 0, vy = 0;
   for (let i = 1; i < frames.length; i++) {
     const f = frames[i];
+    // A frame the sampler could not get in time: hold still (and keep heading
+    // the same way) rather than chase whatever picture was left on screen.
+    if (f.stale) {
+      x = Math.min(f.w - w, Math.max(0, x + Math.round(vx)));
+      y = Math.min(f.h - h, Math.max(0, y + Math.round(vy)));
+      out.push({ t: f.t, x, y });
+      continue;
+    }
     // Look where it was heading, not only where it was.
     const gx = x + Math.round(vx), gy = y + Math.round(vy);
     let best = Infinity, bx = gx, by = gy;
