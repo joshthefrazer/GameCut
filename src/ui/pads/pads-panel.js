@@ -155,5 +155,8 @@ export function initPads({ store, cmds, playback }) {
   store.on('rt', () => { if (recording && !store.rt.playing && recording.hits.length) stopRec(); });
 
   bus.emit('palette:add', [{ id: 'pads', name: 'Sound pads: hit keys to drop sounds while it plays', sec: 'Sound', run: () => bus.emit('drawer:show', 'pads') }]);
-  return { hit, startRec, stopRec, get recording() { return !!recording; }, place };
+  return { hit, startRec, stopRec, get recording() { return !!recording; }, place,
+    /** One sound by name ("whoosh") at a time, as one undo step. Empty if there is no such pad. */
+    placeNamed(sound, t, label) { const i = PADS.findIndex(p => p.sound === sound); return i < 0 ? [] : place([{ pad: i, t }], label); },
+    has: (sound) => PADS.some(p => p.sound === sound) };
 }

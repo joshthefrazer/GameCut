@@ -364,7 +364,7 @@ export function initInspector({ store, cmds, comp, playback }) {
     const open = document.createElement('button');
     open.className = 'fontdrop';
     open.id = 'inspOpenTransitions';
-    open.textContent = pick ? 'Change it in the Transitions panel' : 'Choose a transition…';
+    open.textContent = pick ? 'Change it or adjust it…' : 'Choose a transition…';
     open.addEventListener('click', () => {
       store.setRT({ junction: clip.id });
       bus.emit('transitions:open', { clipId: clip.id });

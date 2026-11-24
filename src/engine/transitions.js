@@ -17,53 +17,36 @@
  * a graceful floor rather than a failure.
  */
 
-export const TRANSITIONS = [
-  { id: 'none',     name: 'Cut',        note: 'No transition — a hard cut' },
-  { id: 'dissolve', name: 'Dissolve',   note: 'One shot fades into the next' },
-  { id: 'dip',      name: 'Dip to black', note: 'Out to black, then in — a beat between scenes' },
-  { id: 'slide',    name: 'Slide',      note: 'The new shot pushes the old one off' },
-];
+import { KINDS, kindOf } from './transition-fx.js';
 
-export const SLIDE_DIRS = [
-  { id: 'left',  name: 'From right' },
-  { id: 'right', name: 'From left' },
-  { id: 'up',    name: 'From below' },
-  { id: 'down',  name: 'From above' },
-];
+export const TRANSITIONS = [{ id: 'none', name: 'Cut', note: 'No transition — a hard cut' },
+  ...KINDS.map(k => ({ id: k.id, name: k.name, note: k.blurb }))];
 
-/**
- * The browsable catalogue — one entry per *thing you can pick*, which is not
- * the same list as the kinds above.
- *
- * "Slide" is one kind with a direction, but nobody browses for "slide" and then
- * separately decides which way; they look at four pictures and click the one
- * that moves the right way. So the picker gets four slide entries that all
- * write the same kind with a different `dir`, and the renderer still only knows
- * about three kinds. Dissolve leads because it is the one you reach for nine
- * times in ten.
- */
-export const TRANSITION_PICKS = [
-  { key: 'dissolve',    kind: 'dissolve', name: 'Dissolve',
-    blurb: 'One shot melts into the next. The safe one.' },
-  { key: 'dip',         kind: 'dip',      name: 'Dip to black',
-    blurb: 'Out to black and back — puts a beat between two scenes.' },
-  { key: 'slide-left',  kind: 'slide', dir: 'left',  name: 'Slide left',
-    blurb: 'The new shot comes in from the right and pushes the old one off.' },
-  { key: 'slide-right', kind: 'slide', dir: 'right', name: 'Slide right',
-    blurb: 'The new shot comes in from the left.' },
-  { key: 'slide-up',    kind: 'slide', dir: 'up',    name: 'Slide up',
-    blurb: 'The new shot comes up from below.' },
-  { key: 'slide-down',  kind: 'slide', dir: 'down',  name: 'Slide down',
-    blurb: 'The new shot drops in from above.' },
-];
+/** What you can pick, in the order it is shown. Dissolve leads: it is the one reached for most. */
+export const TRANSITION_PICKS = KINDS.map(k => ({ key: k.id, kind: k.id, ...k }));
+/** The short list for right-click menus. */
+export const QUICK_PICKS = ['dissolve', 'dip', 'whip', 'slide', 'zoomin', 'punch', 'glitch', 'flash']
+  .map(id => TRANSITION_PICKS.find(p => p.key === id));
+
+/** A fresh transition of this kind, or the one it already is. */
+export function freshTransition(kind, from = null) {
+  const k = kindOf(kind);
+  if (!k) return null;
+  return from?.kind === kind ? { ...k.d, ...from, kind } : { kind, ...k.d };
+}
 
 /** Which catalogue entry a clip's transition corresponds to, or null. */
 export function pickFor(clip) {
   const tr = clip?.transIn;
   if (!tr || !tr.kind || tr.kind === 'none') return null;
-  if (tr.kind !== 'slide') return TRANSITION_PICKS.find(p => p.kind === tr.kind) || null;
-  return TRANSITION_PICKS.find(p => p.kind === 'slide' && p.dir === (tr.dir || 'left')) || null;
+  return TRANSITION_PICKS.find(p => p.kind === tr.kind) || null;
 }
+
+/**
+ * The three original transitions, saved before they had any settings, are drawn
+ * the way they always were (and cheaply); everything else goes to transition-fx.js.
+ */
+export const isPlain = (tr) => tr.kind === 'dissolve' || (tr.kind === 'slide' && tr.amount == null) || (tr.kind === 'dip' && tr.color == null);
 
 /**
  * Every cut on the timeline: two clips on one track, back to back.
@@ -117,7 +100,8 @@ export function transitionSpan(prev, next) {
   const dur = Math.max(0.05, Math.min(
     tr.dur || DEFAULT_TRANS_DUR, maxDurFor(prev, next)));
   const cut = next.start;
-  return { kind: tr.kind, dir: tr.dir || 'left', dur, cut, from: cut - dur / 2, to: cut + dur / 2 };
+  return { kind: tr.kind, dir: tr.dir || 'left', amount: tr.amount, ease: tr.ease, color: tr.color,
+    dur, cut, from: cut - dur / 2, to: cut + dur / 2 };
 }
 
 /**

@@ -2,7 +2,8 @@ import { DecoderPool } from './decoder-pool.js';
 import { drawVisualClip, drawShapeClip, sourceRect } from './layers/video-layer.js';
 import { drawTextClip, measureText } from './layers/text-layer.js';
 import { evalProp, fadeGain } from './keyframes.js';
-import { transitionAt, transitionPlan } from './transitions.js';
+import { transitionAt, transitionPlan, isPlain } from './transitions.js';
+import { paintTransition } from './transition-fx.js';
 import { visualMotion, rad } from './motion.js';
 import { applyEffect } from './layers/effects.js';
 import { drawAnimClip, animBox } from './layers/anim-layer.js';
@@ -488,6 +489,23 @@ export class Compositor {
   #drawTransition(ctx, layer, W, H, t) {
     const { tr } = layer;
     const outgoing = layer.out, incoming = layer.in;
+    if (!isPlain(tr) && !this.bypass) {
+      // Each shot on a sheet of its own, then the effect puts them together.
+      const sheet = (name) => {
+        const c = (this[name] ||= document.createElement('canvas'));
+        if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
+        const g = c.getContext('2d');
+        g.setTransform(1, 0, 0, 1, 0, 0);
+        g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.filter = 'none';
+        g.clearRect(0, 0, W, H);
+        return g;
+      };
+      const a = sheet('_trA'), b = sheet('_trB');
+      this.#styled(a, outgoing.clip, () => drawVisualClip(a, outgoing.clip, outgoing.src, W, H, t, outgoing.alpha));
+      this.#styled(b, incoming.clip, () => drawVisualClip(b, incoming.clip, incoming.src, W, H, t, incoming.alpha));
+      paintTransition(ctx, a.canvas, b.canvas, tr, W, H);
+      return;
+    }
     const plan = transitionPlan(tr, W, H);
 
     /**

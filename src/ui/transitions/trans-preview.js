@@ -1,5 +1,5 @@
 import { assets } from '../../media/asset-store.js';
-import { transitionPlan } from '../../engine/transitions.js';
+import { paintTransition, kindOf } from '../../engine/transition-fx.js';
 
 /**
  * A moving preview of a transition, on your own two shots.
@@ -16,7 +16,7 @@ import { transitionPlan } from '../../engine/transitions.js';
  * visible in the shape of the move, not in whether the footage underneath is
  * playing.
  *
- * `transitionPlan` is the same function the compositor and the exporter use, so
+ * `paintTransition` is the same function the compositor and the exporter use, so
  * what you see here cannot disagree with what gets rendered.
  */
 
@@ -88,17 +88,56 @@ export async function grabCutFrames(j, { store, comp }) {
 }
 
 /**
+ * Two made-up shots, for when no cut is picked: a warm one and a cool one, with
+ * enough in them (ground, sun, shapes, a big letter) that movement reads.
+ */
+let demo = null;
+export function demoFrames() {
+  if (demo) return demo;
+  const w = 480, h = 270;
+  const shot = (sky, ground, sun, letter, seed) => {
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const g = c.getContext('2d');
+    const s = g.createLinearGradient(0, 0, 0, h * 0.75); s.addColorStop(0, sky[0]); s.addColorStop(1, sky[1]);
+    g.fillStyle = s; g.fillRect(0, 0, w, h);
+    g.fillStyle = sun; g.beginPath(); g.arc(w * (seed ? 0.26 : 0.74), h * 0.36, 34, 0, 7); g.fill();
+    let r = 7 + seed * 91;
+    const rnd = () => (r = (r * 16807) % 2147483647) / 2147483647;
+    for (let l = 0; l < 3; l++) {
+      g.fillStyle = ground[l];
+      for (let x = -20; x < w; ) { const bw = 18 + rnd() * 46, bh = 24 + rnd() * (90 - l * 18); g.fillRect(x, h * (0.66 + l * 0.11) - bh, bw, h); x += bw + (l ? 0 : 4); }
+    }
+    g.fillStyle = 'rgba(255,255,255,.92)'; g.font = '900 96px Inter, system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(letter, w / 2, h * 0.52);
+    return c;
+  };
+  demo = { a: shot(['#ff9a3d', '#ffd98a'], ['#8a3b12', '#5f2509', '#351205'], '#fff3d0', 'A', 0),
+    b: shot(['#142a6b', '#3fa7c9'], ['#15406b', '#0d2a4a', '#071829'], '#dff6ff', 'B', 1), w, h, demo: true };
+  return demo;
+}
+
+/** One moment of a transition, on a canvas of any size. */
+export function drawMoment(canvas, frames, tr, raw, lite = true) {
+  const g = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalAlpha = 1; g.filter = 'none'; g.globalCompositeOperation = 'source-over';
+  g.fillStyle = '#05070d'; g.fillRect(0, 0, W, H);
+  const A = frames?.a, B = frames?.b;
+  if (!A && !B) return;
+  if (!tr || !A || !B) { g.drawImage(raw < 0.5 ? (A || B) : (B || A), 0, 0, W, H); return; }
+  paintTransition(g, A, B, { ...tr, raw }, W, H, { lite });
+}
+
+/**
  * The looping player.
  *
  * One canvas, one rAF loop, and a `show()` that can be called as fast as a
- * pointer moves across a grid of tiles — switching what is being previewed must
- * not restart anything expensive, because hovering six tiles in two seconds is
- * the normal way to use this.
+ * pointer moves across a grid of tiles.
  */
 export function createTransPreview(canvas) {
-  const ctx = canvas.getContext('2d');
   let frames = null;                 // { a, b, w, h }
-  let pick = null;                   // { kind, dir, name }
+  let tr = null;                     // { kind, dir, amount, ease, color }
   let dur = 0.45;
   let raf = 0, t0 = 0;
   let running = false;
@@ -107,22 +146,19 @@ export function createTransPreview(canvas) {
 
   function setFrames(f) {
     frames = f && (f.a || f.b) ? f : null;
-    resize();
-    if (!frames) draw(0);
-  }
-
-  function resize() {
-    const w = frames?.w || 480;
-    const h = frames?.h || 270;
+    const w = frames?.w || 480, h = frames?.h || 270;
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+    if (!running) drawMoment(canvas, frames, null, 0);
   }
 
-  /** Start (or switch) the loop. `null` parks on the first frame. */
-  function show(nextPick, nextDur) {
-    pick = nextPick;
-    dur = Math.max(0.15, nextDur || 0.45);
-    t0 = performance.now();
-    if (!pick) { stop(); draw(0); return; }
+  /** Start (or switch) the loop. `null` parks on the first frame. Same transition: keeps rolling. */
+  function show(next, nextDur) {
+    const same = tr && next && tr.kind === next.kind;
+    tr = next;
+    // A touch slower than life, so a quarter-second whip can be seen.
+    dur = Math.max(0.35, (nextDur || kindOf(next?.kind)?.d?.dur || 0.45) * 1.25);
+    if (!same) t0 = performance.now();
+    if (!tr) { stop(); drawMoment(canvas, frames, null, 0); return; }
     if (!running) { running = true; raf = requestAnimationFrame(tick); }
   }
 
@@ -134,49 +170,15 @@ export function createTransPreview(canvas) {
 
   function tick(now) {
     if (!running) return;
-    const cycle = HOLD_IN + dur + HOLD_OUT;
-    const at = ((now - t0) / 1000) % cycle;
-    const raw = at < HOLD_IN ? 0
-      : at > HOLD_IN + dur ? 1
-        : (at - HOLD_IN) / dur;
-    draw(raw);
+    const at = ((now - t0) / 1000) % (HOLD_IN + dur + HOLD_OUT);
+    drawMoment(canvas, frames, tr, at < HOLD_IN ? 0 : at > HOLD_IN + dur ? 1 : (at - HOLD_IN) / dur, false);
     raf = requestAnimationFrame(tick);
-  }
-
-  const easeInOut = (p) => (p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2);
-
-  function draw(raw) {
-    const W = canvas.width, H = canvas.height;
-    ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = '#05070d';
-    ctx.fillRect(0, 0, W, H);
-    if (!frames) return;
-
-    const A = frames.a, B = frames.b;
-    if (!pick) { if (A) ctx.drawImage(A, 0, 0, W, H); return; }
-
-    const plan = transitionPlan(
-      { kind: pick.kind, dir: pick.dir || 'left', p: easeInOut(raw), raw }, W, H);
-
-    if (A && plan.under > 0.001) {
-      ctx.save();
-      ctx.globalAlpha = plan.under;
-      if (plan.udx || plan.udy) ctx.translate(plan.udx, plan.udy);
-      ctx.drawImage(A, 0, 0, W, H);
-      ctx.restore();
-    }
-    if (B && plan.over > 0.001) {
-      ctx.save();
-      ctx.globalAlpha = plan.over;
-      if (plan.dx || plan.dy) ctx.translate(plan.dx, plan.dy);
-      ctx.drawImage(B, 0, 0, W, H);
-      ctx.restore();
-    }
   }
 
   return {
     setFrames, show, stop,
     get hasFrames() { return !!frames; },
+    get frames() { return frames; },
     /** What was actually captured. Exposed so a test can tell a real pair of
      *  frames from a preview that quietly fell back to one, or to none. */
     get captured() { return { a: !!frames?.a, b: !!frames?.b }; },

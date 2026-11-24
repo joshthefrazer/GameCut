@@ -1295,19 +1295,19 @@ await step('hovering a transition says what it would do', async () => {
   await sleep(300);
   const before = await page.evaluate(() =>
     document.getElementById('transPreviewCap')?.textContent.trim());
-  await page.hover('.trs[data-pick="slide-up"]');
+  await page.hover('.trs[data-pick="whip"]');
   await sleep(160);
   const after = await page.evaluate(() =>
     document.getElementById('transPreviewCap')?.textContent.trim());
   if (after === before) throw new Error(`hovering changed nothing — still "${after}"`);
-  if (!/slide up/i.test(after)) throw new Error(`hovering Slide up said "${after}"`);
+  if (!/whip pan/i.test(after)) throw new Error(`hovering Whip pan said "${after}"`);
 
   // And moving away puts it back to whatever the cut is actually set to.
   await page.mouse.move(4, 4);
   await sleep(200);
   const back = await page.evaluate(() =>
     document.getElementById('transPreviewCap')?.textContent.trim());
-  if (/slide up/i.test(back)) throw new Error('the preview stayed on the hovered transition after leaving');
+  if (/whip pan/i.test(back)) throw new Error('the preview stayed on the hovered transition after leaving');
 });
 
 await step('the top bar says whether your work is saved', async () => {

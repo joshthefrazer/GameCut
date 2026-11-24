@@ -10,7 +10,7 @@
  */
 import { bus } from '../../core/events.js';
 import { freezeFrame } from '../../edit/freeze-frame.js';
-import { TRANSITION_PICKS, DEFAULT_TRANS_DUR, pickFor, outgoingFor } from '../../engine/transitions.js';
+import { QUICK_PICKS, freshTransition, pickFor, outgoingFor } from '../../engine/transitions.js';
 import { askText } from '../widgets/ask.js';
 import { LANE_PRESETS } from '../../core/commands.js';
 
@@ -181,15 +181,11 @@ export function initContextMenu({ store, cmds, playback }) {
         label: cut ? 'Transition on the cut before this' : 'Transition (no cut before this clip)',
         disabled: !cut,
         sub: cut ? [
-          ...TRANSITION_PICKS.map(pick => ({
+          ...QUICK_PICKS.map(pick => ({
             label: pick.name,
             on_: cur?.key === pick.key,
             on: () => {
-              cmds.setClipProp(clip.id, 'transIn', {
-                kind: pick.kind,
-                dur: clip.transIn?.dur ?? DEFAULT_TRANS_DUR,
-                dir: pick.dir || 'left',
-              }, { merge: false, label: 'Transition' });
+              cmds.setClipProp(clip.id, 'transIn', freshTransition(pick.kind, clip.transIn), { merge: false, label: 'Transition' });
               store.setRT({ junction: clip.id });
               bus.emit('inspector:refresh');
             },
@@ -201,7 +197,7 @@ export function initContextMenu({ store, cmds, playback }) {
               cmds.setClipProp(clip.id, 'transIn', null, { merge: false, label: 'Transition' });
               bus.emit('inspector:refresh');
             } },
-          { label: 'Open the Transitions panel…',
+          { label: 'All transitions…',
             on: () => { store.setRT({ junction: clip.id }); bus.emit('transitions:open', { clipId: clip.id }); } },
         ] : undefined,
       });
@@ -413,15 +409,11 @@ export function initContextMenu({ store, cmds, playback }) {
     const cur = pickFor(j.next);
     const items = [
       { head: `Cut · ${j.prev.name || 'clip'} → ${j.next.name || 'clip'}` },
-      ...TRANSITION_PICKS.map(pick => ({
+      ...QUICK_PICKS.map(pick => ({
         label: pick.name,
         on_: cur?.key === pick.key,
         on: () => {
-          cmds.setClipProp(j.next.id, 'transIn', {
-            kind: pick.kind,
-            dur: j.next.transIn?.dur ?? DEFAULT_TRANS_DUR,
-            dir: pick.dir || 'left',
-          }, { merge: false, label: 'Transition' });
+          cmds.setClipProp(j.next.id, 'transIn', freshTransition(pick.kind, j.next.transIn), { merge: false, label: 'Transition' });
           bus.emit('inspector:refresh');
         },
       })),
@@ -431,7 +423,7 @@ export function initContextMenu({ store, cmds, playback }) {
           cmds.setClipProp(j.next.id, 'transIn', null, { merge: false, label: 'Transition' });
           bus.emit('inspector:refresh');
         } },
-      { label: 'Open the Transitions panel…',
+      { label: 'All transitions…',
         on: () => bus.emit('transitions:open', { clipId: j.next.id }) },
     ];
     show(x, y, items);
