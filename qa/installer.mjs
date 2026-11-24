@@ -35,16 +35,12 @@ if (!/Frazer/.test(pkg.build?.copyright || '')) bad('copyright does not name the
 else ok('the copyright names the publisher');
 
 /* ── The side panel ──────────────────────────────────────────── */
-const bmp = path.join(ROOT, 'build', 'installer-side.bmp');
-if (!(await access(bmp).then(() => true, () => false))) {
-  bad('build/installer-side.bmp is missing — run npm run icon');
-} else {
-  const b = await readFile(bmp);
-  // BMP header: 'BM', then width at 0x12 and height at 0x16, little-endian.
-  const w = b.readInt32LE(0x12), h = b.readInt32LE(0x16);
-  if (b[0] !== 0x42 || b[1] !== 0x4d) bad('installer-side.bmp is not a BMP');
-  else if (w !== 164 || Math.abs(h) !== 314) bad(`installer-side.bmp is ${w}x${h}; NSIS wants 164x314`);
-  else ok(`the side panel is a ${w}×${Math.abs(h)} BMP`);
+for (const [file, W, H] of [['installer-hero.bmp', 497, 150], ['installer-work.bmp', 450, 118], ['uninstallerSidebar.bmp', 164, 314]]) {
+  const b = await readFile(path.join(ROOT, 'build', file)).catch(() => null);
+  if (!b) { bad(`build/${file} is missing: run electron tools/make-installer-art.cjs`); continue; }
+  const w = b.readInt32LE(0x12), h = Math.abs(b.readInt32LE(0x16));
+  if (b[0] !== 0x42 || b[1] !== 0x4d || w !== W || h !== H) bad(`${file} is ${w}x${h}, wanted a ${W}x${H} BMP`);
+  else ok(`${file} is ${w}x${h}`);
 }
 
 /* ── The icon ────────────────────────────────────────────────── */
@@ -109,69 +105,17 @@ if (svg) {
   else ok('the logo data URL is fully escaped, so it actually renders');
 }
 
-/* ── The NSIS hooks actually compile ─────────────────────────── */
-const has = await run('which', ['makensis']).then(() => true, () => false);
-if (!has) {
-  console.log('  --   makensis is not installed; skipping the NSIS syntax check');
-} else {
-  const dir = path.join(os.tmpdir(), 'gc-nsis-check');
-  await mkdir(path.join(dir, 'BUILD_RES'), { recursive: true });
-  await writeFile(path.join(dir, 'BUILD_RES', 'installer-side.bmp'), await readFile(bmp));
-  // Enough of electron-builder's context for every macro to expand — INCLUDING
-  // the defines it passes on the makensis command line. Leaving those out is
-  // not a smaller test, it is a different one: !define on a name electron-builder
-  // has already defined is a hard error ("already defined!"), and without them
-  // here the hooks compiled cleanly in this check and failed the real build.
-  // Everything in this list is copied from an actual electron-builder 25 run.
-  await writeFile(path.join(dir, 'check.nsi'), `
-!include MUI2.nsh
-!include LogicLib.nsh
-!define MUI_WELCOMEFINISHPAGE_BITMAP "\${NSISDIR}/Contrib/Graphics/Wizard/nsis3-metro.bmp"
-!define MUI_UNWELCOMEFINISHPAGE_BITMAP "\${NSISDIR}/Contrib/Graphics/Wizard/nsis3-metro.bmp"
-!define PRODUCT_NAME "GameCut"
-!define PRODUCT_FILENAME "GameCut"
-!define APP_FILENAME "GameCut"
-!define COMPANY_NAME "Frazer's Softwares"
-!define VERSION "0.0.0"
-!define BUILD_RESOURCES_DIR "BUILD_RES"
-!define isUpdated '"" != ""'
-!define StdUtils.ExecShellAsUser "!insertmacro stubExec"
-!macro stubExec a b c d
-  StrCpy $0 ""
-!macroend
-Var launchLink
-Name "GameCut"
-OutFile "check.exe"
-!include "${path.join(ROOT, 'build', 'installer.nsh').replace(/\\/g, '/')}"
-!insertmacro customWelcomePage
-!insertmacro MUI_PAGE_DIRECTORY
-!insertmacro MUI_PAGE_INSTFILES
-!insertmacro customFinishPage
-!insertmacro MUI_LANGUAGE "English"
-Section "x"
-  StrCpy $launchLink ""
-  !insertmacro customInit
-  !insertmacro customUnInit
-SectionEnd
-`);
-  try {
-    const { stdout } = await run('makensis', ['-V2', 'check.nsi'], { cwd: dir });
-    const errs = String(stdout).split('\n').filter(l => /error/i.test(l));
-    if (errs.length) bad('the NSIS hooks do not compile: ' + errs[0]);
-    else ok('the NSIS hooks compile');
-  } catch (e) {
-    bad('the NSIS hooks do not compile: ' + String(e.stdout || e.message).split('\n').filter(l => /error/i.test(l))[0]);
-  }
-}
+// Whether the pages compile, and what they look like: node qa/installer-preview.mjs (Windows).
 
 /* ── What the pages say ──────────────────────────────────────── */
 const nsh = await readFile(path.join(ROOT, 'build', 'installer.nsh'), 'utf8');
 for (const [what, re] of [
-  ['a welcome page', /!insertmacro MUI_PAGE_WELCOME/],
-  ['a finish page', /!insertmacro MUI_PAGE_FINISH/],
-  ['an offer to pin it', /MUI_FINISHPAGE_SHOWREADME_TEXT "Pin GameCut/],
-  ['an offer to open it', /MUI_FINISHPAGE_RUN_FUNCTION/],
-  ['the publisher on both pages', /Frazer/],
+  ['a first page', /Page custom StrikeStart StrikeStartLeave/],
+  ['a last page', /Page custom StrikeReady StrikeReadyLeave/],
+  ['an offer to pin it', /Pin Strike to my taskbar/],
+  ['an offer to open it', /Call StartApp/],
+  ['the publisher', /Frazer/],
+  ['a check that the folder is its own', /already has other files in it/],
 ]) {
   if (re.test(nsh)) ok('the installer has ' + what);
   else bad('the installer is missing ' + what);

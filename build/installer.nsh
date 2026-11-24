@@ -1,9 +1,22 @@
-; Installer hooks for Strike.
+﻿; Installer hooks for Strike.
 ;
-; electron-builder inserts these macros into its own NSIS template. A macro the
-; template does not reference is simply never expanded, so defining one it does
-; not know about is harmless — and the three it does know about here are
-; customInit, customWelcomePage and customFinishPage.
+; electron-builder inserts these macros into its own NSIS template. Three
+; screens, all dark: Start (what it is, where it goes, Install), Installing,
+; Ready. The folder choice lives on the first screen, so the template's own
+; folder page is off (allowToChangeInstallationDirectory: false in package.json).
+;
+; The pictures come from tools/make-installer-art.cjs.
+; To look at the pages without installing anything: node qa/installer-preview.mjs
+
+!define ST_BG   "0A0E19"
+!define ST_CARD "121829"
+!define ST_TEXT "FFFFFF"
+!define ST_DIM  "9FB0D0"
+!define ST_VOLT "C6FF3D"
+
+; Modern UI's own colours: the strip at the top of the progress screen, and the uninstaller.
+!define MUI_BGCOLOR   "${ST_BG}"
+!define MUI_TEXTCOLOR "${ST_TEXT}"
 
 ; ── Closing a running copy ─────────────────────────────────────
 ; Windows will not let anyone overwrite a file that is open, and the installer
@@ -29,35 +42,240 @@
 !macroend
 
 
-; ── The first page ─────────────────────────────────────────────
-; Without this the installer opens straight onto "choose a folder", which tells
-; someone who has just downloaded a 90MB file from a stranger's website nothing
-; at all about what they are about to run. A page with the name on it, what the
-; thing is, and who made it is the least an installer can do.
+; ── Dark window ────────────────────────────────────────────────
+; Every call here is a nicety: on a Windows that does not know one it fails
+; quietly and the window is simply lighter.
+!ifndef BUILD_UNINSTALLER
+  !define MUI_CUSTOMFUNCTION_GUIINIT StrikeGui
+!endif
 
-!macro customWelcomePage
-  ; electron-builder ALREADY passes MUI_WELCOMEFINISHPAGE_BITMAP on the makensis
-  ; command line, pointed at the stock nsis3-metro.bmp. A plain !define on top of
-  ; that is not "the last one wins" — NSIS stops the build with
-  ;   !define: "MUI_WELCOMEFINISHPAGE_BITMAP" already defined!
-  ; so the side panel has to be swapped in, not merely set.
-  !ifdef MUI_WELCOMEFINISHPAGE_BITMAP
-    !undef MUI_WELCOMEFINISHPAGE_BITMAP
+!macro StrikeDark HWND
+  System::Call 'uxtheme::#133(p ${HWND}, i 1)'
+  System::Call 'uxtheme::SetWindowTheme(p ${HWND}, w "DarkMode_Explorer", p 0)'
+!macroend
+
+; The version text at the bottom and the etched lines are light grey by nature,
+; and Modern UI shows them again on every page change.
+!macro StrikeHideTrim
+  ShowWindow $mui.Branding.Background ${SW_HIDE}
+  ShowWindow $mui.Branding.Text ${SW_HIDE}
+  ShowWindow $mui.Line.Standard ${SW_HIDE}
+  ShowWindow $mui.Line.FullWindow ${SW_HIDE}
+  GetDlgItem $R9 $HWNDPARENT 1036
+  ShowWindow $R9 ${SW_HIDE}
+!macroend
+
+!macro customHeader
+  !ifndef BUILD_UNINSTALLER
+    Function StrikeGui
+      System::Call 'uxtheme::#135(i 2)'
+      System::Call 'uxtheme::#133(p $HWNDPARENT, i 1)'
+      System::Call 'dwmapi::DwmSetWindowAttribute(p $HWNDPARENT, i 20, *i 1, i 4)'
+      SetCtlColors $HWNDPARENT "${ST_TEXT}" "${ST_BG}"
+      CreateFont $StFontTitle "Segoe UI Semibold" 15 600
+      CreateFont $StFontText "Segoe UI" 9 400
+      CreateFont $StFontSmall "Segoe UI" 8 600
+      CreateFont $StFontButton "Segoe UI" 9 400
+      GetDlgItem $0 $HWNDPARENT 1
+      !insertmacro StrikeDark $0
+      SetCtlColors $0 "${ST_TEXT}" "${ST_BG}"
+      SendMessage $0 ${WM_SETFONT} $StFontButton 1
+      GetDlgItem $0 $HWNDPARENT 2
+      !insertmacro StrikeDark $0
+      SetCtlColors $0 "${ST_TEXT}" "${ST_BG}"
+      SendMessage $0 ${WM_SETFONT} $StFontButton 1
+      GetDlgItem $0 $HWNDPARENT 3
+      !insertmacro StrikeDark $0
+      SetCtlColors $0 "${ST_TEXT}" "${ST_BG}"
+      SendMessage $0 ${WM_SETFONT} $StFontButton 1
+    FunctionEnd
   !endif
-  !define MUI_WELCOMEFINISHPAGE_BITMAP "${BUILD_RESOURCES_DIR}\installer-side.bmp"
-  !ifdef MUI_WELCOMEPAGE_TITLE
-    !undef MUI_WELCOMEPAGE_TITLE
-  !endif
-  !define MUI_WELCOMEPAGE_TITLE "Strike"
-  !ifdef MUI_WELCOMEPAGE_TEXT
-    !undef MUI_WELCOMEPAGE_TEXT
-  !endif
-  !define MUI_WELCOMEPAGE_TEXT "A video editor for gaming clips, made by Frazer's Softwares.$\r$\n$\r$\nMulti-track timeline, transitions, graphics and titles, and export straight to MP4. Everything happens on this computer: no account, no upload, no subscription, and your footage never leaves the machine.$\r$\n$\r$\nThis installs for you only, so it will not ask for an administrator password.$\r$\n$\r$\nClick Next to choose where it goes."
-  !insertmacro MUI_PAGE_WELCOME
 !macroend
 
 
-; ── The last page ──────────────────────────────────────────────
+; ── Who it is for ──────────────────────────────────────────────
+; Only for the person installing it, without asking, unless an all-users copy
+; is already on this computer; then the choice is shown as before.
+!macro customInstallMode
+  !ifndef BUILD_UNINSTALLER
+    ${If} $hasPerMachineInstallation == "0"
+      StrCpy $isForceCurrentInstall "1"
+    ${EndIf}
+  !endif
+!macroend
+
+
+; ── Start ──────────────────────────────────────────────────────
+; (This hook runs after "who it is for", which is what decides $INSTDIR.)
+!macro customPageAfterChangeDir
+  Var StFontTitle
+  Var StFontText
+  Var StFontSmall
+  Var StFontButton
+  Var StDialog
+  Var StHero
+  Var StHeroImage
+  Var StPath
+  Var StRun
+  Var StPin
+
+  !insertmacro MUI_PAGE_INIT
+  !insertmacro MUI_PAGE_FUNCTION_FULLWINDOW
+
+  Function StrikeHero
+    nsDialogs::Create 1044
+    Pop $StDialog
+    SetCtlColors $StDialog "${ST_TEXT}" "${ST_BG}"
+    InitPluginsDir
+    File "/oname=$PLUGINSDIR\hero.bmp" "${BUILD_RESOURCES_DIR}\installer-hero.bmp"
+    ${NSD_CreateBitmap} 0 0 100% 150 ""
+    Pop $StHero
+    ${NSD_SetStretchedImage} $StHero "$PLUGINSDIR\hero.bmp" $StHeroImage
+  FunctionEnd
+
+  Function StrikeStart
+    ${If} ${isUpdated}
+      Abort
+    ${EndIf}
+    Call muiPageLoadFullWindow
+    !insertmacro StrikeHideTrim
+    Call StrikeHero
+
+    ${NSD_CreateLabel} 24 160 440 28 "Cut it. Caption it. Post it."
+    Pop $0
+    SetCtlColors $0 "${ST_TEXT}" "${ST_BG}"
+    SendMessage $0 ${WM_SETFONT} $StFontTitle 1
+    ${NSD_CreateLabel} 24 191 440 18 "Everything stays on this PC. No account, no uploads."
+    Pop $0
+    SetCtlColors $0 "${ST_DIM}" "${ST_BG}"
+    SendMessage $0 ${WM_SETFONT} $StFontText 1
+
+    ; The card with the folder in it. Its pieces are made before the card: the first made is on top.
+    ${NSD_CreateLabel} 38 235 300 16 "INSTALLS TO"
+    Pop $0
+    SetCtlColors $0 "${ST_VOLT}" "${ST_CARD}"
+    SendMessage $0 ${WM_SETFONT} $StFontSmall 1
+    ${NSD_CreateLabel} 38 254 324 20 "$INSTDIR"
+    Pop $StPath
+    ${NSD_AddStyle} $StPath 0x8000
+    SetCtlColors $StPath "${ST_TEXT}" "${ST_CARD}"
+    SendMessage $StPath ${WM_SETFONT} $StFontText 1
+    ${NSD_CreateButton} 374 242 86 28 "Change..."
+    Pop $0
+    !insertmacro StrikeDark $0
+    SetCtlColors $0 "${ST_TEXT}" "${ST_CARD}"
+    SendMessage $0 ${WM_SETFONT} $StFontButton 1
+    ${NSD_OnClick} $0 StrikeBrowse
+    ${NSD_CreateLabel} 24 225 449 62 ""
+    Pop $0
+    SetCtlColors $0 "" "${ST_CARD}"
+
+    GetDlgItem $0 $HWNDPARENT 1
+    SendMessage $0 ${WM_SETTEXT} 0 "STR:Install"
+    GetDlgItem $1 $HWNDPARENT 3
+    ShowWindow $1 ${SW_HIDE}
+    System::Call 'user32::SetFocus(p r0)'
+    nsDialogs::Show
+    Call muiPageUnloadFullWindow
+    ${NSD_FreeImage} $StHeroImage
+  FunctionEnd
+
+  ; A folder you pick gets a Strike folder inside it, unless it already is one:
+  ; uninstalling empties the folder Strike is in, so it has to be Strike's own.
+  Function StrikeBrowse
+    Pop $0
+    nsDialogs::SelectFolderDialog "Where should Strike go?" "$INSTDIR"
+    Pop $0
+    ${If} $0 == "error"
+      Return
+    ${EndIf}
+    ${GetFileName} "$0" $1
+    ${If} $1 != "${APP_FILENAME}"
+    ${AndIf} $1 != "Strike"
+      StrCpy $2 $0 1 -1
+      ${If} $2 == "\"
+        StrCpy $0 "$0${APP_FILENAME}"
+      ${Else}
+        StrCpy $0 "$0\${APP_FILENAME}"
+      ${EndIf}
+    ${EndIf}
+    StrCpy $INSTDIR $0
+    ${NSD_SetText} $StPath "$INSTDIR"
+  FunctionEnd
+
+  Function StrikeStartLeave
+    ; Something else's folder? Never install over it.
+    ${If} ${FileExists} "$INSTDIR\*.*"
+    ${AndIfNot} ${FileExists} "$INSTDIR\Strike.exe"
+    ${AndIfNot} ${FileExists} "$INSTDIR\GameCut.exe"
+    ${AndIfNot} ${FileExists} "$INSTDIR\Uninstall Strike.exe"
+    ${AndIfNot} ${FileExists} "$INSTDIR\Uninstall GameCut.exe"
+      ${DirState} "$INSTDIR" $0
+      ${If} $0 = 1
+        MessageBox MB_OK|MB_ICONEXCLAMATION "That folder already has other files in it:$\r$\n$\r$\n$INSTDIR$\r$\n$\r$\nStrike needs a folder of its own. Please choose another one."
+        Abort
+      ${EndIf}
+    ${EndIf}
+    ${GetRoot} "$INSTDIR" $0
+    ClearErrors
+    ${DriveSpace} "$0\" "/D=F /S=M" $1
+    ${IfNot} ${Errors}
+    ${AndIf} $1 < 700
+      MessageBox MB_OK|MB_ICONEXCLAMATION "There is not enough room on $0 ($1 MB free, Strike needs about 700 MB).$\r$\n$\r$\nFree some space or choose another drive."
+      Abort
+    ${EndIf}
+    ClearErrors
+    CreateDirectory "$INSTDIR"
+    FileOpen $0 "$INSTDIR\strike-write-test.tmp" w
+    ${If} ${Errors}
+      MessageBox MB_OK|MB_ICONEXCLAMATION "Windows will not let Strike write to that folder:$\r$\n$\r$\n$INSTDIR$\r$\n$\r$\nPlease choose another one."
+      Abort
+    ${EndIf}
+    FileClose $0
+    Delete "$INSTDIR\strike-write-test.tmp"
+  FunctionEnd
+
+  Page custom StrikeStart StrikeStartLeave
+
+  ; ── Installing ───────────────────────────────────────────────
+  Function StrikeWork
+    !insertmacro StrikeHideTrim
+    FindWindow $0 "#32770" "" $HWNDPARENT
+    SetCtlColors $0 "${ST_TEXT}" "${ST_BG}"
+    GetDlgItem $1 $0 1006
+    SetCtlColors $1 "${ST_DIM}" "${ST_BG}"
+    ; The bar in Strike's own green (0x00BBGGRR), on the card colour.
+    GetDlgItem $1 $0 1004
+    System::Call 'uxtheme::SetWindowTheme(p r1, w " ", w " ")'
+    SendMessage $1 0x409 0 0x3DFFC6
+    SendMessage $1 0x2001 0 0x29180F
+    ; The "show details" button and list are never used.
+    GetDlgItem $1 $0 1027
+    ShowWindow $1 ${SW_HIDE}
+    GetDlgItem $1 $0 1016
+    ShowWindow $1 ${SW_HIDE}
+    File "/oname=$PLUGINSDIR\work.bmp" "${BUILD_RESOURCES_DIR}\installer-work.bmp"
+    System::Call 'user32::LoadImage(p 0, t "$PLUGINSDIR\work.bmp", i 0, i 0, i 0, i 0x10) p .r2'
+    System::Call 'user32::CreateWindowEx(i 0, t "STATIC", t "", i 0x5000000E, i 0, i 74, i 450, i 118, p r0, p 0, p 0, p 0) p .r3'
+    SendMessage $3 0x172 0 $2
+    GetDlgItem $1 $HWNDPARENT 1
+    ShowWindow $1 ${SW_HIDE}
+    GetDlgItem $1 $HWNDPARENT 2
+    ShowWindow $1 ${SW_HIDE}
+    GetDlgItem $1 $HWNDPARENT 3
+    ShowWindow $1 ${SW_HIDE}
+  FunctionEnd
+  AutoCloseWindow true
+  !define MUI_INSTFILESPAGE_PROGRESSBAR "smooth"
+  !define MUI_PAGE_HEADER_TEXT "Installing Strike"
+  !define MUI_PAGE_HEADER_SUBTEXT "Less than a minute on most computers."
+  !define MUI_INSTFILESPAGE_FINISHHEADER_TEXT "Installed"
+  !define MUI_INSTFILESPAGE_FINISHHEADER_SUBTEXT "Strike is ready."
+  !define MUI_PAGE_CUSTOMFUNCTION_SHOW StrikeWork
+!macroend
+
+
+; ── Ready ──────────────────────────────────────────────────────
 ; Two offers: open it, and pin it.
 ;
 ; Pinning is not as simple as it should be. Microsoft closed the documented way
@@ -80,7 +298,7 @@
     ${StdUtils.ExecShellAsUser} $0 "$launchLink" "open" "$1"
   FunctionEnd
 
-  Function PinGameCut
+  Function PinStrike
     ; The script is written out rather than passed with -Command: quoting a
     ; PowerShell one-liner through NSIS and then through cmd is three levels of
     ; escaping, and every one of them is a chance to ship something that fails
@@ -107,55 +325,89 @@
     ${EndIf}
   FunctionEnd
 
-  ; Already set by the welcome page above; MUI keeps one bitmap for both.
-  !ifndef MUI_WELCOMEFINISHPAGE_BITMAP
-    !define MUI_WELCOMEFINISHPAGE_BITMAP "${BUILD_RESOURCES_DIR}\installer-side.bmp"
-  !endif
-  !ifdef MUI_FINISHPAGE_TITLE
-    !undef MUI_FINISHPAGE_TITLE
-  !endif
-  !define MUI_FINISHPAGE_TITLE "Strike is ready"
-  !ifdef MUI_FINISHPAGE_TEXT
-    !undef MUI_FINISHPAGE_TEXT
-  !endif
-  !define MUI_FINISHPAGE_TEXT "It is in your Start menu and on your desktop.$\r$\n$\r$\nStrike checks for its own updates and will tell you when there is one — you will not have to come back here."
+  ; A tick box's own words cannot be coloured in a dark window, so the words sit
+  ; beside it as a label, and clicking them ticks the box.
+  Function StrikeTickRun
+    Pop $0
+    SendMessage $StRun ${BM_CLICK} 0 0
+  FunctionEnd
+  Function StrikeTickPin
+    Pop $0
+    SendMessage $StPin ${BM_CLICK} 0 0
+  FunctionEnd
+  Function StrikeSite
+    Pop $0
+    ExecShell "open" "https://joshthefrazer.github.io/GameCut/"
+  FunctionEnd
 
-  !ifdef MUI_FINISHPAGE_RUN
-    !undef MUI_FINISHPAGE_RUN
-  !endif
-  !define MUI_FINISHPAGE_RUN
-  !ifdef MUI_FINISHPAGE_RUN_FUNCTION
-    !undef MUI_FINISHPAGE_RUN_FUNCTION
-  !endif
-  !define MUI_FINISHPAGE_RUN_FUNCTION "StartApp"
-  !ifdef MUI_FINISHPAGE_RUN_TEXT
-    !undef MUI_FINISHPAGE_RUN_TEXT
-  !endif
-  !define MUI_FINISHPAGE_RUN_TEXT "Open Strike now"
+  Function StrikeReady
+    ${If} ${isUpdated}
+    ${AndIf} ${Silent}
+      Abort
+    ${EndIf}
+    Call muiPageLoadFullWindow
+    !insertmacro StrikeHideTrim
+    Call StrikeHero
 
-  ; SHOWREADME is NSIS's second finish-page checkbox. Pointed at a function, it
-  ; is simply "an extra thing to offer", which is what it is being used for.
-  !ifdef MUI_FINISHPAGE_SHOWREADME
-    !undef MUI_FINISHPAGE_SHOWREADME
-  !endif
-  !define MUI_FINISHPAGE_SHOWREADME ""
-  !ifdef MUI_FINISHPAGE_SHOWREADME_TEXT
-    !undef MUI_FINISHPAGE_SHOWREADME_TEXT
-  !endif
-  !define MUI_FINISHPAGE_SHOWREADME_TEXT "Pin Strike to my taskbar"
-  !ifdef MUI_FINISHPAGE_SHOWREADME_FUNCTION
-    !undef MUI_FINISHPAGE_SHOWREADME_FUNCTION
-  !endif
-  !define MUI_FINISHPAGE_SHOWREADME_FUNCTION "PinGameCut"
+    ${NSD_CreateLabel} 24 160 440 28 "Strike is ready"
+    Pop $0
+    SetCtlColors $0 "${ST_TEXT}" "${ST_BG}"
+    SendMessage $0 ${WM_SETFONT} $StFontTitle 1
+    ${NSD_CreateLabel} 24 191 440 18 "It's in your Start menu and on your desktop, and tells you about updates."
+    Pop $0
+    SetCtlColors $0 "${ST_DIM}" "${ST_BG}"
+    SendMessage $0 ${WM_SETFONT} $StFontText 1
 
-  !ifdef MUI_FINISHPAGE_LINK
-    !undef MUI_FINISHPAGE_LINK
-  !endif
-  !define MUI_FINISHPAGE_LINK "Frazer's Softwares"
-  !ifdef MUI_FINISHPAGE_LINK_LOCATION
-    !undef MUI_FINISHPAGE_LINK_LOCATION
-  !endif
-  !define MUI_FINISHPAGE_LINK_LOCATION "https://joshthefrazer.github.io/GameCut/"
+    ${NSD_CreateCheckBox} 24 226 16 18 "Open Strike now"
+    Pop $StRun
+    !insertmacro StrikeDark $StRun
+    SetCtlColors $StRun "" "${ST_BG}"
+    ${NSD_Check} $StRun
+    ${NSD_CreateLabel} 46 227 300 18 "Open Strike now"
+    Pop $0
+    SetCtlColors $0 "${ST_TEXT}" "${ST_BG}"
+    SendMessage $0 ${WM_SETFONT} $StFontText 1
+    ${NSD_OnClick} $0 StrikeTickRun
+    ${NSD_CreateCheckBox} 24 252 16 18 "Pin Strike to my taskbar"
+    Pop $StPin
+    !insertmacro StrikeDark $StPin
+    SetCtlColors $StPin "" "${ST_BG}"
+    ${NSD_CreateLabel} 46 253 300 18 "Pin Strike to my taskbar"
+    Pop $0
+    SetCtlColors $0 "${ST_TEXT}" "${ST_BG}"
+    SendMessage $0 ${WM_SETFONT} $StFontText 1
+    ${NSD_OnClick} $0 StrikeTickPin
 
-  !insertmacro MUI_PAGE_FINISH
+    ${NSD_CreateLink} 24 288 200 18 "Made by Frazer's Softwares"
+    Pop $0
+    SetCtlColors $0 "${ST_VOLT}" "${ST_BG}"
+    ${NSD_OnClick} $0 StrikeSite
+
+    GetDlgItem $0 $HWNDPARENT 1
+    SendMessage $0 ${WM_SETTEXT} 0 "STR:Finish"
+    EnableWindow $0 1
+    ShowWindow $0 ${SW_SHOW}
+    GetDlgItem $1 $HWNDPARENT 2
+    EnableWindow $1 0
+    ShowWindow $1 ${SW_HIDE}
+    GetDlgItem $1 $HWNDPARENT 3
+    ShowWindow $1 ${SW_HIDE}
+    System::Call 'user32::SetFocus(p r0)'
+    nsDialogs::Show
+    Call muiPageUnloadFullWindow
+    ${NSD_FreeImage} $StHeroImage
+  FunctionEnd
+
+  Function StrikeReadyLeave
+    ${NSD_GetState} $StPin $0
+    ${If} $0 = ${BST_CHECKED}
+      Call PinStrike
+    ${EndIf}
+    ${NSD_GetState} $StRun $0
+    ${If} $0 = ${BST_CHECKED}
+      Call StartApp
+    ${EndIf}
+  FunctionEnd
+
+  Page custom StrikeReady StrikeReadyLeave
 !macroend

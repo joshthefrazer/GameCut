@@ -81,7 +81,9 @@ const SHELL = ['electron-main.cjs', 'file-body.cjs', 'preload.cjs', 'update-conf
 const REBUILD = [...SHELL,
   path.join('build', 'installer.nsh'),
   path.join('build', 'icon.ico'),
-  path.join('build', 'installer-side.bmp')];
+  path.join('build', 'installer-hero.bmp'),
+  path.join('build', 'installer-work.bmp'),
+  path.join('build', 'uninstallerSidebar.bmp')];
 /**
  * The parts of package.json a file update cannot deliver.
  *
