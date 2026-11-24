@@ -8,10 +8,9 @@ that nothing broke. It does not change your footage or your projects.
 1. **The Strike folder** (without `node_modules` and `dist`, which are big and get rebuilt). Copy it by
    USB stick or cloud drive.
 2. **One test video**: a 1080p60 recording of at least 12 seconds, ideally the kind you really edit.
-   A good one is `MedalTVRoblox20261023165210939.mp4` (153 MB) from `Videos\Medal\Clips\Roblox`.
    Any 1080p60 clip works, but results from different clips can't be compared.
 
-## On the college computer
+## On the other computer
 
 1. Install **Node.js LTS** from https://nodejs.org if it isn't there (default options). If you can't install
    software there, get the portable zip from the same site, unzip it, and add its folder to PATH for that session.

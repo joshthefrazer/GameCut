@@ -47,6 +47,9 @@ The first Strike 3.0 update: editing tools you drive yourself, plus a lot of fix
 - **Stick to it**: crop something, press Follow it as it moves, then add a
   ring, an arrow, a name tag, a spotlight or a pixelated blur that moves with
   it, even when the footage is zoomed or moved. Let go leaves it where it is.
+- **Update log you can read**: grouped, bigger, and built in, so it is there
+  offline too. Click the version number at the top.
+- **New installer**: Strike's own look, and three screens instead of five.
 - Fixed: an "unexpected error: ReadableStream is already closed" box that could
   appear while scrubbing or closing a clip.
 - Fixed: Follow it as it moves sometimes drifted off what it was following.

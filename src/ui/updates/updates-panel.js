@@ -100,19 +100,70 @@ export function initUpdates({ store }) {
     }
   }
 
-  function notesList(notes) {
-    const ul = document.createElement('ul');
-    ul.className = 'upd__notes';
-    for (const n of notes || []) {
-      const li = document.createElement('li');
-      li.textContent = n;
-      ul.appendChild(li);
-    }
-    return ul;
+  /* ── The log ──────────────────────────────────────────────────
+     Built into the app (assets/changelog.json, made from CHANGELOG.md), so it
+     is there offline. Anything newer that the update server knows is added. */
+  let builtIn = [];
+  const builtInReady = fetch(new URL('../../../assets/changelog.json', import.meta.url))
+    .then(r => r.json()).then(l => { if (Array.isArray(l)) builtIn = l; }).catch(() => { /* the online log still works */ });
+
+  function fullHistory() {
+    const net = state?.history || [];
+    const when = new Map(net.map(h => [h.version, h.published]));
+    const have = new Set(builtIn.map(h => h.version));
+    const list = [...net.filter(h => !have.has(h.version)), ...builtIn.map(h => ({ ...h, published: when.get(h.version) || null }))];
+    const parts = (v) => String(v).split('.').map(n => parseInt(n, 10) || 0);
+    return list.sort((x, y) => { const a = parts(x.version), b = parts(y.version); for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return (b[i] || 0) - (a[i] || 0); return 0; });
   }
 
+  /** "**Name**: what it does" → a heading and a line. Never HTML: the notes come from a file or the network. */
+  function splitNote(note) {
+    let s = String(note || '').trim();
+    const fixed = /^\**fixed\**:?\s/i.test(s);
+    if (fixed) s = s.replace(/^\**fixed\**:?\s*/i, '');
+    const removed = !fixed && /\b(was|were) removed\b/i.test(s);
+    let title = '';
+    const bold = s.match(/^\*\*(.+?)\*\*(?=\W)\s*/);
+    if (bold) {
+      const rest = s.slice(bold[0].length);
+      title = bold[1].replace(/[:.]$/, '');
+      // "Colour for any clip: …" keeps its whole lead-in as the heading.
+      const lead = rest.match(/^([^:.,]{1,44}):\s+/);
+      if (lead) { title += ' ' + lead[1]; s = rest.slice(lead[0].length); } else s = rest.replace(/^[:.,]\s*/, '');
+      title = title.replace(/\s+([,;])/g, '$1');
+    }
+    s = s.replace(/\*\*/g, '');
+    if (s) s = s[0].toUpperCase() + s.slice(1);
+    return { kind: fixed ? 'fixed' : removed ? 'removed' : title ? 'new' : 'changed', title, text: s };
+  }
+  const KINDS = [['new', 'New'], ['changed', 'Changed'], ['fixed', 'Fixed'], ['removed', 'Removed']];
+
+  function notesList(notes, { max = Infinity } = {}) {
+    const wrap = document.createElement('div');
+    wrap.className = 'upd__notes';
+    let left = max;
+    const all = (notes || []).map(splitNote);
+    for (const [kind, label] of KINDS) {
+      const items = all.filter(n => n.kind === kind).slice(0, Math.max(0, left));
+      if (!items.length) continue;
+      left -= items.length;
+      const h = document.createElement('h4');
+      h.className = `upd__kind upd__kind--${kind}`;
+      h.textContent = label;
+      const ul = document.createElement('ul');
+      for (const n of items) {
+        const li = document.createElement('li');
+        if (n.title) { const b = document.createElement('b'); b.textContent = n.title; li.appendChild(b); }
+        if (n.text) { const p = document.createElement('span'); p.textContent = n.text; li.appendChild(p); }
+        ul.appendChild(li);
+      }
+      wrap.append(h, ul);
+    }
+    return wrap;
+  }
   async function refresh() {
     try { status = await api.updateStatus(); } catch { status = null; }
+    await builtInReady;
     state = status?.net || null;
     build();
     paintChip();
@@ -170,27 +221,34 @@ export function initUpdates({ store }) {
     if (state?.configured) put('Last checked', fmtAgo(state.lastCheck));
     body.appendChild(facts);
 
-    /* The log */
-    const hist = state?.history || [];
+    /* The log: the version you are on is open, the rest fold out. */
+    const hist = fullHistory();
     if (hist.length) {
+      const mine = status?.running?.version || status?.built;
       const h = document.createElement('h3');
       h.className = 'upd__h';
-      h.textContent = 'What has changed';
+      h.textContent = 'Update log';
       body.appendChild(h);
+      const openOne = hist.some(e => e.version === mine) ? mine : hist[0].version;
       for (const entry of hist) {
-        const box = document.createElement('section');
+        const box = document.createElement('details');
         box.className = 'upd__rel';
-        const head2 = document.createElement('div');
+        box.open = entry.version === openOne;
+        const head2 = document.createElement('summary');
         head2.className = 'upd__relhead';
-        head2.innerHTML = `<b></b><span></span>`;
-        head2.querySelector('b').textContent = entry.version;
-        head2.querySelector('span').textContent = fmtWhen(entry.published);
+        const v = document.createElement('b'); v.textContent = entry.version;
+        head2.appendChild(v);
+        if (entry.version === mine) { const tag = document.createElement('i'); tag.textContent = 'You have this'; head2.appendChild(tag); }
+        const info = document.createElement('span');
+        const n = entry.notes?.length || 0;
+        info.textContent = [fmtWhen(entry.published), n ? `${n} change${n === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ');
+        head2.appendChild(info);
         box.appendChild(head2);
-        if (entry.notes?.length) box.appendChild(notesList(entry.notes));
+        if (entry.intro) { const p = document.createElement('p'); p.className = 'upd__intro'; p.textContent = entry.intro.replace(/\*\*/g, ''); box.appendChild(p); }
+        if (n) box.appendChild(notesList(entry.notes));
         body.appendChild(box);
       }
     }
-
     /* Escape hatches, last and quiet. */
     const foot = document.createElement('div');
     foot.className = 'upd__foot';
@@ -266,7 +324,7 @@ export function initUpdates({ store }) {
     const notes = state.available.notes || [];
     const bodyEl = card.querySelector('.updcard__body');
     if (notes.length) {
-      bodyEl.appendChild(notesList(notes.slice(0, 3)));
+      bodyEl.appendChild(notesList(notes, { max: 3 }));
       if (notes.length > 3) {
         const more = document.createElement('p');
         more.className = 'updcard__more';
@@ -326,7 +384,11 @@ export function initUpdates({ store }) {
         <button class="updcard__x" id="updNewClose" aria-label="Close">✕</button></div>
       <div class="updcard__body"></div>`;
     n.querySelector('b').textContent = `You are now on ${whats.version}`;
-    n.querySelector('.updcard__body').appendChild(notesList(whats.notes));
+    n.querySelector('.updcard__body').appendChild(notesList(whats.notes, { max: 4 }));
+    const row = document.createElement('div');
+    row.className = 'updcard__row';
+    row.appendChild(btn('updNewAll', 'See everything that changed', 'primary', () => { n.remove(); open(); }));
+    n.appendChild(row);
     n.querySelector('#updNewClose').addEventListener('click', () => {
       n.classList.remove('is-on');
       setTimeout(() => n.remove(), 200);

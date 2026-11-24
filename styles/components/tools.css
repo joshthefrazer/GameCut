@@ -37,9 +37,9 @@
 .xp-range{margin:2px 0 8px;padding:8px 10px;border-radius:10px;background:color-mix(in srgb,var(--acc) 8%,transparent);border:1px solid color-mix(in srgb,var(--acc) 30%,transparent)}
 
 /* ── Small dialogs: go to time, captions file ──────────────────── */
-.mini{position:fixed;inset:0;z-index:80;display:grid;place-items:start center;padding-top:18vh;background:rgba(2,4,10,.45)}
+.mini{position:fixed;inset:0;z-index:380;display:grid;place-items:start center;padding-top:18vh;background:rgba(2,4,10,.66)}
 .mini[hidden]{display:none}
-.mini__box{width:min(420px,92vw);padding:16px;border-radius:var(--r-md,12px);background:var(--surface-hi,#141b2d);
+.mini__box{width:min(420px,92vw);padding:16px;border-radius:var(--r-md,12px);background:var(--bg-2,#141b2d);
   border:1px solid var(--glass-line-2,rgba(255,255,255,.12));box-shadow:0 18px 60px rgba(0,0,0,.5);display:grid;gap:10px}
 .mini__box b{font-size:14px;color:var(--txt-0)}
 .mini__box p{margin:0;font-size:12px;line-height:1.45;color:var(--txt-2)}
@@ -51,7 +51,7 @@
 
 /* ── Caption editor (Shift+C): beside the preview, over the inspector ── */
 .cape{position:fixed;top:64px;right:10px;bottom:10px;width:min(430px,46vw);z-index:60;display:flex;flex-direction:column;
-  background:var(--surface-hi,#121829);border:1px solid var(--glass-line-2,rgba(255,255,255,.12));border-radius:14px;
+  background:var(--bg-2,#121829);border:1px solid var(--glass-line-2,rgba(255,255,255,.12));border-radius:14px;
   box-shadow:0 18px 50px rgba(0,0,0,.45);overflow:hidden}
 .cape[hidden]{display:none}
 .cape__head{display:flex;align-items:baseline;gap:8px;padding:12px 14px 8px}
@@ -108,14 +108,16 @@
 .cape-open{margin-bottom:8px}
 
 /* ── What's new ───────────────────────────────────────────────── */
-.whatsnew{padding-top:9vh}
-.whatsnew__box{width:min(560px,94vw);max-height:80vh;overflow:auto}
-.whatsnew__list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
-.whatsnew__list li{display:grid;grid-template-columns:150px 1fr;gap:10px;font-size:12px;line-height:1.45}
-.whatsnew__list li b{font-size:12px;color:var(--acc)}
+.whatsnew{padding-top:7vh}
+.whatsnew__box{width:min(720px,94vw);max-height:84vh;display:flex;flex-direction:column;gap:12px;padding:20px 22px}
+.whatsnew__list{list-style:none;margin:0;padding:0 8px 0 0;display:block;overflow:auto;min-height:0;flex:1 1 auto}
+.whatsnew__list li{display:grid;grid-template-columns:190px 1fr;gap:14px;font-size:13.5px;line-height:1.5;padding:8px 0;border-bottom:1px solid var(--glass-line,rgba(255,255,255,.08))}
+.whatsnew__list li b{font-size:14px;color:var(--txt-0)}
 .whatsnew__list li span{color:var(--txt-1,#cdd6ea)}
-.whatsnew__moved{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;padding:8px 10px;border-radius:8px;background:var(--surface,#0e1422);font-size:12px;color:var(--txt-1,#cdd6ea)}
-.whatsnew__moved b{font-size:12px;color:var(--txt-0)}
+.whatsnew__box>b{font-size:21px;flex:none}
+.whatsnew__box>.whatsnew__moved,.whatsnew__box>.mini__row{flex:none}
+.whatsnew__moved{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;padding:8px 10px;border-radius:8px;background:var(--surface,#0e1422);font-size:13.5px;color:var(--txt-0,#fff)}
+.whatsnew__moved b{font-size:13.5px;color:var(--txt-0)}
 .whatsnew__moved s{opacity:.6}
 .whatsnew__moved kbd{font:700 11px/1 var(--font-mono,ui-monospace,monospace);padding:2px 5px;border-radius:4px;background:var(--surface-hi,#1a2236);border:1px solid var(--glass-line-2,rgba(255,255,255,.14))}
 @media (max-width:560px){.whatsnew__list li{grid-template-columns:1fr;gap:2px}}

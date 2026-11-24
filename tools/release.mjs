@@ -131,6 +131,9 @@ function die(msg) {
   process.exit(1);
 }
 
+// The log inside the app is made from the same CHANGELOG.md as everything else.
+await import('./make-changelog.mjs');
+
 /* ── Pack the editor ─────────────────────────────────────────── */
 async function walk(dir, out = []) {
   let entries;
