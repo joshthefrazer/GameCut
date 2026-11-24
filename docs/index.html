@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>GameCut — A video editor for gaming clips that runs on your machine.</title>
+<title>Strike — A video editor for gaming clips that runs on your machine.</title>
 <meta name="description" content="Multi-track timeline, CapCut-style transitions, a text engine built for titles, beat-synced cutting, and export straight to MP4. No account, no upload, no subscription — your footage never leaves your computer.">
-<meta property="og:title" content="GameCut 1.6.0">
+<meta property="og:title" content="Strike 2.1.0">
 <meta property="og:description" content="A video editor for gaming clips that runs on your machine.">
 <meta property="og:type" content="website">
 <meta property="og:image" content="https://joshthefrazer.github.io/GameCut/shots/editor.png">
@@ -18,8 +18,8 @@
 <header class="top">
   <div class="top__in">
     <span class="mark"></span>
-    <span class="top__name">GameCut</span>
-    <span class="top__ver">v1.6.0</span>
+    <span class="top__name">Strike</span>
+    <span class="top__ver">v2.1.0</span>
     <nav class="top__nav">
       <a href="#what">What it does</a>
       <a href="#look">Look</a>
@@ -36,16 +36,16 @@
       <p>Multi-track timeline, CapCut-style transitions, a text engine built for titles, beat-synced cutting, and export straight to MP4. No account, no upload, no subscription — your footage never leaves your computer.</p>
 
       <div class="cta">
-        <a class="btn btn--go" href="GameCut-1.6.0-x64.exe" download>
+        <a class="btn btn--go" href="Strike-2.1.0-x64.exe" download>
           <svg viewBox="0 0 24 24"><path d="M12 4v12"/><path d="m7 11 5 5 5-5"/><path d="M4 19h16"/></svg>
           Download for Windows
         </a>
         <a class="btn" href="#changes">
           <svg viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h10"/></svg>
-          What&rsquo;s new in 1.6.0
+          What&rsquo;s new in 2.1.0
         </a>
       </div>
-      <p class="cta__note">Windows 10 and 11 · 78 MB · free · no account</p>
+      <p class="cta__note">Windows 10 and 11 · 100 MB · free · no account</p>
     </div>
 
     <div class="shot"><img src="shots/editor.png" alt="The GameCut editor: timeline, preview and the transitions panel" width="1600" height="940"></div>
@@ -143,8 +143,39 @@
       <h2 class="h3">Every version, and what it brought.</h2>
             <article class="rel">
         <div class="rel__head">
-          <span class="rel__v">1.6.0</span>
+          <span class="rel__v">2.1.0</span>
           <span class="rel__now">Current</span>
+          <span class="rel__when">23 November 2026</span>
+        </div>
+        <ul>
+          <li>Colour for any clip: brightness, contrast, saturation, warmth, tint and film fade, with starting points you pick (Vivid, Punchy, Warm, Cool, Faded, Mono, Dreamy) and then adjust. Picture tab → Colour. Compare shows before / after.</li>
+          <li>Blend next to Opacity: Screen for light leaks and flares, Multiply for shadows, Overlay for textures, and more.</li>
+          <li>In and Out: I and O mark part of the edit. Loop it (Shift+L), export just that part (&quot;Only In to Out&quot; in Export), or take it out with Lift or Extract (Ctrl+K). Alt+X clears, Shift+I / Shift+O jump to them.</li>
+          <li>J K L: play backwards, stop, play forwards; press J or L again to go faster. , and . step one frame.</li>
+          <li>Trim to the playhead: Alt+[ and Alt+]. Slip: Alt+, and Alt+. show an earlier or later part of the recording inside a clip without moving it.</li>
+          <li>Go to a time: Ctrl+G, or click the time under the preview, and type 1:23, 83, 2m5s or +2.</li>
+          <li>Caption editor (Shift+C): every caption line in one list. Type to fix a word, click a word to colour it, make it bigger, put an emoji on it or make it shake while it's said. Split a line at a word, join two lines, nudge a line earlier or later, find and replace, and change the look of every caption at once.</li>
+          <li>Caption animations: Karaoke (colour sweeps through each word as it is said), Bounce in, Rise up, Word by word and Punch, plus new Karaoke and Bounce looks in Auto-captions.</li>
+          <li>Subtitle files: save captions as .srt or .vtt, or bring in an .srt you already have (buttons in the Auto-captions box).</li>
+          <li>Click to outline anything in Crop → Smart: click a thing and Strike traces its exact edge. ] and [ make the outline bigger or smaller, Ctrl+click adds a missed bit, Alt+click takes one away. Uses a small optional download (14 MB, once); without it, clicking still selects by colour.</li>
+          <li>Find what stays still finds whole panels now, not just their edges, and never guesses names: pieces are numbered.</li>
+          <li>Keys that moved: Import is Ctrl+I and Loop is Shift+L. A card says so the first time you open the editor.</li>
+          <li>Stick to it: crop something, press Follow it as it moves, then add a ring, an arrow, a name tag, a spotlight or a pixelated blur that moves with it, even when the footage is zoomed or moved. Let go leaves it where it is.</li>
+          <li>Update log you can read: grouped, bigger, and built in, so it is there offline too. Click the version number at the top.</li>
+          <li>New installer: Strike's own look, and three screens instead of five.</li>
+          <li>Fixed: an &quot;unexpected error: ReadableStream is already closed&quot; box that could appear while scrubbing or closing a clip.</li>
+          <li>Fixed: Follow it as it moves sometimes drifted off what it was following.</li>
+          <li>Fixed: Compare showed the footage without effects on both sides.</li>
+          <li>Fixed: double-clicking a lane name only renamed the lane that was already selected.</li>
+          <li>Fixed: making a smooth-editing copy of a 1440p or 4K clip stopped at about 80% and never finished. The same stall could freeze an export where a clip runs to the very end of its recording.</li>
+          <li>Fixed: an export whose file name was in use is saved as &quot;name (2).mp4&quot; instead of being thrown away.</li>
+          <li>Smart Zoom, the highlight reel, find-the-beat, auto-vertical and stabilize were removed: Strike 3.0 is about tools you control.</li>
+        </ul>
+      </article>
+      <article class="rel">
+        <div class="rel__head">
+          <span class="rel__v">1.6.0</span>
+          
           <span class="rel__when">14 September 2026</span>
         </div>
         <ul>
@@ -184,8 +215,8 @@
 
 <footer>
   <div class="wrap">
-    <span>GameCut v1.6.0 &middot; Windows &middot; free &middot; by Frazer&rsquo;s Softwares</span>
-    <span class="sp"><a href="GameCut-1.6.0-x64.exe">Download</a></span>
+    <span>Strike v2.1.0 &middot; Windows &middot; free &middot; by Frazer&rsquo;s Softwares</span>
+    <span class="sp"><a href="Strike-2.1.0-x64.exe">Download</a></span>
   </div>
 </footer>
 

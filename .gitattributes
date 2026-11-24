@@ -1,0 +1,11 @@
+# Same line endings on every computer: release files are signed byte for byte.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.gcupdate -text
+*.exe binary
+*.bmp binary
+*.ico binary
+*.png binary
+*.wasm binary
+*.woff2 binary
+*.wav binary

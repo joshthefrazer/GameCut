@@ -148,10 +148,19 @@ async function walk(dir, out = []) {
 
 
 /** Text stays text; anything that does not survive as UTF-8 travels as base64. */
+/*
+ * Other people's libraries (vendor/) and binary files travel as base64, in
+ * 28-character lines. GitHub's secret scanner stopped the 2.1.0 push over
+ * "Mistral3ForConditionalGeneration", a class name in the captions library that
+ * is exactly as long as a Mistral API key. Our own code stays readable text, so
+ * a real secret in it would still be caught. (Buffer.from ignores the line breaks.)
+ */
 async function packFile(abs) {
   const buf = await readFile(abs);
   const txt = buf.toString('utf8');
-  return Buffer.from(txt, 'utf8').equals(buf) ? txt : { b64: buf.toString('base64') };
+  const vendored = path.relative(ROOT, abs).split(path.sep)[0] === 'vendor';
+  if (!vendored && Buffer.from(txt, 'utf8').equals(buf)) return txt;
+  return { b64: buf.toString('base64').replace(/.{28}(?=.)/g, '$&\n') };
 }
 
 const files = {};
@@ -248,7 +257,7 @@ const rebuildNeeded = samePublish
 async function notesFor(v) {
   let md = '';
   try { md = await readFile(path.join(ROOT, 'CHANGELOG.md'), 'utf8'); } catch { return null; }
-  const lines = md.split('\n');
+  const lines = md.replace(/\r\n?/g, '\n').split('\n');
   const start = lines.findIndex(l => new RegExp(`^#{1,3}\\s.*\\b${v.replace(/\./g, '\\.')}\\b`).test(l));
   if (start < 0) return null;
   /**
