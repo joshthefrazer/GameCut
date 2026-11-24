@@ -44,6 +44,12 @@ The first Strike 3.0 update: editing tools you drive yourself, plus a lot of fix
   never guesses names: pieces are numbered.
 - Keys that moved: **Import is Ctrl+I** and **Loop is Shift+L**. A card says so
   the first time you open the editor.
+- **Stick to it**: crop something, press Follow it as it moves, then add a
+  ring, an arrow, a name tag, a spotlight or a pixelated blur that moves with
+  it, even when the footage is zoomed or moved. Let go leaves it where it is.
+- Fixed: an "unexpected error: ReadableStream is already closed" box that could
+  appear while scrubbing or closing a clip.
+- Fixed: Follow it as it moves sometimes drifted off what it was following.
 - Fixed: Compare showed the footage without effects on both sides.
 - Fixed: double-clicking a lane name only renamed the lane that was already
   selected.

@@ -34,6 +34,7 @@ import { initInbox } from './ui/inbox/inbox.js';
 import { initThumbnails } from './ui/thumbs/thumbnail-maker.js';
 import { initMarkerNav } from './edit/marker-nav.js';
 import { initEditTools } from './edit/edit-tools.js';
+import { initStickTo } from './edit/stick-to.js';
 import { initCaptionFiles } from './captions/caption-files.js';
 import { initWhatsNew } from './ui/whats-new.js';
 import { initCaptionEditor } from './captions/caption-edit.js';
@@ -86,6 +87,7 @@ const pads = initPads({ store, cmds, playback });
 const layouts = initLayouts({ store, cmds, comp });
 const markerNav = initMarkerNav({ store, playback });
 const editTools = initEditTools({ store, cmds, history, playback });
+const stickTo = initStickTo({ store, cmds, history });
 const proxies = initProxies({ store, comp });
 const desktop = initDesktop({ history });
 const updates = initUpdates({ store });
@@ -321,4 +323,4 @@ home.show();
 // over "What are you making?". The first-run tour covers the keys instead.
 
 /* Expose for console poking during development. */
-Object.assign(window, { gc: { store, history, cmds, comp, playback, timeline, preview, transport, desktop, library, home, help, transitions, updates, assets, graphics, palette, markerNav, editTools, versions, proxies, captions, captionFiles, captionEditor, whatsNew, qol, animLib, tour, pads, layouts, inbox, thumbs } });
+Object.assign(window, { gc: { store, history, cmds, comp, playback, timeline, preview, transport, desktop, library, home, help, transitions, updates, assets, graphics, palette, markerNav, editTools, stickTo, versions, proxies, captions, captionFiles, captionEditor, whatsNew, qol, animLib, tour, pads, layouts, inbox, thumbs } });

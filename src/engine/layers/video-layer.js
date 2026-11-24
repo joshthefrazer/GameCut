@@ -307,6 +307,83 @@ function cropCanvas(from, w, h) {
   return tight;
 }
 
+/**
+ * Ring, arrow, spotlight and hide: the "point at it" shapes.
+ *   ring:  an outline round the box (s.stroke = thickness, fraction of the short edge), with a soft pulse
+ *   arrow: a bobbing arrow above the box, pointing down at it
+ *   spot:  everything outside the box goes dark (s.dark 0..1), with a soft edge
+ *   hide:  what is inside the box is pixelated (s.blocks = how many blocks across)
+ * `local` is seconds into the clip, for the little movements.
+ */
+let hideCv = null;
+function drawMarker(ctx, s, x, y, w, h, W, H, local, alpha) {
+  const S = Math.min(W, H);
+  const col = s.fill && typeof s.fill === 'string' ? s.fill : '#C6FF3D';
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  if (s.kind === 'ring') {
+    const pulse = s.pulse === false ? 1 : 1 + 0.035 * Math.sin(local * Math.PI * 2 * 1.2);
+    const lw = Math.max(2, (s.stroke ?? 0.008) * S);
+    ctx.lineWidth = lw;
+    ctx.strokeStyle = col;
+    ctx.shadowColor = col;
+    ctx.shadowBlur = lw * 2.2;
+    ctx.beginPath();
+    ctx.ellipse(x, y, Math.max(2, w / 2 * pulse), Math.max(2, h / 2 * pulse), 0, 0, Math.PI * 2);
+    ctx.stroke();
+  } else if (s.kind === 'arrow') {
+    const size = Math.max(S * 0.045, Math.min(S * 0.12, Math.max(w, h) * 0.55));
+    const bob = Math.sin(local * Math.PI * 2 * 1.4) * size * 0.12;
+    const tip = y - h / 2 - S * 0.012 + bob;
+    ctx.translate(x, tip);
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(-size * 0.5, -size * 0.55);
+    ctx.lineTo(-size * 0.18, -size * 0.55);
+    ctx.lineTo(-size * 0.18, -size * 1.15);
+    ctx.lineTo(size * 0.18, -size * 1.15);
+    ctx.lineTo(size * 0.18, -size * 0.55);
+    ctx.lineTo(size * 0.5, -size * 0.55);
+    ctx.closePath();
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(2, size * 0.09);
+    ctx.strokeStyle = '#06080F';
+    ctx.stroke();
+    ctx.fillStyle = col;
+    ctx.fill();
+  } else if (s.kind === 'spot') {
+    const dark = Math.max(0, Math.min(1, s.dark ?? 0.72));
+    const rx = Math.max(4, w / 2), ry = Math.max(4, h / 2);
+    ctx.translate(x, y);
+    ctx.scale(1, ry / rx);
+    const g = ctx.createRadialGradient(0, 0, rx, 0, 0, rx * (1 + (s.soft ?? 0.45)));
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(1, `rgba(0,0,0,${dark})`);
+    ctx.fillStyle = g;
+    const far = (W + H) * 2 * Math.max(1, rx / ry);
+    ctx.fillRect(-far, -far * rx / ry, far * 2, far * 2 * rx / ry);
+  } else if (s.kind === 'hide') {
+    // Pixelate what is already drawn under the box.
+    const bx = Math.max(0, Math.floor(x - w / 2)), by = Math.max(0, Math.floor(y - h / 2));
+    const bw = Math.min(W - bx, Math.ceil(w)), bh = Math.min(H - by, Math.ceil(h));
+    if (bw > 2 && bh > 2) {
+      const n = Math.max(3, Math.round(s.blocks ?? 9));
+      const cw = n, ch = Math.max(2, Math.round(n * bh / bw));
+      hideCv ||= document.createElement('canvas');
+      if (hideCv.width !== cw || hideCv.height !== ch) { hideCv.width = cw; hideCv.height = ch; }
+      const hc = hideCv.getContext('2d');
+      hc.imageSmoothingEnabled = true;
+      hc.drawImage(ctx.canvas, bx, by, bw, bh, 0, 0, cw, ch);
+      ctx.beginPath();
+      if (s.round !== false) ctx.ellipse(x, y, bw / 2, bh / 2, 0, 0, Math.PI * 2); else ctx.rect(bx, by, bw, bh);
+      ctx.clip();
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(hideCv, 0, 0, cw, ch, bx, by, bw, bh);
+    }
+  }
+  ctx.restore();
+}
+
 /** Solid / gradient shape layer — used for lower thirds, bars, letterboxes. */
 export function drawShapeClip(ctx, clip, W, H, t, alpha) {
   const s = clip.shape || {};
@@ -315,6 +392,12 @@ export function drawShapeClip(ctx, clip, W, H, t, alpha) {
   const w = evalProp(clip, 'transform.w', t) * W * evalProp(clip, 'transform.scale', t);
   const h = evalProp(clip, 'transform.h', t) * H * evalProp(clip, 'transform.scale', t);
   const rot = evalProp(clip, 'transform.rotation', t) * Math.PI / 180;
+
+  // Pointers and highlights (most often stuck to something tracked, see stick.js).
+  if (s.kind === 'ring' || s.kind === 'arrow' || s.kind === 'spot' || s.kind === 'hide') {
+    drawMarker(ctx, s, x, y, w, h, W, H, t - clip.start, alpha);
+    return;
+  }
 
   ctx.save();
   ctx.globalAlpha = alpha;

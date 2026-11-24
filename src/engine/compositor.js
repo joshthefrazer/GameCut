@@ -7,6 +7,8 @@ import { visualMotion, rad } from './motion.js';
 import { applyEffect } from './layers/effects.js';
 import { drawAnimClip, animBox } from './layers/anim-layer.js';
 import { blendOp, colorFilter } from './layers/color.js';
+import { resolveStick } from './layers/stick.js';
+import { assets } from '../media/asset-store.js';
 
 /** Preview renders at most this wide; export re-runs the same code at full res. */
 const PREVIEW_MAX_W = 2560;
@@ -315,12 +317,12 @@ export class Compositor {
         if (alpha <= 0.001) continue;
 
         if (clip.type === 'text' || clip.type === 'shape' || clip.type === 'effect' || clip.type === 'anim') {
-          layers.push({ clip, alpha, src: null });
+          layers.push({ clip: this.stuck(clip, t, W, H), alpha, src: null });
           continue;
         }
         const src = this.pool.frameFor(clip, t, playing);
         if (!src) { starved = true; continue; }
-        layers.push({ clip, alpha, src });
+        layers.push({ clip: clip.type === 'image' ? this.stuck(clip, t, W, H) : clip, alpha, src });
       }
     }
 
@@ -514,7 +516,25 @@ export class Compositor {
   }
 
   /** Bounding box of a clip in normalized (0..1) frame space, for the gizmo. */
+  /**
+   * A layer stuck to something tracked (src/engine/layers/stick.js), moved to
+   * where that thing is at `t`. Anything else comes back as it was.
+   */
+  stuck(clip, t, W = this.canvas.width, H = this.canvas.height) {
+    if (!clip.stick) return clip;
+    const place = (f, at) => {
+      let src = this.pool.peek(f);
+      if (!(src?.videoWidth || src?.naturalWidth || src?.displayWidth)) {
+        const a = assets.get(f.assetId);
+        src = a?.width ? { videoWidth: a.width, videoHeight: a.height } : null;
+      }
+      return src ? this.boundsPx(f, at, src, W, H) : null;
+    };
+    return resolveStick(this.store.doc, clip, t, W, H, place);
+  }
+
   bounds(clip, t) {
+    clip = this.stuck(clip, t);
     const W = this.canvas.width, H = this.canvas.height;
     const cx = evalProp(clip, 'transform.x', t);
     const cy = evalProp(clip, 'transform.y', t);

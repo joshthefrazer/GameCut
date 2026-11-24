@@ -263,6 +263,7 @@ export function initInspector({ store, cmds, comp, playback }) {
     if (clip.type === 'video') buildFraming(clip);
     if (clip.crop) buildCrop(clip);
     if (clip.type === 'shape') buildShape(clip);
+    if (clip.stick) buildStuck(clip);
     if (clip.type === 'text') { into('text'); buildText(clip); }
     if (clip.type === 'anim') { into('custom'); buildAnimPanel({ clip, root, store, cmds, comp, rerender }); }
     if (track.kind !== 'audio' && clip.type !== 'effect') {
@@ -876,6 +877,65 @@ export function initInspector({ store, cmds, comp, playback }) {
     help.className = 'insp__help';
     help.textContent = 'This writes a path you can undo; the crop box can still be nudged by hand.';
     g.body.appendChild(help);
+    root.appendChild(g);
+
+    /* Stick to it: things that move with what this crop follows. */
+    const st = window.gc?.stickTo;
+    if (!st) return;
+    const gs = group('Stick to it');
+    gs.dataset.group = 'stick';
+    const note = document.createElement('p');
+    note.className = 'insp__help';
+    note.textContent = clip.crop.path?.length
+      ? 'Add something that moves with what this crop follows. Each is a normal layer you can restyle or delete.'
+      : 'Press "Follow it as it moves" first; then these move with it.';
+    gs.body.appendChild(note);
+    const chips = document.createElement('div');
+    chips.className = 'chips';
+    for (const s of st.STICKERS) {
+      const b = document.createElement('button');
+      b.className = 'chip-btn';
+      b.dataset.stick = s.id;
+      b.textContent = s.name;
+      b.title = s.note;
+      b.addEventListener('click', () => { st.add(s.id, clip.id); comp.render(); });
+      chips.appendChild(b);
+    }
+    gs.body.appendChild(chips);
+    root.appendChild(gs);
+  }
+
+  /** A layer stuck to something tracked: say so, and offer to let go or nudge it. */
+  function buildStuck(clip) {
+    if (!clip.stick) return;
+    const st = window.gc?.stickTo;
+    const target = store.doc.tracks.flatMap(t => t.clips).find(c => c.id === clip.stick.to);
+    const g = group('Stuck to a tracked thing');
+    g.dataset.group = 'stuck';
+    const p = document.createElement('p');
+    p.className = 'insp__help';
+    p.textContent = target
+      ? `Moves with “${target.name || 'the tracked crop'}”. Nudge it, or let it go to place it yourself.`
+      : 'What it was stuck to has been deleted, so it stays where it is.';
+    g.body.appendChild(p);
+    const pad = document.createElement('div');
+    pad.className = 'chips';
+    const step = 0.01;
+    for (const [lbl, dx, dy] of [['◂', -step, 0], ['▴', 0, -step], ['▾', 0, step], ['▸', step, 0]]) {
+      const b = document.createElement('button');
+      b.className = 'chip-btn';
+      b.textContent = lbl;
+      b.title = 'Nudge';
+      b.addEventListener('click', () => { st?.nudge(clip.id, dx, dy); comp.render(); });
+      pad.appendChild(b);
+    }
+    g.body.appendChild(row('Nudge', pad));
+    const off = document.createElement('button');
+    off.className = 'fontdrop';
+    off.id = 'btnUnstick';
+    off.textContent = 'Let go (stay where it is now)';
+    off.addEventListener('click', () => { st?.unstick(clip.id); comp.render(); rerender(); });
+    g.body.appendChild(off);
     root.appendChild(g);
   }
 
