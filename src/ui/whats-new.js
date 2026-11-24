@@ -16,6 +16,8 @@ const NEW_TOOLS = [
   ['J K L', 'Play backwards, stop, play forwards; press J or L again to go faster. , and . step one frame.'],
   ['Trim and slip', 'Alt+[ and Alt+] cut the start or end of the clip under the playhead right to it. Alt+, and Alt+. slip: show an earlier or later part of the recording inside the clip.'],
   ['Go to a time', 'Ctrl+G, or click the time under the preview, and type 1:23, 83 or 2m5s.'],
+  ['Caption editor', 'Shift+C: every caption in one list. Fix a word, click a word to colour it, make it huge, give it an emoji or a shake, split and join lines.'],
+  ['Caption animations', 'Karaoke (colour sweeps through each word), Bounce in, Rise up, Word by word, Punch: pick one for all your captions.'],
   ['Subtitle files', 'Save captions as .srt / .vtt, or bring in an .srt you already have (in the Auto-captions box).'],
   ['Click to outline anything', 'Crop → Smart: click a thing and Strike traces its exact edge (a small optional download, once).'],
 ];

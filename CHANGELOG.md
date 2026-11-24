@@ -26,6 +26,14 @@ The first Strike 3.0 update: editing tools you drive yourself, plus a lot of fix
   earlier or later part of the recording inside a clip without moving it.
 - **Go to a time**: Ctrl+G, or click the time under the preview, and type
   1:23, 83, 2m5s or +2.
+- **Caption editor** (Shift+C): every caption line in one list. Type to fix a
+  word, click a word to colour it, make it bigger, put an emoji on it or make
+  it shake while it's said. Split a line at a word, join two lines, nudge a
+  line earlier or later, find and replace, and change the look of every
+  caption at once.
+- **Caption animations**: Karaoke (colour sweeps through each word as it is
+  said), Bounce in, Rise up, Word by word and Punch, plus new Karaoke and
+  Bounce looks in Auto-captions.
 - **Subtitle files**: save captions as .srt or .vtt, or bring in an .srt you
   already have (buttons in the Auto-captions box).
 - **Click to outline anything** in Crop → Smart: click a thing and Strike traces

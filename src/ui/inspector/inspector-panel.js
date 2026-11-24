@@ -814,6 +814,15 @@ export function initInspector({ store, cmds, comp, playback }) {
 
   /* ── Text ─────────────────────────────────────────────────── */
   function buildText(clip) {
+    // A caption: the caption editor is where all of them are fixed and styled together.
+    if (clip.caption || Array.isArray(clip.text?.words)) {
+      const b = document.createElement('button');
+      b.className = 'fontdrop cape-open';
+      b.id = 'btnEditCaptions';
+      b.textContent = 'Edit all captions (Shift+C): words, colours, emoji, timing';
+      b.addEventListener('click', () => bus.emit('captions:editor'));
+      root.appendChild(b);
+    }
     buildTextPanel({ clip, root, store, cmds, comp, rerender, playback });
   }
 

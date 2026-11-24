@@ -181,6 +181,7 @@ export function initShortcuts({ store, cmds, history, playback, timeline, previe
         const k = e.key.toLowerCase();
         if (k === 's') { e.preventDefault(); cmds.splitAt(store.rt.playhead, store.rt.selection); }
         else if (k === 't') { e.preventDefault(); cmds.addTextClip(store.rt.playhead); }
+        else if (k === 'c' && e.shiftKey) { e.preventDefault(); window.gc?.captionEditor?.toggle(); }
         else if (k === 'c') { e.preventDefault(); preview?.crop?.toggle?.(); }
         else if (k === 'm') { cmds.addMarker(store.rt.playhead); }
         // J K L shuttle; loop moved to Shift+L.

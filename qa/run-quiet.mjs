@@ -16,7 +16,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
-const LIGHT = ['tools-a', 'features', 'features2', 'timeline', 'timeline-next', 'qol', 'ui-next', 'strike', 'smart-crop', 'crop-box', 'text-motion', 'engine'];
+const LIGHT = ['tools-a', 'captions-edit', 'features', 'features2', 'timeline', 'timeline-next', 'qol', 'ui-next', 'strike', 'smart-crop', 'crop-box', 'text-motion', 'engine'];
 const HEAVY = ['export-sink', 'outline'];
 
 const args = process.argv.slice(2);

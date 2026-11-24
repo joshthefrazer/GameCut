@@ -134,6 +134,10 @@ export function drawTextClip(ctx, clip, W, H, t, alpha) {
   const live = spoken ? s.words.findIndex(w => tt >= w.s && tt < w.e) : -1;
   /* Keywords ("kill", "clutch", numbers…) marked by the captioner: bigger and coloured. */
   const keys = spoken && Array.isArray(s.keys) && s.keys.length ? new Set(s.keys) : null;
+  /* Caption animation for the words as they are said (see WORD_ANIMS), and
+     styles you gave single words (colour, size, emoji, shake). */
+  const wordAnim = spoken ? (s.wordAnim || 'none') : 'none';
+  const wstyle = spoken && s.wordStyle && typeof s.wordStyle === 'object' ? s.wordStyle : null;
   const perPiece = unit !== 'all' || typing || spoken;
   // Spoken captions get a little more room between words: the said word pops
   // and keywords are coloured, and a thick outline eats into a plain space.
@@ -213,7 +217,7 @@ export function drawTextClip(ctx, clip, W, H, t, alpha) {
    * turn, wrapped in its own move — so glow, shadow, outline and fill all
    * follow a flying letter without any of them knowing it is flying.
    */
-  const paint = (fn) => {
+  const paint = (fn, onPiece = null) => {
     if (!lay) {
       m.lines.forEach((line, i) => fn(line, alignOffset(s.align, m, lineWidth(ctx, line, sp)), top + i * m.lineH, null));
       return;
@@ -221,8 +225,21 @@ export function drawTextClip(ctx, clip, W, H, t, alpha) {
     for (const piece of lay.pieces) {
       if (typing && piece.chars[0].gi >= typed) continue;
       let mv = motionOf(piece.idx, Math.max(1, lay.count), false);
-      if (piece.idx === live) mv = { ...mv, s: mv.s * (s.hiPop ?? 1.12) };
+      if (wordAnim !== 'none') mv = wordMove(wordAnim, mv, s.words[piece.idx], tt, m.lineH);
+      if (piece.idx === live && wordAnim !== 'karaoke') mv = { ...mv, s: mv.s * (s.hiPop ?? 1.12) };
       if (keys && keys.has(piece.idx)) mv = { ...mv, s: mv.s * (s.keyPop ?? 1) };
+      const ws = wstyle?.[piece.idx];
+      if (ws) {
+        if (ws.scale && ws.scale !== 1) mv = { ...mv, s: mv.s * ws.scale };
+        // Shake: while the word is being said and a moment after.
+        if (ws.shake) {
+          const w = s.words[piece.idx];
+          if (w && tt >= w.s - 0.02 && tt < w.e + 0.35) {
+            const k = m.lineH * 0.07;
+            mv = { ...mv, dx: mv.dx + Math.sin(tt * 91 + piece.idx) * k, dy: mv.dy + Math.cos(tt * 77 + piece.idx * 3) * k, rot: mv.rot + Math.sin(tt * 63) * 4 };
+          }
+        }
+      }
       if (mv.a * alpha <= 0.002) continue;
       ctx.save();
       ctx.globalAlpha = alpha * mv.a;
@@ -238,6 +255,7 @@ export function drawTextClip(ctx, clip, W, H, t, alpha) {
         if (typing && g.gi >= typed) continue;
         fn(g.ch, g.x + g.w / 2 - piece.cx, 0, { piece, mv });
       }
+      onPiece?.(piece, mv);
       ctx.restore();
     }
   };
@@ -302,13 +320,45 @@ export function drawTextClip(ctx, clip, W, H, t, alpha) {
   const baseFill = fillStyle(ctx, s, m);
   const rainbow = loopKind === 'rainbow' && s.fill !== 'gradient';
   ctx.fillStyle = rainbow && !lay ? `hsl(${(tt * 120) % 360} 90% 62%)` : baseFill;
+  const hi = s.hiColor || '#facc15';
   paint((str, gx, gy, info) => {
-    if (info && keys && keys.has(info.piece.idx) && (s.keyWins || info.piece.idx !== live)) ctx.fillStyle = s.keyColor || s.hiColor || '#facc15';
-    else if (info && info.piece.idx === live) ctx.fillStyle = s.hiColor || '#facc15';
+    const own = info && wstyle?.[info.piece.idx]?.color;
+    const idx = info?.piece.idx;
+    if (own) ctx.fillStyle = own;
+    else if (info && keys && keys.has(idx) && (s.keyWins || idx !== live)) ctx.fillStyle = s.keyColor || hi;
+    // Karaoke: words already said stay lit; the word being said fills left to right (below).
+    else if (info && wordAnim === 'karaoke' && s.words[idx] && tt >= s.words[idx].e) ctx.fillStyle = hi;
+    else if (info && idx === live && wordAnim !== 'karaoke') ctx.fillStyle = hi;
     else if (info && spoken && !rainbow && s.fill !== 'gradient') ctx.fillStyle = baseFill;
     else if (info && rainbow) ctx.fillStyle = `hsl(${info.mv.hue ?? 0} 90% 62%)`;
     else if (info && s.fill === 'gradient') ctx.fillStyle = gradientAt(ctx, s, m, info.piece.cx, info.piece.cy);
     drawOne(str, gx, gy, 'fill', info);
+    if (info && !own && wordAnim === 'karaoke' && idx === live) {
+      const w = s.words[idx];
+      const p = clamp01((tt - w.s) / Math.max(0.05, w.e - w.s));
+      const pw = info.piece.w;
+      ctx.save();
+      ctx.beginPath();
+      // In the piece's own space: its left edge is at -w/2. This char sits at gx.
+      ctx.rect(-pw / 2 - m.px * 0.1, -m.lineH, (pw + m.px * 0.2) * p, m.lineH * 2);
+      ctx.clip();
+      ctx.shadowColor = 'transparent';
+      ctx.fillStyle = hi;
+      drawOne(str, gx, gy, 'fill', info);
+      ctx.restore();
+    }
+  }, (piece) => {
+    // An emoji you put on a word sits just above it and moves with it.
+    const e = wstyle?.[piece.idx]?.emoji;
+    if (!e) return;
+    ctx.save();
+    ctx.shadowColor = 'transparent';
+    ctx.globalAlpha = Math.min(1, ctx.globalAlpha);
+    ctx.font = `${Math.round(m.px * 0.95)}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff';
+    ctx.fillText(e, 0, -m.lineH * 0.88);
+    ctx.restore();
   });
 
   /* ── Typewriter cursor ─────────────────────────────────────────
@@ -331,6 +381,48 @@ export function drawTextClip(ctx, clip, W, H, t, alpha) {
   }
 
   ctx.restore();
+}
+
+/* ── Caption animations: what each word does as it is said ───────
+   Only for captions (text with word timings). Picked from tiles in the
+   caption editor; the look's own colours still apply. */
+export const WORD_ANIMS = [
+  { id: 'none',    name: 'Highlight',  note: 'All the words show; the one being said lights up and pops' },
+  { id: 'karaoke', name: 'Karaoke',    note: 'Colour sweeps through each word as it is said, and stays' },
+  { id: 'bounce',  name: 'Bounce in',  note: 'Each word drops in with a bounce the moment it is said' },
+  { id: 'rise',    name: 'Rise up',    note: 'Each word slides up and fades in as it is said' },
+  { id: 'reveal',  name: 'Word by word', note: 'Each word appears exactly when it is said, no movement' },
+  { id: 'punch',   name: 'Punch',      note: 'Each word slams in big and settles' },
+];
+
+/** The move for one word at clip time `tt`, given when it is said. */
+function wordMove(kind, mv, w, tt, lineH) {
+  if (!w) return mv;
+  const since = tt - w.s;
+  if (since < 0) return { ...mv, a: 0 };            // not said yet: not there
+  if (kind === 'karaoke') return mv;
+  if (kind === 'reveal') return mv;
+  if (kind === 'bounce') {
+    const d = 0.32;
+    if (since >= d) return mv;
+    const p = since / d;
+    // A drop that overshoots and settles.
+    const y = (1 - p) * (1 - p) * Math.cos(p * Math.PI * 2.5);
+    return { ...mv, dy: mv.dy - y * lineH * 0.55, a: mv.a * Math.min(1, p * 4) };
+  }
+  if (kind === 'rise') {
+    const d = 0.22;
+    if (since >= d) return mv;
+    const p = easeOut(since / d);
+    return { ...mv, dy: mv.dy + (1 - p) * lineH * 0.45, a: mv.a * p };
+  }
+  if (kind === 'punch') {
+    const d = 0.2;
+    if (since >= d) return mv;
+    const p = easeOut(since / d);
+    return { ...mv, s: mv.s * (1.8 - 0.8 * p), a: mv.a * Math.min(1, since / 0.05) };
+  }
+  return mv;
 }
 
 /* ── helpers ──────────────────────────────────────────────────── */

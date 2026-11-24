@@ -60,6 +60,26 @@ export const CAPTION_LOOKS = [
     },
   },
   {
+    id: 'karaoke', name: 'Karaoke', note: 'Yellow sweeps through each word as it is said',
+    style: {
+      font: 'Inter', weight: 900, size: 0.066, fill: 'solid', color: '#ffffff',
+      strokeWidth: 0.07, strokeColor: '#06080F', glow: 0, shadow: 0.016, shadowColor: '#000000', shadowY: 0.008,
+      bg: 'none', letterSpacing: 0, lineHeight: 1.08,
+      anim: 'fade', animDur: 0.08, animOut: 'none', animLoop: 'none', animUnit: 'all',
+      hiColor: '#facc15', hiPop: 1, keyColor: '#fb923c', wordAnim: 'karaoke',
+    },
+  },
+  {
+    id: 'bounce', name: 'Bounce in', note: 'Each word drops in with a bounce as it is said',
+    style: {
+      font: 'Inter', weight: 900, size: 0.072, fill: 'solid', color: '#ffffff',
+      strokeWidth: 0.08, strokeColor: '#06080F', glow: 0, shadow: 0.02, shadowColor: '#000000', shadowY: 0.01,
+      bg: 'none', letterSpacing: 0, lineHeight: 1.08,
+      anim: 'none', animDur: 0.1, animOut: 'none', animLoop: 'none', animUnit: 'all',
+      hiColor: '#C6FF3D', hiPop: 1.1, keyColor: '#C6FF3D', wordAnim: 'bounce',
+    },
+  },
+  {
     id: 'single', name: 'One word at a time', note: 'Big single words, punchy for fast talking', lines: { maxWords: 1, maxChars: 14, maxDur: 0.9, gap: 0.3 },
     style: {
       font: 'Inter', weight: 900, size: 0.1, fill: 'solid', color: '#ffffff',
@@ -380,7 +400,8 @@ export function initCaptions({ store, cmds, history }) {
       const n = addCaptions({ store, cmds, history }, lines, { look, from, to, keywords: opts.keywords, safe: opts.safe });
       running = false;
       el.hidden = true;
-      bus.emit('toast', { msg: `Added ${n} caption${n === 1 ? '' : 's'} on the Captions lane — click one to fix a word. Ctrl+Z removes them all.`, kind: 'ok', ms: 6000 });
+      bus.emit('toast', { msg: `Added ${n} caption${n === 1 ? '' : 's'} on the Captions lane. Shift+C opens the caption editor to fix and style words; Ctrl+Z removes them all.`, kind: 'ok', ms: 7000,
+        action: { label: 'Edit captions', run: () => bus.emit('captions:editor') } });
     } catch (e) {
       if (!alive()) return;
       running = false;

@@ -36,6 +36,7 @@ import { initMarkerNav } from './edit/marker-nav.js';
 import { initEditTools } from './edit/edit-tools.js';
 import { initCaptionFiles } from './captions/caption-files.js';
 import { initWhatsNew } from './ui/whats-new.js';
+import { initCaptionEditor } from './captions/caption-edit.js';
 import { initVersions } from './ui/versions.js';
 import { initProxies } from './media/proxies.js';
 import { initCaptions } from './captions/captions.js';
@@ -116,6 +117,7 @@ const library = createLibrary({ store, comp, history });
 const versions = initVersions({ library });
 const captions = initCaptions({ store, cmds, history });
 const captionFiles = initCaptionFiles({ store, cmds, history });
+const captionEditor = initCaptionEditor({ store, history, playback, cmds });
 const whatsNew = initWhatsNew({ library });
 const qol = initQol({ store, cmds, history, playback, comp, timeline });
 
@@ -319,4 +321,4 @@ home.show();
 // over "What are you making?". The first-run tour covers the keys instead.
 
 /* Expose for console poking during development. */
-Object.assign(window, { gc: { store, history, cmds, comp, playback, timeline, preview, transport, desktop, library, home, help, transitions, updates, assets, graphics, palette, markerNav, editTools, versions, proxies, captions, captionFiles, whatsNew, qol, animLib, tour, pads, layouts, inbox, thumbs } });
+Object.assign(window, { gc: { store, history, cmds, comp, playback, timeline, preview, transport, desktop, library, home, help, transitions, updates, assets, graphics, palette, markerNav, editTools, versions, proxies, captions, captionFiles, captionEditor, whatsNew, qol, animLib, tour, pads, layouts, inbox, thumbs } });

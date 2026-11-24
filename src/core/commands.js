@@ -981,8 +981,9 @@ export function createCommands(store, history) {
       const pick = (o, keys) => Object.fromEntries(keys.filter(k => o[k] !== undefined).map(k => [k, structuredClone(o[k])]));
       const look = { from: clip.type, name: clip.name };
       if (clip.type === 'text') {
-        const { text, ...style } = clip.text || {};
-        void text;
+        // The words, their timings and per-word styles belong to that line, not to its look.
+        const { text, words, keys, wordStyle, ...style } = clip.text || {};
+        void text; void words; void keys; void wordStyle;
         look.textStyle = structuredClone(style);
       }
       if (clip.type === 'effect') look.effect = structuredClone(clip.effect);

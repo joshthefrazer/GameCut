@@ -52,6 +52,7 @@ const KEYS = [
   ['S', 'Split at the playhead'],
   ['T', 'Add a text layer'],
   ['C', 'Crop tool'],
+  ['Shift + C', 'Caption editor: fix words, colour or enlarge a word, add an emoji, split and join lines'],
   ['Shift + F', 'Freeze frame: pause the video on this frame for 2 seconds'],
   ['Z', 'Punch-in zoom at the playhead'],
   ['Ctrl + K', 'Find any action, clip or media by typing'],
