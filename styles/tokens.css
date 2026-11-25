@@ -86,10 +86,12 @@
   --marker:#fbbf24;
 
   /* Geometry */
-  --r-xl:18px;
-  --r-lg:14px;
-  --r-md:9px;
-  --r-sm:6px;
+  --rk:1;               /* how round corners are */
+  --fs:1;               /* text size */
+  --r-xl:calc(18px*var(--rk));
+  --r-lg:calc(14px*var(--rk));
+  --r-md:calc(9px*var(--rk));
+  --r-sm:calc(6px*var(--rk));
 
   /* Elevation — depth from black, light from blue */
   --sh-panel:

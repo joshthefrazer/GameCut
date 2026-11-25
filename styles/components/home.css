@@ -7,7 +7,7 @@
   position:fixed;inset:0;z-index:60;
   display:none;flex-direction:column;
   background:
-    radial-gradient(58vw 44vw at 6% -10%, rgba(37,99,235,.20), rgba(37,99,235,0) 62%),
+    radial-gradient(58vw 44vw at 6% -10%, color-mix(in srgb,var(--acc) 20%,transparent), transparent 62%),
     radial-gradient(46vw 40vw at 98% 4%, rgba(34,211,238,.13), rgba(34,211,238,0) 62%),
     var(--bg-0);
 }
@@ -23,8 +23,8 @@
   -webkit-app-region:drag;
 }
 .home__bar > *{-webkit-app-region:no-drag}
-.home__title{font-size:14px;font-weight:700;letter-spacing:-.01em;color:var(--txt-0)}
-.home__ver{font-family:var(--f-mono);font-size:10.5px;color:var(--txt-3)}
+.home__title{font-size:calc(14px*var(--fs));font-weight:700;letter-spacing:-.01em;color:var(--txt-0)}
+.home__ver{font-family:var(--f-mono);font-size:calc(11px*var(--fs));color:var(--txt-3)}
 
 .home__body{
   flex:1;min-height:0;overflow-y:auto;
@@ -36,26 +36,26 @@
 .home__new{
   display:block;width:100%;height:132px;border-radius:var(--r-lg);
   background:linear-gradient(100deg,#7c3aed 0%,#4f46e5 26%,#2563eb 54%,#0ea5e9 78%,#22d3ee 100%);
-  box-shadow:0 0 0 1px rgba(120,170,255,.22), 0 18px 44px -20px rgba(37,99,235,.75);
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--tint) 22%,transparent), 0 18px 44px -20px color-mix(in srgb,var(--acc) 75%,transparent);
   transition:transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
 .home__new:hover{
   transform:translateY(-2px);
-  box-shadow:0 0 0 1px rgba(120,170,255,.38), 0 24px 56px -20px rgba(37,99,235,.9);
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--tint) 38%,transparent), 0 24px 56px -20px color-mix(in srgb,var(--acc) 90%,transparent);
 }
 .home__new:active{transform:translateY(0)}
 .home__newInner{
   display:flex;align-items:center;justify-content:center;gap:10px;height:100%;
-  font-size:17px;font-weight:650;color:#fff;letter-spacing:-.01em;
+  font-size:calc(17px*var(--fs));font-weight:650;color:#fff;letter-spacing:-.01em;
   text-shadow:0 1px 10px rgba(4,10,24,.35);
 }
 .home__newInner svg{width:22px;height:22px;stroke-width:2.2}
 
 .home__head{
   display:flex;align-items:baseline;gap:9px;margin:26px 0 12px;
-  font-size:13px;color:var(--txt-0);
+  font-size:calc(13px*var(--fs));color:var(--txt-0);
 }
-.home__count{font-size:11.5px;color:var(--txt-3)}
+.home__count{font-size:calc(11.5px*var(--fs));color:var(--txt-3)}
 
 .home__grid{
   display:grid;gap:14px;
@@ -65,8 +65,8 @@
   grid-column:1/-1;padding:38px 20px;text-align:center;
   border:1px dashed var(--glass-line-2);border-radius:var(--r-lg);
 }
-.home__empty b{display:block;font-size:13.5px;color:var(--txt-1);margin-bottom:6px}
-.home__empty span{font-size:12px;color:var(--txt-3);line-height:1.55;max-width:420px;display:inline-block}
+.home__empty b{display:block;font-size:calc(13.5px*var(--fs));color:var(--txt-1);margin-bottom:6px}
+.home__empty span{font-size:calc(12px*var(--fs));color:var(--txt-3);line-height:1.55;max-width:420px;display:inline-block}
 
 .proj{
   position:relative;display:flex;flex-direction:column;gap:8px;text-align:left;
@@ -87,17 +87,17 @@
 .proj__shot img{width:100%;height:100%;object-fit:cover;display:block}
 .proj__blank{
   display:block;width:100%;height:100%;
-  background:linear-gradient(135deg,rgba(59,130,246,.18),rgba(34,211,238,.10));
+  background:linear-gradient(135deg,color-mix(in srgb,var(--acc) 18%,transparent),rgba(34,211,238,.10));
 }
 .proj__meta{display:flex;flex-direction:column;gap:2px;min-width:0;padding:0 2px 2px}
 .proj__name{
-  font-size:12.5px;font-weight:600;color:var(--txt-0);
+  font-size:calc(12.5px*var(--fs));font-weight:600;color:var(--txt-0);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
-.proj__sub{font-size:10.5px;color:var(--txt-3)}
+.proj__sub{font-size:calc(11px*var(--fs));color:var(--txt-3)}
 .proj__del{
   position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;
-  background:var(--danger);color:#fff;font-style:normal;font-size:11px;
+  background:var(--danger);color:#fff;font-style:normal;font-size:calc(11px*var(--fs));
   line-height:20px;text-align:center;opacity:0;
   transition:opacity var(--dur) var(--ease);
 }
@@ -107,8 +107,8 @@
    a question anyone reads. */
 .proj__del.is-armed{
   opacity:1;width:auto;padding:0 9px;border-radius:99px;
-  font-size:10.5px;font-weight:700;letter-spacing:.02em;
-  box-shadow:0 2px 10px -3px rgba(244,63,94,.8);
+  font-size:calc(11px*var(--fs));font-weight:700;letter-spacing:.02em;
+  box-shadow:0 2px 10px -3px color-mix(in srgb,var(--danger) 80%,transparent);
 }
 
 /* Missing footage — the clip stays on the timeline so you can see what is

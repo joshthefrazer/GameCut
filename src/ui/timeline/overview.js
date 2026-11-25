@@ -1,4 +1,4 @@
-import { TH } from '../theme.js';
+import { TH, alpha as hexA } from '../theme.js';
 import { CLIP_COLORS } from '../../core/schema.js';
 
 /**
@@ -56,7 +56,7 @@ export function initOverview({ store, L, repaint, deferFollow, playback }) {
     // What the timeline is showing.
     const v0 = store.ui.scrollX * k;
     const vw = Math.max(8, ((L.W || 1) / store.pxPerSec) * k);
-    ctx.fillStyle = 'rgba(59,130,246,.16)';
+    ctx.fillStyle = hexA(TH.acc, 0.16);
     ctx.fillRect(v0, 1, vw, H - 2);
     ctx.strokeStyle = TH.acc;
     ctx.lineWidth = 2;

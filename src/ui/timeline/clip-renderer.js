@@ -89,9 +89,12 @@ export function drawClip(ctx, { clip, track, rect, full, selected, pps, L, hover
   }
   if (w > 64) {
     ctx.fillStyle = TH.clipLabelDim;
-    ctx.font = '9px ui-monospace, monospace';
+    ctx.font = '10px ui-monospace, monospace';
     ctx.textAlign = 'right';
+    const wasBase = ctx.textBaseline;
+    ctx.textBaseline = 'middle';      // without it the top half was cut off
     ctx.fillText(shortTime(clip.duration), x + w - 5, y + hh / 2 + .5);
+    ctx.textBaseline = wasBase;
     ctx.textAlign = 'left';
   }
 

@@ -122,7 +122,8 @@ export function initTimelineInteractions({ view, store, cmds, history, playback,
 
   /* ── Hover: cursor, handles, razor line ───────────────────── */
   view.addEventListener('pointermove', (e) => {
-    if (store.rt.dragging) return;
+    // Forget the waiting hover info too, or the clip just dragged never shows it again.
+    if (store.rt.dragging) { hideTip(); return; }
     const p = local(e);
     const h = hit(p);
     const tool = store.ui.tool || 'select';

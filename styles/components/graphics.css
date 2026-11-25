@@ -15,11 +15,11 @@
   stroke-width:2;stroke-linecap:round;
 }
 .gfx__add span{display:flex;flex-direction:column;gap:2px;min-width:0}
-.gfx__add b{font-size:12.5px;font-weight:650;color:var(--txt-0)}
-.gfx__add i{font-style:normal;font-size:10.5px;line-height:1.35;color:var(--txt-3)}
+.gfx__add b{font-size:calc(12.5px*var(--fs));font-weight:650;color:var(--txt-0)}
+.gfx__add i{font-style:normal;font-size:calc(11px*var(--fs));line-height:1.35;color:var(--txt-3)}
 
 .gfx__label{
-  font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  font-size:calc(11px*var(--fs));font-weight:700;letter-spacing:.08em;text-transform:uppercase;
   color:var(--txt-3);margin:0 0 7px;
 }
 .gfx__label--head{margin-top:16px}
@@ -34,10 +34,10 @@
 }
 .gfxlook:hover{background:var(--surface-hi);border-color:var(--glass-line-2)}
 .gfxlook.is-on{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc) inset,var(--glow-acc)}
-.gfxlook__art{display:block;border-radius:4px;overflow:hidden;background:#05080f;line-height:0}
+.gfxlook__art{display:block;border-radius:calc(4px*var(--rk));overflow:hidden;background:#05080f;line-height:0}
 .gfxlook__art svg{width:100%;height:auto;display:block}
 .gfxlook__name{
-  font-size:10px;font-weight:580;color:var(--txt-2);text-align:center;
+  font-size:calc(11px*var(--fs));font-weight:580;color:var(--txt-2);text-align:center;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
 .gfxlook.is-on .gfxlook__name{color:var(--txt-0);font-weight:650}
@@ -50,19 +50,19 @@
 }
 .gfxtile:hover{background:var(--surface-hi);border-color:var(--acc-line);transform:translateY(-1px)}
 .gfxtile__art{
-  display:block;aspect-ratio:1;border-radius:5px;overflow:hidden;
+  display:block;aspect-ratio:1;border-radius:calc(5px*var(--rk));overflow:hidden;
   background:
-    linear-gradient(45deg,rgba(120,170,255,.07) 25%,transparent 25%,transparent 75%,rgba(120,170,255,.07) 75%) 0 0/12px 12px,
-    linear-gradient(45deg,rgba(120,170,255,.07) 25%,transparent 25%,transparent 75%,rgba(120,170,255,.07) 75%) 6px 6px/12px 12px,
+    linear-gradient(45deg,color-mix(in srgb,var(--tint) 7%,transparent) 25%,transparent 25%,transparent 75%,color-mix(in srgb,var(--tint) 7%,transparent) 75%) 0 0/12px 12px,
+    linear-gradient(45deg,color-mix(in srgb,var(--tint) 7%,transparent) 25%,transparent 25%,transparent 75%,color-mix(in srgb,var(--tint) 7%,transparent) 75%) 6px 6px/12px 12px,
     #070b14;
   display:grid;place-items:center;
 }
 .gfxtile__art img{max-width:100%;max-height:100%;object-fit:contain;display:block}
 .gfxtile__name{
-  font-size:10px;color:var(--txt-2);text-align:center;
+  font-size:calc(11px*var(--fs));color:var(--txt-2);text-align:center;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
 
 /* ── Add text: built-in looks and the words you saved ───────── */
 .gfx__text{margin-bottom:12px}
-.gfx__sub{margin:8px 2px 5px;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--txt-3,var(--txt-2))}
+.gfx__sub{margin:8px 2px 5px;font-size:calc(11px*var(--fs));font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--txt-3,var(--txt-2))}

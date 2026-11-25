@@ -190,7 +190,8 @@ if (process.argv.includes('--pictures')) {
   await ev(async () => { const { freshTransition } = await import('app://gamecut/src/engine/transitions.js'); const b = window.gc.store.doc.tracks.flatMap(t => t.clips).find(c => c.name === 'tr-b'); window.gc.cmds.setClipProp(b.id, 'transIn', freshTransition('whip'), { merge: false }); window.gc.store.setRT({ junction: b.id }); });
   await openPanel();
   await ev(() => window.gc.playback.seek(2.52)); await sleep(700);
-  await win.screenshot({ path: `${OUT}/trans-panel.png` });
+  await ev(() => { document.querySelector('#transRoot').scrollTop = 0; }); await sleep(200); await win.screenshot({ path: `${OUT}/trans-panel.png` });
+  await ev(() => { window.gc.store.ui.leftW = 420; document.querySelector('.app').style.setProperty('--left-w', '420px'); window.gc.bus?.emit?.('layout'); document.querySelector('.trs__bar').scrollIntoView(); }); await sleep(700); await win.screenshot({ path: `${OUT}/trans-tiles.png` });
 }
 
 await finish('TRANSITIONS');

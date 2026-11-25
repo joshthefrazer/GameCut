@@ -1,6 +1,9 @@
 import { bus } from '../core/events.js';
 import { parseTime, fmtTime } from './palette.js';
 import { loadTheme } from './theme.js';
+import { CLIP_COLORS } from '../core/schema.js';
+import { findTheme, themeVars, isLight, mix, themePicture } from './themes/theme-core.js';
+import { initThemeStudio } from './themes/theme-studio.js';
 
 /**
  * Quality-of-life pieces that belong to no one panel:
@@ -19,12 +22,6 @@ const ACCENTS = [
   { id: 'amber',   name: 'Amber',   c: '#f59e0b', hi: '#fbbf24', lo: '#d97706' },
   { id: 'rose',    name: 'Rose',    c: '#f43f5e', hi: '#fb7185', lo: '#e11d48' },
   { id: 'cyan',    name: 'Cyan',    c: '#06b6d4', hi: '#22d3ee', lo: '#0891b2' },
-];
-export const THEMES = [
-  { id: 'strike', name: 'Strike',      note: 'Void and Volt',      swatch: ['#06080F', '#121829', '#C6FF3D'] },
-  { id: 'black',  name: 'Pitch black', note: 'Darkest, for OLED',  swatch: ['#000000', '#0E0E0E', '#C6FF3D'] },
-  { id: 'neon',   name: 'Neon night',  note: 'Violet and pink',    swatch: ['#0E0620', '#1E0F3D', '#E040FB'] },
-  { id: 'day',    name: 'Daylight',    note: 'For bright rooms',   swatch: ['#EEF1F7', '#FFFFFF', '#3B5BFF'] },
 ];
 const SETTINGS_KEY = 'gamecut.settings';
 const DEFAULTS = { theme: 'strike', accent: 'auto', density: 'comfy', tips: true };
@@ -50,13 +47,32 @@ const rgba = (hex, a) => {
 const ACC_VARS = ['--acc', '--acc-hi', '--acc-lo', '--acc-glow', '--acc-soft', '--acc-line', '--tl-lane-active', '--tl-ghost-fill', '--tl-ghost-line'];
 
 /** Paint the theme, accent and density onto the page (and the timeline canvas). */
-export function applySettings(s = readSettings()) {
+const CLIP_STOCK = JSON.parse(JSON.stringify(CLIP_COLORS));
+let painted = [];
+export function applySettings(s = readSettings(), draft = null) {
   const root = document.documentElement;
-  const theme = THEMES.find(t => t.id === s.theme) ? s.theme : 'strike';
-  if (theme === 'strike') delete root.dataset.theme; else root.dataset.theme = theme;
-  const a = ACCENTS.find(x => x.id === s.accent) || ACCENTS[0];
+  const t = draft || findTheme(s.theme) || findTheme('strike');
+  for (const v of painted) root.style.removeProperty(v);
+  painted = [];
+  if (t.css) {
+    if (t.id === 'strike') delete root.dataset.theme; else root.dataset.theme = t.id;
+  } else {
+    root.dataset.theme = isLight(t) ? 'day' : 'made';
+    const vars = themeVars(t);
+    painted = Object.keys(vars);
+    for (const v of painted) root.style.setProperty(v, vars[v]);
+  }
+  root.style.setProperty('--rk', String(t.radius));
+  root.style.setProperty('--fs', String(t.size));
+  root.classList.toggle('no-motion', t.motion === false);
+  // Clips on the timeline are painted on a canvas from these.
+  for (const [k, c] of [['video', t.video], ['audio', t.audio], ['text', t.title]]) {
+    const pair = t.css ? CLIP_STOCK[k] : [c, mix(c, '#ffffff', 0.28)];
+    CLIP_COLORS[k][0] = pair[0]; CLIP_COLORS[k][1] = pair[1];
+  }
+  const a = (draft ? null : ACCENTS.find(x => x.id === s.accent)) || ACCENTS[0];
   const st = root.style;
-  for (const v of ACC_VARS) st.removeProperty(v);
+  if (t.css) for (const v of ACC_VARS) st.removeProperty(v);
   if (a.c) {
     st.setProperty('--acc', a.c);
     st.setProperty('--acc-hi', a.hi);
@@ -67,6 +83,8 @@ export function applySettings(s = readSettings()) {
     st.setProperty('--tl-lane-active', rgba(a.c, 0.10));
     st.setProperty('--tl-ghost-fill', rgba(a.c, 0.26));
     st.setProperty('--tl-ghost-line', rgba(a.c, 0.95));
+    st.setProperty('--acc-txt', a.hi); st.setProperty('--on-acc', ['amber', 'emerald', 'cyan'].includes(a.id) ? '#06080f' : '#fff');
+    painted.push('--acc-txt', '--on-acc', ...ACC_VARS);
   }
   root.classList.toggle('is-compact', s.density === 'compact');
   root.dataset.gcAccent = a.id;
@@ -264,7 +282,7 @@ export function initQol({ store, cmds, history, playback, comp, timeline }) {
           <button class="btn btn--ghost btn--sm" data-close>Close</button></div>
         <div class="qold__body">
           <div class="capd__lbl">Theme</div>
-          <div class="set__themes">${THEMES.map(t => `<button class="set__theme${t.id === s.theme ? ' is-on' : ''}" data-theme-pick="${t.id}"><span class="set__sw" style="background:${t.swatch[0]}"><i style="background:${t.swatch[1]}"></i><i style="background:${t.swatch[2]}"></i></span><b>${t.name}</b><span>${t.note}</span></button>`).join('')}</div>
+          <div class="set__now"><span class="set__nowpic">${themePicture(findTheme(s.theme) || findTheme('strike'))}</span><div><b id="setThemeName"></b><span>15 to choose from, or make your own.</span></div><button class="btn btn--primary" data-open="themes">Change theme…</button></div>
           <div class="capd__lbl">Accent colour</div>
           <div class="set__accents">${ACCENTS.map(a => `<button class="set__acc${a.id === s.accent ? ' is-on' : ''}" data-accent="${a.id}" style="--c:${a.c || 'var(--acc)'}" title="${a.name}"><i></i><span>${a.name}</span></button>`).join('')}</div>
           <div class="capd__lbl">Layout size</div>
@@ -280,17 +298,16 @@ export function initQol({ store, cmds, history, playback, comp, timeline }) {
           </div>
         </div>
       </div>`;
+    sets.querySelector('#setThemeName').textContent = (findTheme(s.theme) || findTheme('strike')).name;
     sets.hidden = false;
   }
   sets.addEventListener('click', (e) => {
-    const th = e.target.closest('[data-theme-pick]');
-    if (th) { applySettings(writeSettings({ theme: th.dataset.themePick })); openSettings(); return; }
     const a = e.target.closest('[data-accent]');
     if (a) { applySettings(writeSettings({ accent: a.dataset.accent })); openSettings(); return; }
     const d = e.target.closest('[data-density]');
     if (d) { applySettings(writeSettings({ density: d.dataset.density })); openSettings(); return; }
     const o = e.target.closest('[data-open]');
-    if (o) { sets.hidden = true; if (o.dataset.open === 'tour') openTour(); else document.getElementById('btnHelp')?.click(); }
+    if (o) { sets.hidden = true; if (o.dataset.open === 'themes') bus.emit('themes:open'); else if (o.dataset.open === 'tour') openTour(); else document.getElementById('btnHelp')?.click(); }
   });
   sets.addEventListener('change', (e) => {
     if (e.target.id === 'setTips') {
@@ -303,6 +320,16 @@ export function initQol({ store, cmds, history, playback, comp, timeline }) {
   const s0 = readSettings();
   applySettings(s0);
   document.documentElement.classList.toggle('no-tips', !s0.tips);
+  // A slider's coloured part follows its handle, wherever the slider is.
+  const fillOf = (r) => { const a = +r.min || 0, b = r.max === '' ? 100 : +r.max; r.style.setProperty('--fill', `${b > a ? ((r.value - a) / (b - a)) * 100 : 0}%`); };
+  document.addEventListener('input', (e) => { if (e.target.matches?.('.rng')) fillOf(e.target); }, true);
+  document.querySelectorAll('.rng').forEach(fillOf);
+  new MutationObserver((list) => { for (const m of list) for (const n of m.addedNodes) if (n.nodeType === 1) { if (n.matches('.rng')) fillOf(n); else if (n.firstElementChild) n.querySelectorAll('.rng').forEach(fillOf); } }).observe(document.body, { childList: true, subtree: true });
+  const themes = initThemeStudio({
+    current: () => readSettings().theme,
+    use: (id) => applySettings(writeSettings({ theme: id, accent: 'auto' })),
+    preview: (t) => applySettings(readSettings(), t),
+  });
 
   /* ── What's new ──────────────────────────────────────────── */
   const tour = dialog('tourPanel', "What's new");
@@ -358,5 +385,5 @@ export function initQol({ store, cmds, history, playback, comp, timeline }) {
     { id: 'prevedit', name: 'Jump to the previous cut', sec: 'Jump', key: '↑', run: () => { const t = cmds.nextEdit(store.rt.playhead, -1); if (t != null) playback.seek(t); } },
   ]);
   void comp; void timeline;
-  return { openHistory, openSettings, openTour, saveFrame, applySettings, quickLook, fullFrame };
+  return { openHistory, openSettings, openTour, saveFrame, applySettings, quickLook, fullFrame, themes };
 }

@@ -14,7 +14,7 @@
 .glass{
   position:relative;
   background:
-    linear-gradient(180deg, var(--glass-bg-2), var(--glass-bg) 62%, var(--bg-1));
+    linear-gradient(180deg, var(--glass-bg-2), var(--glass-bg) 62%, var(--glass-end,var(--bg-1)));
   border:1px solid var(--glass-line);
   border-radius:var(--r-lg);
   box-shadow:var(--sh-panel);

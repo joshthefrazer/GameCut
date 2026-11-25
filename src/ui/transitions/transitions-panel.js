@@ -269,7 +269,7 @@ export function initTransitions({ store, cmds, comp, playback }) {
         b.addEventListener('click', () => setting('ease', ez.id, true));
         seg.appendChild(b);
       }
-      rowOf('Feel', seg);
+      rowOf('Feel', seg).classList.add('trs__row--wide');
     }
     if (cur.color) {
       const box = el('div', 'trs__cols');

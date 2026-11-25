@@ -1,6 +1,7 @@
 export const GROUP_LABEL = { text: 'TEXT & GRAPHICS', video: 'VIDEO', audio: 'AUDIO' };
 
-const KIND_COLOR = { video: '#3b82f6', audio: '#14b8a6', text: '#8b5cf6' };
+import { CLIP_COLORS } from '../../core/schema.js';
+const KIND_COLOR = { get video() { return CLIP_COLORS.video[1]; }, get audio() { return CLIP_COLORS.audio[1]; }, get text() { return CLIP_COLORS.text[1]; } };
 
 const ICON = {
   eyeOn:  `<svg viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/></svg>`,

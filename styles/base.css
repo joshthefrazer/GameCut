@@ -4,7 +4,7 @@ body{
   margin:0;
   background:var(--bg-0);
   color:var(--txt-0);
-  font:13px/1.45 var(--f-ui);
+  font:calc(13px*var(--fs))/1.45 var(--f-ui);
   -webkit-font-smoothing:antialiased;
   text-rendering:optimizeLegibility;
   overflow:hidden;
@@ -21,10 +21,10 @@ svg{fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-l
 
 ::-webkit-scrollbar{width:10px;height:10px}
 ::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:rgba(120,170,255,.18);border-radius:99px;border:3px solid transparent;background-clip:content-box}
-::-webkit-scrollbar-thumb:hover{background:rgba(120,170,255,.34);background-clip:content-box}
+::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--tint) 18%,transparent);border-radius:99px;border:3px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background:color-mix(in srgb,var(--tint) 34%,transparent);background-clip:content-box}
 
-::selection{background:rgba(59,130,246,.34);color:#fff}
+::selection{background:color-mix(in srgb,var(--acc) 34%,transparent);color:var(--on-acc)}
 
 :focus{outline:none}
 :focus-visible{outline:2px solid var(--acc);outline-offset:2px;border-radius:var(--r-sm)}
@@ -45,11 +45,11 @@ svg{fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-l
    blur cannot. */
 .aurora{
   position:fixed;inset:0;z-index:0;pointer-events:none;
-  background:
-    radial-gradient(46vw 46vw at 4% -6%,  rgba(37,99,235,.28), rgba(37,99,235,0) 64%),
-    radial-gradient(40vw 40vw at 97% -2%, rgba(34,211,238,.16), rgba(34,211,238,0) 64%),
-    radial-gradient(62vw 34vw at 54% 106%, rgba(79,70,229,.20), rgba(79,70,229,0) 66%),
-    radial-gradient(130% 100% at 50% -25%, #0d1526 0%, #090e1b 46%, var(--bg-0) 100%);
+  background:var(--backdrop,
+    radial-gradient(46vw 46vw at 4% -6%,color-mix(in srgb,var(--acc) 26%,transparent),transparent 64%),
+    radial-gradient(40vw 40vw at 97% -2%,color-mix(in srgb,var(--volt) 7%,transparent),transparent 64%),
+    radial-gradient(62vw 34vw at 54% 106%,color-mix(in srgb,var(--clip-text) 16%,transparent),transparent 66%),
+    var(--bg-0));
 }
 
 /* Toasts ------------------------------------------------------ */
@@ -62,9 +62,11 @@ svg{fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-l
   padding:9px 14px;border-radius:var(--r-md);
   background:var(--bg-2);
   border:1px solid var(--glass-line-2);box-shadow:var(--sh-pop);
-  font-size:12.5px;font-weight:500;color:var(--txt-0);
+  font-size:calc(12.5px*var(--fs));font-weight:500;color:var(--txt-0);
   animation:toastIn .28s var(--ease-out);
 }
-.toast--err{border-color:rgba(225,29,72,.45);box-shadow:var(--sh-pop),0 0 0 3px rgba(225,29,72,.10)}
-.toast--ok{border-color:rgba(13,148,136,.45);box-shadow:var(--sh-pop),0 0 0 3px rgba(13,148,136,.10)}
+.toast--err{border-color:color-mix(in srgb,var(--danger) 45%,transparent);box-shadow:var(--sh-pop),0 0 0 3px color-mix(in srgb,var(--danger) 10%,transparent)}
+.toast--ok{border-color:color-mix(in srgb,var(--clip-audio-2) 45%,transparent);box-shadow:var(--sh-pop),0 0 0 3px color-mix(in srgb,var(--clip-audio-2) 10%,transparent)}
 @keyframes toastIn{from{opacity:0;transform:translateY(-8px) scale(.97)}to{opacity:1;transform:none}}
+
+::-webkit-scrollbar-corner{background:transparent}

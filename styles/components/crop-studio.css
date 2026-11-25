@@ -25,19 +25,19 @@
   height:32px;padding:0 12px;border-radius:var(--r-md);
   display:inline-flex;align-items:center;gap:7px;
   border:1px solid var(--glass-line);background:var(--surface);
-  color:var(--txt-1);font-size:12.5px;font-weight:600;
+  color:var(--txt-1);font-size:calc(12.5px*var(--fs));font-weight:600;
   transition:all var(--dur) var(--ease);
 }
 .cst:hover{color:var(--txt-0);background:var(--surface-hi);border-color:var(--glass-line-2)}
 .cst svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.7;
   stroke-linecap:round;stroke-linejoin:round}
-.cst.is-on{color:#fff;background:var(--acc);border-color:transparent;box-shadow:var(--glow-acc)}
-.cst--sm{height:30px;padding:0 11px;font-size:12px}
-.cst--ic{width:30px;height:30px;padding:0;justify-content:center;font-size:16px;line-height:1}
+.cst.is-on{color:var(--on-acc);background:var(--acc);border-color:transparent;box-shadow:var(--glow-acc)}
+.cst--sm{height:30px;padding:0 11px;font-size:calc(12px*var(--fs))}
+.cst--ic{width:30px;height:30px;padding:0;justify-content:center;font-size:calc(16px*var(--fs));line-height:1}
 .cst--ghost{background:transparent;border-color:transparent;color:var(--txt-2)}
 .cst--ghost:hover{color:var(--txt-0);background:var(--surface)}
 .cst--go{
-  background:var(--acc);border-color:transparent;color:#fff;
+  background:var(--acc);border-color:transparent;color:var(--on-acc);
   padding:0 16px;box-shadow:var(--glow-acc);
 }
 .cst--go:hover{background:var(--acc-hi)}
@@ -47,18 +47,18 @@
 .cropst.is-brush .cropst__paint,.cropst.is-brush .cropst__slide{opacity:1;pointer-events:auto}
 .cst[data-paint="remove"].is-on{background:var(--danger);box-shadow:none}
 
-.cropst__slide{display:flex;align-items:center;gap:7px;margin-right:6px;font-size:11.5px;color:var(--txt-2)}
+.cropst__slide{display:flex;align-items:center;gap:7px;margin-right:6px;font-size:calc(11.5px*var(--fs));color:var(--txt-2)}
 .cropst__slide span{font-weight:600}
 .cropst__slide b{
   min-width:26px;text-align:right;color:var(--txt-1);
-  font:600 11.5px/1 var(--f-mono);font-variant-numeric:tabular-nums;
+  font:600 calc(11.5px*var(--fs))/1 var(--f-mono);font-variant-numeric:tabular-nums;
 }
 .cropst__slide input[type=range]{width:92px;accent-color:var(--acc)}
 
 .cropst__zoom{display:flex;align-items:center;gap:6px;margin-right:6px}
 .cropst__zoom b{
   min-width:46px;text-align:center;color:var(--txt-1);
-  font:600 12px/1 var(--f-mono);font-variant-numeric:tabular-nums;
+  font:600 calc(12px*var(--fs))/1 var(--f-mono);font-variant-numeric:tabular-nums;
 }
 
 .cropst__stage{position:relative;flex:1;min-height:0;overflow:hidden}
@@ -70,7 +70,7 @@
   position:absolute;left:50%;bottom:16px;transform:translateX(-50%);
   padding:7px 14px;border-radius:999px;
   background:rgba(8,14,26,.86);border:1px solid var(--glass-line);
-  color:var(--txt-1);font-size:12px;font-weight:550;white-space:nowrap;
+  color:var(--txt-1);font-size:calc(12px*var(--fs));font-weight:550;white-space:nowrap;
   pointer-events:none;box-shadow:var(--sh-pop);
 }
 
@@ -80,29 +80,29 @@
 }
 
 /* The shape lock only means anything with a box in hand. */
-.cropst__shape{display:flex;align-items:center;gap:7px;margin-right:6px;font-size:11.5px;color:var(--txt-2);
+.cropst__shape{display:flex;align-items:center;gap:7px;margin-right:6px;font-size:calc(11.5px*var(--fs));color:var(--txt-2);
   opacity:.42;pointer-events:none;transition:opacity var(--dur) var(--ease)}
 .cropst__shape span{font-weight:600}
 .cropst.is-box .cropst__shape{opacity:1;pointer-events:auto}
-.cropst__shape select{padding:0 8px;height:30px;font-size:12px;cursor:pointer}
+.cropst__shape select{padding:0 8px;height:30px;font-size:calc(12px*var(--fs));cursor:pointer}
 @media (max-width:1100px){ .cropst__shape span{display:none} }
 
 /* Smart crop: the side panel with what was found */
 .cropst__smart{display:none;position:absolute;right:14px;top:14px;width:260px;max-height:calc(100% - 28px);overflow:auto;
-  padding:12px;border-radius:12px;background:rgba(9,14,28,.92);border:1px solid rgba(120,170,255,.22);box-shadow:0 18px 40px -18px #000;z-index:3}
+  padding:12px;border-radius:calc(12px*var(--rk));background:rgba(9,14,28,.92);border:1px solid color-mix(in srgb,var(--tint) 22%,transparent);box-shadow:0 18px 40px -18px #000;z-index:3}
 .cropst.is-smart .cropst__smart{display:block}
 .cropst.is-smart .cropst__paint,.cropst.is-smart .cropst__slide,.cropst.is-smart .cropst__shape{display:none}
 .cropst__find{width:100%;justify-content:center}
-.cropst__note{margin:8px 0;font-size:11.5px;line-height:1.45;color:#9fb0d0}
+.cropst__note{margin:8px 0;font-size:calc(11.5px*var(--fs));line-height:1.45;color:var(--txt-1)}
 /* Click to outline: the optional model's button, download bar and status. */
 .cropst__ol{display:grid;gap:6px;margin:4px 0 8px}
 .cropst__ol .cst{width:100%;justify-content:center}
 .cropst__ol .cropst__note{margin:0}
 .cropst__ol .cropst__note:empty{display:none}
 .cropst__found{display:flex;flex-direction:column;gap:4px;margin:6px 0}
-.cropst__item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;background:rgba(120,170,255,.07);font-size:12px;color:#dbe6fb;cursor:pointer}
+.cropst__item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:calc(8px*var(--rk));background:color-mix(in srgb,var(--tint) 7%,transparent);font-size:calc(12px*var(--fs));color:var(--txt-0);cursor:pointer}
 .cropst__item .cropst__nm{flex:1;font-weight:650}
-.cropst__item i{font-style:normal;font:600 10px ui-monospace,monospace;color:#7f90b3}
-.cropst__out{display:flex;flex-direction:column;gap:5px;margin-top:10px;padding-top:10px;border-top:1px solid rgba(120,170,255,.15);font-size:12px;color:#c8d4ea}
-.cropst__out b{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:#7f90b3}
+.cropst__item i{font-style:normal;font:600 calc(11px*var(--fs)) ui-monospace,monospace;color:var(--txt-2)}
+.cropst__out{display:flex;flex-direction:column;gap:5px;margin-top:10px;padding-top:10px;border-top:1px solid color-mix(in srgb,var(--tint) 15%,transparent);font-size:calc(12px*var(--fs));color:var(--txt-1)}
+.cropst__out b{font-size:calc(11px*var(--fs));letter-spacing:.06em;text-transform:uppercase;color:var(--txt-2)}
 .cropst__out label{display:flex;gap:7px;align-items:center;cursor:pointer}
