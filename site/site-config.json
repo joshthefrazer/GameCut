@@ -11,7 +11,7 @@
   "links": [],
   "_lastInstaller": "Filled in by npm run release so the Download button keeps working on releases that did not rebuild the .exe. Leave it alone.",
   "lastInstaller": {
-    "name": "Strike-2.1.0-x64.exe",
-    "version": "2.1.0"
+    "name": "Strike-2.3.1-x64.exe",
+    "version": "2.3.1"
   }
 }

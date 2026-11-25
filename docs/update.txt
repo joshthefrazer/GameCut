@@ -1,32 +1,32 @@
 {
   "product": "gamecut",
   "channel": "stable",
-  "version": "2.3.0",
-  "published": "2026-11-25T02:46:20.081Z",
+  "version": "2.3.1",
+  "published": "2026-11-25T03:07:54.845Z",
   "rollout": 1,
   "needsInstaller": false,
   "minShell": "2.1.0",
   "bundle": {
-    "path": "GameCut-2.3.0.gcupdate",
-    "sha256": "56907828850b37fec9769fc6239d64016f1b4a06ddd59885436f61b1983d3769",
-    "bytes": 43757568
+    "path": "GameCut-2.3.1.gcupdate",
+    "sha256": "4b1adf1aeaa8db3da27d9256a91556a979ff2bdad542b21bd091ee7b1d98305a",
+    "bytes": 43759103
   },
-  "installer": null,
+  "installer": {
+    "path": "Strike-2.3.1-x64.exe"
+  },
   "notes": [
-    "Two updates in one: everything in 2.2 is here too, including 23 transitions and 15 themes. Its own log is right below this one.",
-    "Real filmstrips: clips on the timeline show the actual moments they cover, with their sound underneath. Turn it off in Settings on a slow PC.",
-    "Your own shortcuts: give any action any key. Settings → Change shortcuts. It tells you when a key is taken, and you can put everything back.",
-    "Workspaces: Alt+1 to Alt+4 switch between Cutting, Picture and colour, Text and captions, and Sound. Arrange the editor your way and keep that too (the button next to Settings).",
-    "Paste parts of a look: copy a clip's look, then tick just the colour, crop, sound, transition and so on (Ctrl+Alt+Shift+V).",
-    "Edit many clips at once: select several and set opacity, scale, rotation, volume, speed, fades or text size on all of them. One undo.",
-    "Replace footage: right-click a clip and swap the recording. Its place, crop, effects and transition stay.",
-    "Trim preview: drag a cut and see the last frame before it next to the first frame after it.",
-    "Markers list (Shift+M): notes, colours, and click to jump. Notes show on the ruler.",
-    "Stars: star the transitions and effects you use most, and show only those.",
-    "Opens where you left off: same playhead, zoom and scroll.",
-    "Clearer everywhere: keycaps for shortcuts, pictures in menus, smoother panels, and fewer shouty capital labels."
+    "Fixed: minimise, maximise and close sat on a dark block that ignored your theme and stayed bright over menus. With the 2.3.1 installer nothing is painted behind them; with just this update the block blends in.",
+    "The 2.3.1 installer is worth getting, from the website: it also brings taskbar and shortcut icons that follow your theme, an uninstaller that only removes Strike's own files, and an installer that asks before closing Strike."
   ],
   "history": [
+    {
+      "version": "2.3.1",
+      "published": "2026-11-25T03:07:54.562Z",
+      "notes": [
+        "Fixed: minimise, maximise and close sat on a dark block that ignored your theme and stayed bright over menus. With the 2.3.1 installer nothing is painted behind them; with just this update the block blends in.",
+        "The 2.3.1 installer is worth getting, from the website: it also brings taskbar and shortcut icons that follow your theme, an uninstaller that only removes Strike's own files, and an installer that asks before closing Strike."
+      ]
+    },
     {
       "version": "2.3.0",
       "published": "2026-11-25T02:46:19.888Z",

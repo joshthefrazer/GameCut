@@ -15,6 +15,9 @@ The window's corner, tidied up.
 - Fixed: **minimise, maximise and close** sat on a dark block that ignored your
   theme and stayed bright over menus. With the 2.3.1 installer nothing is painted
   behind them; with just this update the block blends in.
+- **The 2.3.1 installer is worth getting**, from the website: it also brings taskbar
+  and shortcut icons that follow your theme, an uninstaller that only removes
+  Strike's own files, and an installer that asks before closing Strike.
 
 ## 2.3.0
 
