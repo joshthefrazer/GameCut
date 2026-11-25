@@ -75,12 +75,86 @@
 
 !macro customInit
   !insertmacro StrikeAskAndClose "Strike is open.$\r$\n$\r$\nPress OK to let the installer save and close it, or Cancel to go back to what you were doing."
+  !insertmacro StrikeGuardOld HKCU
 !macroend
 
 !macro customUnInit
   !insertmacro StrikeAskAndClose "Strike is open.$\r$\n$\r$\nPress OK to close it and carry on uninstalling, or Cancel to keep Strike."
 !macroend
 
+
+; ── Other programs' files ──────────────────────────────────────
+; "Strike" is not a rare name. A folder with someone else's program in it must
+; never be installed into, and never be emptied: on 23 Nov 2026 the uninstaller
+; that clears the whole folder took a different program called STRIKE with it.
+
+; Is there a program in DIR that is not Strike's? Answer in $1: "yes" or "no".
+!macro StrikeForeign DIR
+  StrCpy $1 "no"
+  FindFirst $2 $3 "${DIR}\*.exe"
+  ${DoWhile} $3 != ""
+    ${If} $3 != "Strike.exe"
+    ${AndIf} $3 != "GameCut.exe"
+    ${AndIf} $3 != "Uninstall Strike.exe"
+    ${AndIf} $3 != "Uninstall GameCut.exe"
+      StrCpy $1 "yes"
+    ${EndIf}
+    FindNext $2 $3
+  ${Loop}
+  FindClose $2
+!macroend
+
+; The uninstaller removes what Strike put there, by name, and the folder only if
+; that leaves it empty.
+!macro customRemoveFiles
+  Delete "$INSTDIR\Strike.exe"
+  Delete "$INSTDIR\GameCut.exe"
+  Delete "$INSTDIR\Uninstall Strike.exe"
+  Delete "$INSTDIR\Uninstall GameCut.exe"
+  Delete "$INSTDIR\chrome_100_percent.pak"
+  Delete "$INSTDIR\chrome_200_percent.pak"
+  Delete "$INSTDIR\d3dcompiler_47.dll"
+  Delete "$INSTDIR\dxcompiler.dll"
+  Delete "$INSTDIR\dxil.dll"
+  Delete "$INSTDIR\ffmpeg.dll"
+  Delete "$INSTDIR\icudtl.dat"
+  Delete "$INSTDIR\libEGL.dll"
+  Delete "$INSTDIR\libGLESv2.dll"
+  Delete "$INSTDIR\LICENSE.electron.txt"
+  Delete "$INSTDIR\LICENSES.chromium.html"
+  Delete "$INSTDIR\resources.pak"
+  Delete "$INSTDIR\snapshot_blob.bin"
+  Delete "$INSTDIR\v8_context_snapshot.bin"
+  Delete "$INSTDIR\vk_swiftshader.dll"
+  Delete "$INSTDIR\vk_swiftshader_icd.json"
+  Delete "$INSTDIR\vulkan-1.dll"
+  Delete "$INSTDIR\resources\app.asar"
+  Delete "$INSTDIR\resources\elevate.exe"
+  RMDir /r "$INSTDIR\resources\app.asar.unpacked"
+  RMDir "$INSTDIR\resources"
+  Delete "$INSTDIR\locales\*.pak"
+  RMDir "$INSTDIR\locales"
+  SetOutPath "$TEMP"
+  RMDir "$INSTDIR"
+!macroend
+
+; The copy already installed may carry the old uninstaller, which empties its
+; whole folder. If another program lives there too, do not let it run: Strike's
+; own files are taken out by name instead.
+!macro StrikeGuardOld ROOT
+  ReadRegStr $5 ${ROOT} "${INSTALL_REGISTRY_KEY}" "InstallLocation"
+  ${If} $5 != ""
+    !insertmacro StrikeForeign "$5"
+    ${If} $1 == "yes"
+      DeleteRegValue ${ROOT} "${UNINSTALL_REGISTRY_KEY}" "UninstallString"
+      DeleteRegValue ${ROOT} "${INSTALL_REGISTRY_KEY}" "InstallLocation"
+      Push $INSTDIR
+      StrCpy $INSTDIR $5
+      !insertmacro customRemoveFiles
+      Pop $INSTDIR
+    ${EndIf}
+  ${EndIf}
+!macroend
 
 ; ── Dark window ────────────────────────────────────────────────
 ; Every call here is a nicety: on a Windows that does not know one it fails
@@ -177,6 +251,11 @@
     ${If} ${isUpdated}
       Abort
     ${EndIf}
+    ; Somebody else's "Strike" is already in the usual place: use a folder of our own.
+    !insertmacro StrikeForeign "$INSTDIR"
+    ${If} $1 == "yes"
+      StrCpy $INSTDIR "$LOCALAPPDATA\Programs\Strike Editor"
+    ${EndIf}
     Call muiPageLoadFullWindow
     !insertmacro StrikeHideTrim
     Call StrikeHero
@@ -232,6 +311,7 @@
     ${GetFileName} "$0" $1
     ${If} $1 != "${APP_FILENAME}"
     ${AndIf} $1 != "Strike"
+    ${AndIf} $1 != "Strike Editor"
       StrCpy $2 $0 1 -1
       ${If} $2 == "\"
         StrCpy $0 "$0${APP_FILENAME}"
@@ -245,6 +325,11 @@
 
   Function StrikeStartLeave
     ; Something else's folder? Never install over it.
+    !insertmacro StrikeForeign "$INSTDIR"
+    ${If} $1 == "yes"
+      MessageBox MB_OK|MB_ICONEXCLAMATION "Another program is already in that folder:$\r$\n$\r$\n$INSTDIR$\r$\n$\r$\nStrike needs a folder of its own. Please choose another one."
+      Abort
+    ${EndIf}
     ${If} ${FileExists} "$INSTDIR\*.*"
     ${AndIfNot} ${FileExists} "$INSTDIR\Strike.exe"
     ${AndIfNot} ${FileExists} "$INSTDIR\GameCut.exe"
