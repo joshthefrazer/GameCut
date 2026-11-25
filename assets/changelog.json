@@ -1,5 +1,39 @@
 [
  {
+  "version": "2.3.0",
+  "intro": "Two updates in one: this and 2.2. Faster to edit, and nicer to look at.",
+  "notes": [
+   "**Two updates in one**: everything in 2.2 is here too, including 23 transitions and 15 themes. Its own log is right below this one.",
+   "**Real filmstrips**: clips on the timeline show the actual moments they cover, with their sound underneath. Turn it off in Settings on a slow PC.",
+   "**Your own shortcuts**: give any action any key. Settings → Change shortcuts. It tells you when a key is taken, and you can put everything back.",
+   "**Workspaces**: Alt+1 to Alt+4 switch between Cutting, Picture and colour, Text and captions, and Sound. Arrange the editor your way and keep that too (the button next to Settings).",
+   "**Paste parts of a look**: copy a clip's look, then tick just the colour, crop, sound, transition and so on (Ctrl+Alt+Shift+V).",
+   "**Edit many clips at once**: select several and set opacity, scale, rotation, volume, speed, fades or text size on all of them. One undo.",
+   "**Replace footage**: right-click a clip and swap the recording. Its place, crop, effects and transition stay.",
+   "**Trim preview**: drag a cut and see the last frame before it next to the first frame after it.",
+   "**Markers list** (Shift+M): notes, colours, and click to jump. Notes show on the ruler.",
+   "**Stars**: star the transitions and effects you use most, and show only those.",
+   "**Opens where you left off**: same playhead, zoom and scroll.",
+   "Clearer everywhere: keycaps for shortcuts, pictures in menus, smoother panels, and fewer shouty capital labels."
+  ]
+ },
+ {
+  "version": "2.2.0",
+  "intro": "New transitions, themes you can make yourself, and a calmer editor.",
+  "notes": [
+   "**23 transitions** instead of 3, with real motion blur: whip pans, zooms, spins, glitches, old tape, light leaks, shapes and more.",
+   "**See it on your own shots**: every transition plays on the two clips at your cut. Set its length, strength, direction, colour and feel, put it on every cut, or add a matching sound.",
+   "**15 themes**: Volt, Midnight, Sakura, Retro CRT, Dusk, Paper, High contrast and more. Settings → Change theme.",
+   "**Make your own theme**: the editor changes while you pick colours, corners, text size, glow, or your own background picture. It warns you when something would be hard to read and offers a fix.",
+   "**The Strike logo follows your theme**. The taskbar and shortcut icons do too, once you have the next full installer.",
+   "**A calmer editor**: the Inspector has no boxes inside boxes, text is bigger, and only the important buttons are solid colour.",
+   "**Drag stuck layers**: move a ring, arrow or name tag on the picture and it keeps following. Drag a ring's corner to resize it.",
+   "Fixed: the \"You are now on\" card covered the track names and blocked clicks.",
+   "Fixed: a clip's hover info stopped appearing after dragging it slowly.",
+   "Fixed: slider bars follow their handles, and clip lengths are no longer cut off."
+  ]
+ },
+ {
   "version": "2.1.0",
   "intro": "The first Strike 3.0 update: editing tools you drive yourself, plus a lot of fixes.",
   "notes": [

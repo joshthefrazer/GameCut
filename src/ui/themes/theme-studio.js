@@ -67,7 +67,7 @@ export function initThemeStudio({ current, use, preview, icon }) {
     const foot = el('label', 'thst__foot thst__tick');
     const tick = el('input'); tick.type = 'checkbox'; tick.id = 'themeIcon'; tick.checked = icon();
     tick.addEventListener('change', () => icon(tick.checked));
-    foot.append(tick, el('span', null, 'Recolour the Strike logo and app icon too'));
+    foot.append(tick, el('span', null, window.gamecut?.setAppIcon ? 'Recolour the Strike logo and app icon too' : 'Recolour the Strike logo too'));
     root.appendChild(foot);
   }
   function remove(t) {

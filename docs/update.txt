@@ -1,44 +1,66 @@
 {
   "product": "gamecut",
   "channel": "stable",
-  "version": "2.1.0",
-  "published": "2026-11-24T04:05:58.437Z",
+  "version": "2.3.0",
+  "published": "2026-11-25T02:46:20.081Z",
   "rollout": 1,
-  "needsInstaller": true,
+  "needsInstaller": false,
   "minShell": "2.1.0",
   "bundle": {
-    "path": "GameCut-2.1.0.gcupdate",
-    "sha256": "e53f7158d77c38dcf028637caed0e2a614f573191dee99f255cd0b2b4d1840ca",
-    "bytes": 43591729
+    "path": "GameCut-2.3.0.gcupdate",
+    "sha256": "56907828850b37fec9769fc6239d64016f1b4a06ddd59885436f61b1983d3769",
+    "bytes": 43757568
   },
-  "installer": {
-    "path": "Strike-2.1.0-x64.exe"
-  },
+  "installer": null,
   "notes": [
-    "Colour for any clip: brightness, contrast, saturation, warmth, tint and film fade, with starting points you pick (Vivid, Punchy, Warm, Cool, Faded, Mono, Dreamy) and then adjust. Picture tab → Colour. Compare shows before / after.",
-    "Blend next to Opacity: Screen for light leaks and flares, Multiply for shadows, Overlay for textures, and more.",
-    "In and Out: I and O mark part of the edit. Loop it (Shift+L), export just that part (\"Only In to Out\" in Export), or take it out with Lift or Extract (Ctrl+K). Alt+X clears, Shift+I / Shift+O jump to them.",
-    "J K L: play backwards, stop, play forwards; press J or L again to go faster. , and . step one frame.",
-    "Trim to the playhead: Alt+[ and Alt+]. Slip: Alt+, and Alt+. show an earlier or later part of the recording inside a clip without moving it.",
-    "Go to a time: Ctrl+G, or click the time under the preview, and type 1:23, 83, 2m5s or +2.",
-    "Caption editor (Shift+C): every caption line in one list. Type to fix a word, click a word to colour it, make it bigger, put an emoji on it or make it shake while it's said. Split a line at a word, join two lines, nudge a line earlier or later, find and replace, and change the look of every caption at once.",
-    "Caption animations: Karaoke (colour sweeps through each word as it is said), Bounce in, Rise up, Word by word and Punch, plus new Karaoke and Bounce looks in Auto-captions.",
-    "Subtitle files: save captions as .srt or .vtt, or bring in an .srt you already have (buttons in the Auto-captions box).",
-    "Click to outline anything in Crop → Smart: click a thing and Strike traces its exact edge. ] and [ make the outline bigger or smaller, Ctrl+click adds a missed bit, Alt+click takes one away. Uses a small optional download (14 MB, once); without it, clicking still selects by colour.",
-    "Find what stays still finds whole panels now, not just their edges, and never guesses names: pieces are numbered.",
-    "Keys that moved: Import is Ctrl+I and Loop is Shift+L. A card says so the first time you open the editor.",
-    "Stick to it: crop something, press Follow it as it moves, then add a ring, an arrow, a name tag, a spotlight or a pixelated blur that moves with it, even when the footage is zoomed or moved. Let go leaves it where it is.",
-    "Update log you can read: grouped, bigger, and built in, so it is there offline too. Click the version number at the top.",
-    "New installer: Strike's own look, and three screens instead of five.",
-    "Fixed: an \"unexpected error: ReadableStream is already closed\" box that could appear while scrubbing or closing a clip.",
-    "Fixed: Follow it as it moves sometimes drifted off what it was following.",
-    "Fixed: Compare showed the footage without effects on both sides.",
-    "Fixed: double-clicking a lane name only renamed the lane that was already selected.",
-    "Fixed: making a smooth-editing copy of a 1440p or 4K clip stopped at about 80% and never finished. The same stall could freeze an export where a clip runs to the very end of its recording.",
-    "Fixed: an export whose file name was in use is saved as \"name (2).mp4\" instead of being thrown away.",
-    "Smart Zoom, the highlight reel, find-the-beat, auto-vertical and stabilize were removed: Strike 3.0 is about tools you control."
+    "Two updates in one: everything in 2.2 is here too, including 23 transitions and 15 themes. Its own log is right below this one.",
+    "Real filmstrips: clips on the timeline show the actual moments they cover, with their sound underneath. Turn it off in Settings on a slow PC.",
+    "Your own shortcuts: give any action any key. Settings → Change shortcuts. It tells you when a key is taken, and you can put everything back.",
+    "Workspaces: Alt+1 to Alt+4 switch between Cutting, Picture and colour, Text and captions, and Sound. Arrange the editor your way and keep that too (the button next to Settings).",
+    "Paste parts of a look: copy a clip's look, then tick just the colour, crop, sound, transition and so on (Ctrl+Alt+Shift+V).",
+    "Edit many clips at once: select several and set opacity, scale, rotation, volume, speed, fades or text size on all of them. One undo.",
+    "Replace footage: right-click a clip and swap the recording. Its place, crop, effects and transition stay.",
+    "Trim preview: drag a cut and see the last frame before it next to the first frame after it.",
+    "Markers list (Shift+M): notes, colours, and click to jump. Notes show on the ruler.",
+    "Stars: star the transitions and effects you use most, and show only those.",
+    "Opens where you left off: same playhead, zoom and scroll.",
+    "Clearer everywhere: keycaps for shortcuts, pictures in menus, smoother panels, and fewer shouty capital labels."
   ],
   "history": [
+    {
+      "version": "2.3.0",
+      "published": "2026-11-25T02:46:19.888Z",
+      "notes": [
+        "Two updates in one: everything in 2.2 is here too, including 23 transitions and 15 themes. Its own log is right below this one.",
+        "Real filmstrips: clips on the timeline show the actual moments they cover, with their sound underneath. Turn it off in Settings on a slow PC.",
+        "Your own shortcuts: give any action any key. Settings → Change shortcuts. It tells you when a key is taken, and you can put everything back.",
+        "Workspaces: Alt+1 to Alt+4 switch between Cutting, Picture and colour, Text and captions, and Sound. Arrange the editor your way and keep that too (the button next to Settings).",
+        "Paste parts of a look: copy a clip's look, then tick just the colour, crop, sound, transition and so on (Ctrl+Alt+Shift+V).",
+        "Edit many clips at once: select several and set opacity, scale, rotation, volume, speed, fades or text size on all of them. One undo.",
+        "Replace footage: right-click a clip and swap the recording. Its place, crop, effects and transition stay.",
+        "Trim preview: drag a cut and see the last frame before it next to the first frame after it.",
+        "Markers list (Shift+M): notes, colours, and click to jump. Notes show on the ruler.",
+        "Stars: star the transitions and effects you use most, and show only those.",
+        "Opens where you left off: same playhead, zoom and scroll.",
+        "Clearer everywhere: keycaps for shortcuts, pictures in menus, smoother panels, and fewer shouty capital labels."
+      ]
+    },
+    {
+      "version": "2.2.0",
+      "published": "2026-11-25T02:46:19.889Z",
+      "notes": [
+        "23 transitions instead of 3, with real motion blur: whip pans, zooms, spins, glitches, old tape, light leaks, shapes and more.",
+        "See it on your own shots: every transition plays on the two clips at your cut. Set its length, strength, direction, colour and feel, put it on every cut, or add a matching sound.",
+        "15 themes: Volt, Midnight, Sakura, Retro CRT, Dusk, Paper, High contrast and more. Settings → Change theme.",
+        "Make your own theme: the editor changes while you pick colours, corners, text size, glow, or your own background picture. It warns you when something would be hard to read and offers a fix.",
+        "The Strike logo follows your theme. The taskbar and shortcut icons do too, once you have the next full installer.",
+        "A calmer editor: the Inspector has no boxes inside boxes, text is bigger, and only the important buttons are solid colour.",
+        "Drag stuck layers: move a ring, arrow or name tag on the picture and it keeps following. Drag a ring's corner to resize it.",
+        "Fixed: the \"You are now on\" card covered the track names and blocked clicks.",
+        "Fixed: a clip's hover info stopped appearing after dragging it slowly.",
+        "Fixed: slider bars follow their handles, and clip lengths are no longer cut off."
+      ]
+    },
     {
       "version": "2.1.0",
       "published": "2026-11-24T04:05:57.804Z",

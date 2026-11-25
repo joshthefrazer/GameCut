@@ -229,7 +229,13 @@ const samePublish = !!stamp
   && stamp.hash === nativeHash
   && stamp.shellHash === shellHash;
 
-const shellChanged = samePublish
+/**
+ * --works-on X: the shell did change, but this editor runs on the shell people
+ * already have (X or newer): what is new in the shell is optional to it. Say it
+ * only after running the packed update on that shell (qa/update-from-release.mjs).
+ */
+const worksOn = flag('works-on') || null;
+const shellChanged = worksOn ? false : samePublish
   ? !!stamp.shellChanged
   : (stamp ? stamp.shellHash !== shellHash : false);
 
@@ -307,7 +313,9 @@ try {
 
 history = [
   { version, published: new Date().toISOString(), notes: notes || [] },
-  ...history.filter(h => h.version !== version),
+  // --also 2.2.0: versions that went out together with this one keep a log of their own.
+  ...(await Promise.all(String(flag('also') || '').split(',').filter(Boolean).map(async v => ({ version: v, published: new Date().toISOString(), notes: (await notesFor(v)) || die(`CHANGELOG.md has no section for ${v}.`) })))),
+  ...history.filter(h => h.version !== version && !String(flag('also') || '').split(',').includes(h.version)),
 ].slice(0, 40);
 
 /* ── Write it all out ────────────────────────────────────────── */
@@ -373,7 +381,7 @@ const installerName = installer?.name || null;
  * old ones in its history, which is why the size warning below exists.
  */
 const keepBundles = new Set([bundleName]);
-for (const h of history.slice(1, 3)) keepBundles.add(`GameCut-${h.version}.gcupdate`);
+for (const h of history.slice(1, 4)) keepBundles.add(`GameCut-${h.version}.gcupdate`);
 const keepExe = installer?.name || siteCfg.lastInstaller?.name || null;
 for (const f of await readdir(SITE).catch(() => [])) {
   if (f.endsWith('.gcupdate') && !keepBundles.has(f)) await rm(path.join(SITE, f), { force: true });
@@ -391,7 +399,7 @@ const manifest = {
   published: new Date().toISOString(),
   rollout: Math.max(0, Math.min(1, isFinite(rollout) ? rollout : 1)),
   needsInstaller: shellChanged,
-  minShell: shellChanged ? version : (flag('min-shell') || null),
+  minShell: shellChanged ? version : (worksOn || flag('min-shell') || null),
   bundle: { path: bundleName, sha256, bytes: Buffer.byteLength(bundleText) },
   installer: installerName ? { path: installerName } : null,
   notes: notes || [],
