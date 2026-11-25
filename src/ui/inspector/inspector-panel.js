@@ -123,7 +123,7 @@ export function initInspector({ store, cmds, comp, playback }) {
     const head = document.createElement('div');
     head.className = 'ihead';
     const kindName = { video: 'Video', image: 'Picture', audio: 'Sound', text: 'Text', shape: 'Shape', effect: 'Effect', anim: 'Animation' }[clip.type] || clip.type;
-    head.innerHTML = `<span class="ihead__icon" style="--c:${(CLIP_COLORS[clip.type] || CLIP_COLORS.video)[0]}">${ICONS[clip.type] || ''}</span>
+    head.innerHTML = `<span class="ihead__icon" style="--c:${{ video: 'var(--clip-video)', audio: 'var(--clip-audio)', text: 'var(--clip-text)' }[clip.type] || (CLIP_COLORS[clip.type] || CLIP_COLORS.video)[0]}">${ICONS[clip.type] || ''}</span>
       <div class="ihead__text"><b></b><span>${kindName} · ${fmtS(clip.duration)} · at ${fmtS(clip.start)} · ${track.name}</span></div>`;
     head.querySelector('b').textContent = clip.type === 'text' ? (clip.text?.text || clip.name || 'Text').split('\n')[0] : (clip.name || kindName);
     // Double-click the name to rename the clip (text clips are named by their words).
@@ -915,7 +915,7 @@ export function initInspector({ store, cmds, comp, playback }) {
     const p = document.createElement('p');
     p.className = 'insp__help';
     p.textContent = target
-      ? `Moves with “${target.name || 'the tracked crop'}”. Nudge it, or let it go to place it yourself.`
+      ? `Moves with “${target.name || 'the tracked crop'}”. Drag it on the picture to move it, or its corners to make it bigger: it keeps following.`
       : 'What it was stuck to has been deleted, so it stays where it is.';
     g.body.appendChild(p);
     const pad = document.createElement('div');

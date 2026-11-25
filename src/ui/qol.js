@@ -3,6 +3,7 @@ import { parseTime, fmtTime } from './palette.js';
 import { loadTheme } from './theme.js';
 import { CLIP_COLORS } from '../core/schema.js';
 import { findTheme, themeVars, isLight, mix, themePicture } from './themes/theme-core.js';
+import { markUrl, dressApp } from './themes/theme-icon.js';
 import { initThemeStudio } from './themes/theme-studio.js';
 
 /**
@@ -24,7 +25,7 @@ const ACCENTS = [
   { id: 'cyan',    name: 'Cyan',    c: '#06b6d4', hi: '#22d3ee', lo: '#0891b2' },
 ];
 const SETTINGS_KEY = 'gamecut.settings';
-const DEFAULTS = { theme: 'strike', accent: 'auto', density: 'comfy', tips: true };
+const DEFAULTS = { theme: 'strike', accent: 'auto', density: 'comfy', tips: true, appIcon: true };
 
 export function readSettings() {
   let s;
@@ -65,6 +66,7 @@ export function applySettings(s = readSettings(), draft = null) {
   root.style.setProperty('--rk', String(t.radius));
   root.style.setProperty('--fs', String(t.size));
   root.classList.toggle('no-motion', t.motion === false);
+  if (s.appIcon === false || t.id === 'strike' || t.id === 'black') root.style.removeProperty('--mark'); else root.style.setProperty('--mark', markUrl(t));
   // Clips on the timeline are painted on a canvas from these.
   for (const [k, c] of [['video', t.video], ['audio', t.audio], ['text', t.title]]) {
     const pair = t.css ? CLIP_STOCK[k] : [c, mix(c, '#ffffff', 0.28)];
@@ -89,6 +91,7 @@ export function applySettings(s = readSettings(), draft = null) {
   root.classList.toggle('is-compact', s.density === 'compact');
   root.dataset.gcAccent = a.id;
   loadTheme();
+  if (!draft) dressApp(t, s.appIcon !== false);
   bus.emit('theme');
   bus.emit('layout');
 }
@@ -329,6 +332,7 @@ export function initQol({ store, cmds, history, playback, comp, timeline }) {
     current: () => readSettings().theme,
     use: (id) => applySettings(writeSettings({ theme: id, accent: 'auto' })),
     preview: (t) => applySettings(readSettings(), t),
+    icon: (on) => { if (on === undefined) return readSettings().appIcon !== false; applySettings(writeSettings({ appIcon: !!on })); return !!on; },
   });
 
   /* ── What's new ──────────────────────────────────────────── */

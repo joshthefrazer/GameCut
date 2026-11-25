@@ -88,6 +88,27 @@ if (process.argv.includes('--pictures')) {
   await ev(() => document.querySelector('#themeStudio [data-theme="sakura"]').click()); await win.click('#themeNew'); await sleep(400); await win.screenshot({ path: `${OUT}/theme-maker.png` }); await win.click('#themeCancel');
 }
 
+await step('each theme has its own readable logo, and the window takes it; the tick turns it off', async () => {
+  const r = await ev(async () => {
+    const { GALLERY, contrast } = await import('app://gamecut/src/ui/themes/theme-core.js');
+    const { markColours } = await import('app://gamecut/src/ui/themes/theme-icon.js');
+    const bad = [];
+    for (const t of GALLERY) { const m = markColours(t); if (contrast(m.tile, m.mark) < 3.5) bad.push(t.name + ' logo ' + contrast(m.tile, m.mark).toFixed(1)); }
+    const png = await (async () => { const o = {}; for (const s of [16, 24, 32, 48, 256]) { const c = document.createElement('canvas'); c.width = c.height = s; c.getContext('2d').fillRect(0, 0, s, s); o[s] = new Uint8Array(await (await new Promise(r => c.toBlob(r))).arrayBuffer()); } return o; })();
+    const good = await window.gamecut.setAppIcon({ png, bar: '#102030', barText: '#ffffff' });
+    let refused = false; try { await window.gamecut.setAppIcon({ png: { 16: new Uint8Array(100) } }); } catch { refused = true; }
+    document.querySelector('#themeStudio [data-theme=ocean]').click();
+    const before = getComputedStyle(document.querySelector('.topbar .brand__mark')).backgroundImage;
+    document.querySelector('#themeStudio [data-theme="sakura"]').click();
+    const after = getComputedStyle(document.querySelector('.topbar .brand__mark')).backgroundImage;
+    document.querySelector('#themeIcon').click();
+    const off = getComputedStyle(document.querySelector('.topbar .brand__mark')).backgroundImage;
+    document.querySelector('#themeIcon').click();
+    return { bad, good, refused, changed: before !== after && /ff7eb6/.test(after), off: /strike-icon\.svg/.test(off) };
+  });
+  if (r.bad.length || !r.good?.icon || !r.refused || !r.changed || !r.off) throw new Error(JSON.stringify(r));
+});
+
 await step('the maker: live colours, warning and Fix, shape, undo, cancel puts it back', async () => {
   await ev(() => document.querySelector('#themeStudio [data-theme="midnight"]').click());
   await win.click('#themeNew'); await sleep(200);

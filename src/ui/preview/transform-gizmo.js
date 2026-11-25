@@ -83,7 +83,10 @@ export class Gizmo {
       scale: clip.transform.scale, rot: clip.transform.rotation,
       w: clip.transform.w, h: clip.transform.h,
       px: e.clientX, py: e.clientY,
+      stick: clip.stick ? { ...clip.stick } : null,
     };
+    // Stuck to something tracked: the drag moves it relative to that thing, so it keeps following.
+    const stuck = !!start.stick && this.comp.stuck(clip, t) !== clip;
     const b0 = this.comp.bounds(clip, t);
     this.history.begin('Transform', 'gizmo:' + clip.id);
 
@@ -91,7 +94,13 @@ export class Gizmo {
       const dx = (ev.clientX - start.px) / rect.width;
       const dy = (ev.clientY - start.py) / rect.height;
 
-      if (mode === 'move') {
+      if (stuck && mode === 'move') {
+        let sx = (start.stick.dx || 0) + dx, sy = (start.stick.dy || 0) + dy;
+        if (ev.shiftKey) Math.abs(dx) > Math.abs(dy) ? (sy = start.stick.dy || 0) : (sx = start.stick.dx || 0);
+        // Back on the thing itself is easy to find again.
+        if (this.store.ui.snap) { sx = snapTo(sx, [0]); sy = snapTo(sy, [0]); }
+        clip.stick = { ...start.stick, dx: clamp(sx, -1, 1), dy: clamp(sy, -1, 1) };
+      } else if (mode === 'move') {
         let nx = start.x + dx, ny = start.y + dy;
         if (ev.shiftKey) Math.abs(dx) > Math.abs(dy) ? (ny = start.y) : (nx = start.x);
         if (this.store.ui.snap) { nx = snapTo(nx, [0.5, 0.05, 0.95]); ny = snapTo(ny, [0.5, 0.05, 0.95]); }
@@ -110,7 +119,9 @@ export class Gizmo {
         const dw = signX ? (dx * signX * 2) / Math.max(b0.w, .001) : 0;
         const dh = signY ? (dy * signY * 2) / Math.max(b0.h, .001) : 0;
         const f = 1 + (signX && signY ? Math.max(dw, dh) : signX ? dw : dh);
-        if (clip.type === 'shape' && !ev.shiftKey && (signX === 0 || signY === 0)) {
+        if (stuck && start.stick.fit) {
+          clip.stick = { ...start.stick, pad: clamp((start.stick.pad ?? 1.25) * f, 0.2, 8) };
+        } else if (clip.type === 'shape' && !ev.shiftKey && (signX === 0 || signY === 0)) {
           if (signX) clip.transform.w = Math.max(.01, start.w * (1 + dw));
           if (signY) clip.transform.h = Math.max(.01, start.h * (1 + dh));
         } else {

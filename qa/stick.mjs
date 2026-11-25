@@ -169,6 +169,30 @@ await step('the export paints the same stuck layers as the preview', async () =>
   for (const p of r) if (!near(p, thing(p.t))) throw new Error('export: ' + JSON.stringify(p));
 });
 
+await step('dragging it on the picture moves it but it keeps following; a corner resizes it; each is one undo', async () => {
+  const ring = (await clips()).find(c => c.kind === 'ring');
+  await show(1);
+  await ev((id) => { window.gc.store.ui.snap = false; window.gc.store.select([id]); }, ring.id); await sleep(250);
+  const a = await where(ring.id, 1), b = await where(ring.id, 3);
+  const box = () => ev(() => { const r = document.querySelector('.gizmo').getBoundingClientRect(), f = document.querySelector('.gizmo').parentElement.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height, fw: f.width, fh: f.height }; });
+  let g = await box();
+  await win.mouse.move(g.x + g.w / 2, g.y + g.h / 2); await win.mouse.down();
+  for (let i = 1; i <= 6; i++) await win.mouse.move(g.x + g.w / 2 + 12 * i, g.y + g.h / 2 + 5 * i);
+  await win.mouse.up(); await frame();
+  const a2 = await where(ring.id, 1), b2 = await where(ring.id, 3), dx = 72 / g.fw, dy = 30 / g.fh;
+  const off = (p, q) => Math.hypot(q.x - p.x - dx, q.y - p.y - dy);
+  if (off(a, a2) > 0.01 || off(b, b2) > 0.01) throw new Error('moved wrongly: ' + JSON.stringify({ a, a2, b, b2, dx, dy }));
+  await sleep(150); g = await box();
+  await win.mouse.move(g.x + g.w, g.y + g.h); await win.mouse.down();
+  for (let i = 1; i <= 6; i++) await win.mouse.move(g.x + g.w + 4 * i, g.y + g.h + 4 * i);
+  await win.mouse.up(); await frame();
+  const a3 = await where(ring.id, 1), b3 = await where(ring.id, 3);
+  if (!(a3.w > a2.w * 1.1 && b3.w > b2.w * 1.1)) throw new Error('corner did not resize: ' + JSON.stringify({ a2, a3 }));
+  await ev(() => window.gc.history.undo()); await ev(() => window.gc.history.undo()); await frame();
+  const z = await where(ring.id, 1);
+  if (Math.hypot(z.x - a.x, z.y - a.y) > 0.002 || Math.abs(z.w - a.w) > 0.002) throw new Error('two undos did not put it back');
+});
+
 await step('Let go leaves it where it is; undo puts it back; deleting the target does not break it', async () => {
   const ring = (await clips()).find(c => c.kind === 'ring');
   await show(2);

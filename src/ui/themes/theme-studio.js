@@ -13,7 +13,7 @@ const COLOURS = [
 ];
 const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
 
-export function initThemeStudio({ current, use, preview }) {
+export function initThemeStudio({ current, use, preview, icon }) {
   const root = el('aside', 'thst');
   root.id = 'themeStudio';
   root.hidden = true;
@@ -64,6 +64,11 @@ export function initThemeStudio({ current, use, preview }) {
     if (mine.length) { body.appendChild(el('h4', null, 'Yours')); const g = el('div', 'thst__grid'); mine.forEach(t => g.appendChild(card(t, true))); body.appendChild(g); body.appendChild(el('h4', null, 'Made for Strike')); }
     const g = el('div', 'thst__grid'); GALLERY.forEach(t => g.appendChild(card(t, false))); body.appendChild(g);
     root.appendChild(body);
+    const foot = el('label', 'thst__foot thst__tick');
+    const tick = el('input'); tick.type = 'checkbox'; tick.id = 'themeIcon'; tick.checked = icon();
+    tick.addEventListener('change', () => icon(tick.checked));
+    foot.append(tick, el('span', null, 'Recolour the Strike logo and app icon too'));
+    root.appendChild(foot);
   }
   function remove(t) {
     const list = myThemes();

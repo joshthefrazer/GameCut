@@ -1266,6 +1266,7 @@ ipcMain.handle('proj:delete', async (_e, id) => {
  * gcmedia:; nothing else on the disk is.
  */
 /* Clip Inbox: recordings in the folders recorders save to. See inbox.cjs. */
+require('./app-icon.cjs').setup({ ipcMain, app, shell, nativeImage: require('electron').nativeImage, getWin: () => win, quiet: QA_QUIET });
 require('./inbox.cjs')({ ipcMain, app, dialog, getWin: () => win, registerMedia });
 
 ipcMain.handle('media:register', (_e, paths) => {

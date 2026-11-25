@@ -5,7 +5,7 @@
   "publishDir": "docs",
   "name": "Strike",
   "tagline": "A video editor for gaming clips that runs on your machine.",
-  "blurb": "Multi-track timeline, CapCut-style transitions, a text engine built for titles, beat-synced cutting, and export straight to MP4. No account, no upload, no subscription — your footage never leaves your computer.",
+  "blurb": "Multi-track timeline, 23 transitions with real motion blur, a text engine built for titles, beat-synced cutting, and export straight to MP4. No account, no upload, no subscription — your footage never leaves your computer.",
   "_installer": "Where the Download button points. 'folder' means the .exe sits next to the page, which is the simplest thing that works. Set it to a full https:// address instead (a GitHub release, say) if the repository gets heavy.",
   "installer": "folder",
   "links": [],

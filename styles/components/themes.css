@@ -73,3 +73,23 @@ html.no-motion *,html.no-motion *::before,html.no-motion *::after{transition-dur
 .rail__btn{font-size:min(11.5px,calc(11px*var(--fs)));width:56px;letter-spacing:-.01em}
 /* The what's-new card belongs to the home screen: over the editor it sat on the track names and took their clicks. */
 body:has(#app:not(.is-home)) .updcard--new{display:none}
+
+.thst__tick{font-size:12.5px;color:var(--txt-1);cursor:pointer}
+.thst__tick input{accent-color:var(--acc)}
+
+/* ── 2.2: the Inspector without boxes in boxes ────────────────── */
+.group{border:0;border-radius:0;background:none;margin:0;border-top:1px solid var(--glass-line);overflow:visible}
+.ipane>.group:first-child,#inspectorRoot>.group:first-child{border-top:0}
+.group__h{height:38px;padding:0 4px;font-size:calc(13px*var(--fs));text-transform:none;letter-spacing:0;font-weight:700;color:var(--txt-0)}
+.group__c{padding:0 4px 14px;gap:8px}
+.row{grid-template-columns:76px minmax(0,1fr);min-height:28px}
+.row--kf{grid-template-columns:76px minmax(0,1fr) 18px}
+.row>label{font-size:calc(12px*var(--fs));color:var(--txt-1)}
+.num,.sel,.swatch,.txt-in{height:28px;background-color:var(--field);font-size:calc(12px*var(--fs))}
+.num input{font-size:calc(12px*var(--fs))}
+.fontdrop{height:30px;border-style:solid;border-color:var(--glass-line);font-size:calc(12px*var(--fs));font-weight:600;color:var(--txt-1);background:var(--surface)}
+.chip-btn{height:27px;font-size:calc(12px*var(--fs))}
+.insp__help{font-size:calc(12px*var(--fs))}
+.empty{border:0;background:none;padding:26px 14px}
+.empty span{font-size:calc(12px*var(--fs));color:var(--txt-2)}
+.trs__set{background:none;border:0;border-top:1px solid var(--glass-line);border-bottom:1px solid var(--glass-line);border-radius:0;padding:12px 2px}

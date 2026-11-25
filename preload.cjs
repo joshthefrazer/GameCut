@@ -37,6 +37,8 @@ contextBridge.exposeInMainWorld('gamecut', {
   isDesktop: true,
   platform: process.platform,
   version: () => ipcRenderer.invoke('app:version'),
+  /** Window, taskbar and shortcut icons in the theme's colours (app-icon.cjs). */
+  setAppIcon: (opts) => ipcRenderer.invoke('icon:set', opts).then(orThrow),
 
   /**
    * Is the graphics card actually being used?

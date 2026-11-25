@@ -27,18 +27,58 @@
 ;
 ; So close it first, rather than asking the person to know that.
 
+; It asks first when a person is doing the installing. Updates Strike started by
+; itself (and silent installs) were already agreed to, so those just close it.
+; Closing is polite to begin with (Strike saves), forced only if that is ignored.
+!macro StrikeClose IMAGE
+  nsExec::Exec 'cmd /c taskkill /IM "${IMAGE}"'
+  Pop $0
+  StrCpy $1 0
+  ${Do}
+    nsExec::Exec 'cmd /c tasklist /FI "IMAGENAME eq ${IMAGE}" | find /I "${IMAGE}"'
+    Pop $0
+    ${If} $0 != 0
+      ${ExitDo}
+    ${EndIf}
+    Sleep 500
+    IntOp $1 $1 + 1
+  ${LoopUntil} $1 >= 16
+  ; /T takes the process tree with it: Chromium leaves helper processes, and one
+  ; of those still holding a file is enough to fail the write.
+  nsExec::Exec 'cmd /c taskkill /F /IM "${IMAGE}" /T'
+  Pop $0
+!macroend
+
+!macro StrikeAskAndClose ASK
+  StrCpy $2 "no"
+  nsExec::Exec 'cmd /c tasklist /FI "IMAGENAME eq Strike.exe" | find /I "Strike.exe"'
+  Pop $0
+  ${If} $0 = 0
+    StrCpy $2 "yes"
+  ${EndIf}
+  nsExec::Exec 'cmd /c tasklist /FI "IMAGENAME eq GameCut.exe" | find /I "GameCut.exe"'
+  Pop $0
+  ${If} $0 = 0
+    StrCpy $2 "yes"
+  ${EndIf}
+  ${If} $2 == "yes"
+    ${IfNot} ${Silent}
+    ${AndIfNot} ${isUpdated}
+      MessageBox MB_OKCANCEL|MB_ICONINFORMATION "${ASK}" /SD IDOK IDOK +2
+      Quit
+    ${EndIf}
+    !insertmacro StrikeClose "Strike.exe"
+    !insertmacro StrikeClose "GameCut.exe"
+    Sleep 500
+  ${EndIf}
+!macroend
+
 !macro customInit
-  ; /T takes the process tree with it — Chromium leaves helper processes, and a
-  ; single one of those still holding a handle is enough to fail the write.
-  nsExec::Exec 'cmd /c taskkill /F /IM "Strike.exe" /T'
-  nsExec::Exec 'cmd /c taskkill /F /IM "GameCut.exe" /T'
-  Sleep 800
+  !insertmacro StrikeAskAndClose "Strike is open.$\r$\n$\r$\nPress OK to let the installer save and close it, or Cancel to go back to what you were doing."
 !macroend
 
 !macro customUnInit
-  nsExec::Exec 'cmd /c taskkill /F /IM "Strike.exe" /T'
-  nsExec::Exec 'cmd /c taskkill /F /IM "GameCut.exe" /T'
-  Sleep 800
+  !insertmacro StrikeAskAndClose "Strike is open.$\r$\n$\r$\nPress OK to close it and carry on uninstalling, or Cancel to keep Strike."
 !macroend
 
 

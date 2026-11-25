@@ -21,7 +21,7 @@ function checkContents(ctx) {
     : path.join(ctx.appOutDir, 'resources');
   const file = path.join(res, 'app.asar');
   const read = (n) => { try { return asar.extractFile(file, n); } catch { throw new Error(`The packaged app is missing ${n}. Not building a broken installer.`); } };
-  for (const n of ['electron-main.cjs', 'file-body.cjs', 'preload.cjs', 'updater.cjs', 'inbox.cjs', 'index.html']) read(n);
+  for (const n of ['electron-main.cjs', 'file-body.cjs', 'preload.cjs', 'updater.cjs', 'inbox.cjs', 'app-icon.cjs', 'index.html']) read(n);
   const cfg = JSON.parse(read('update-config.json').toString('utf8'));
   if (!cfg.publicKey || !/^https:/.test(cfg.manifestUrl || '') || /CHANGE-ME/.test(cfg.manifestUrl)) {
     throw new Error('update-config.json has no public key or no address: this build could never update.');
