@@ -479,7 +479,8 @@ function createWindow() {
       : {
           titleBarStyle: 'hidden',
           ...(process.platform === 'win32'
-            ? { titleBarOverlay: { color: '#0b1120', symbolColor: '#b8c9e4', height: 52 } }
+            ? { // See-through: the theme (and anything that dims the screen) shows behind the window's own buttons.
+            titleBarOverlay: { color: '#00000000', symbolColor: '#c9d3ea', height: 51 } }
             : {}),
         }),
     autoHideMenuBar: true,

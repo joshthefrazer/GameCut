@@ -76,8 +76,8 @@ function setup({ ipcMain, app, shell, nativeImage, getWin, quiet }) {
     const win = getWin();
     if (!win || e.sender !== win.webContents) return { error: 'No window' };
     const o = opts && typeof opts === 'object' ? opts : {};
-    if (process.platform === 'win32' && HEX.test(o.bar || '') && HEX.test(o.barText || '')) {
-      try { win.setTitleBarOverlay({ color: o.bar, symbolColor: o.barText, height: 52 }); } catch { /* no overlay on this Windows */ }
+    if (process.platform === 'win32' && HEX.test(o.barText || '')) {
+      try { win.setTitleBarOverlay({ color: '#00000000', symbolColor: o.barText, height: 51 }); } catch { /* no overlay on this Windows */ }
     }
     if (!o.png) return { ok: true, icon: false };
     const pngs = {};

@@ -1,5 +1,12 @@
 [
  {
+  "version": "2.3.1",
+  "intro": "The window's corner, tidied up.",
+  "notes": [
+   "Fixed: **minimise, maximise and close** sat on a dark block that ignored your theme and stayed bright over menus. With the 2.3.1 installer nothing is painted behind them; with just this update the block blends in."
+  ]
+ },
+ {
   "version": "2.3.0",
   "intro": "Two updates in one: this and 2.2. Faster to edit, and nicer to look at.",
   "notes": [

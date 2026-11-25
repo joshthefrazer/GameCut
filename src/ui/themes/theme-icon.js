@@ -25,6 +25,7 @@ export function dressApp(t, wantIcon = true, css = getComputedStyle(document.doc
   clearTimeout(timer);
   const use = wantIcon ? t : { id: 'strike', radius: 1, accent: STOCK.tile };
   const bar = css.getPropertyValue('--bg-1').trim(), barText = css.getPropertyValue('--txt-1').trim();
+  document.documentElement.classList.toggle('old-bar', !!window.gamecut && window.gamecut.platform === 'win32' && !window.gamecut.seamlessBar);
   const key = JSON.stringify([markColours(use), use.radius, bar, barText]);
   if (key === last || !window.gamecut?.setAppIcon) return;
   timer = setTimeout(async () => {

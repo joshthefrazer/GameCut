@@ -37,6 +37,8 @@ contextBridge.exposeInMainWorld('gamecut', {
   isDesktop: true,
   platform: process.platform,
   version: () => ipcRenderer.invoke('app:version'),
+  /** The window's own buttons sit on the page with nothing painted behind them. */
+  seamlessBar: process.platform === 'win32',
   /** Window, taskbar and shortcut icons in the theme's colours (app-icon.cjs). */
   setAppIcon: (opts) => ipcRenderer.invoke('icon:set', opts).then(orThrow),
 

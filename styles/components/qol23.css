@@ -126,3 +126,13 @@ html.no-motion .btn:hover,html.no-motion .asset:hover,html.no-motion .fxtile:hov
 
 .pads__rec{flex:none}
 .wsp__t i{display:block;max-width:calc(100% - 46px)}
+
+/* ── The window's own buttons ─────────────────────────────────────
+   Strike 2.3.1 and newer: nothing is painted behind them. Older programs paint a
+   fixed navy there and only an installer can change that, so the bar runs into
+   it softly instead of stopping at a hard edge. */
+.topbar{border-radius:0}
+html.old-bar .topbar::after,html.old-bar .home__bar::after{content:"";position:absolute;top:0;right:0;bottom:0;z-index:-1;pointer-events:none;
+  width:calc(120px + 100% - env(titlebar-area-width,calc(100% - 146px)));
+  background:linear-gradient(90deg,transparent,#0b1120 110px)}
+html.old-bar .home__bar{position:relative;isolation:isolate}

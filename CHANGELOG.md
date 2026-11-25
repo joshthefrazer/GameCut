@@ -8,6 +8,14 @@ one.
 Write them for the person using GameCut, not for yourself: "you can drag the
 ends of a clip to trim it" rather than "added trim handles to clip-renderer".
 
+## 2.3.1
+
+The window's corner, tidied up.
+
+- Fixed: **minimise, maximise and close** sat on a dark block that ignored your
+  theme and stayed bright over menus. With the 2.3.1 installer nothing is painted
+  behind them; with just this update the block blends in.
+
 ## 2.3.0
 
 Two updates in one: this and 2.2. Faster to edit, and nicer to look at.
