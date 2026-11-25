@@ -130,7 +130,7 @@
   display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 8px;
   border-radius:var(--r-sm);border:1px solid var(--glass-line);background:var(--surface);
 }
-.mini-field>span{font-size:calc(11px*var(--fs));text-transform:uppercase;letter-spacing:.09em;color:var(--txt-3)}
+.mini-field>span{font-size:calc(12.5px*var(--fs));text-transform:none;letter-spacing:0;color:var(--txt-3);font-weight:650}
 .mini-field input{
   width:46px;background:none;border:0;font-family:var(--f-mono);font-size:calc(11.5px*var(--fs));
   text-align:right;-moz-appearance:textfield;color:var(--txt-0);

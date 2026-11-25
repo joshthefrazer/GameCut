@@ -10,8 +10,11 @@
  */
 import { bus } from '../../core/events.js';
 import { freezeFrame } from '../../edit/freeze-frame.js';
-import { QUICK_PICKS, freshTransition, pickFor, outgoingFor } from '../../engine/transitions.js';
+import { QUICK_PICKS, TRANSITION_PICKS, freshTransition, pickFor, outgoingFor } from '../../engine/transitions.js';
 import { askText } from '../widgets/ask.js';
+import { assets } from '../../media/asset-store.js';
+import { starred } from '../stars.js';
+import { MARK_COLORS } from '../markers-panel.js';
 import { LANE_PRESETS } from '../../core/commands.js';
 
 /** Colour labels for clips and lanes. */
@@ -30,6 +33,9 @@ const SPEEDS = [
   { v: 4,    n: '4×' },
   { v: 16,   n: '16× — timelapse' },
 ];
+
+/** What you starred first, then the usual ones. */
+const quickPicks = () => { const s = starred('trans').map(k => TRANSITION_PICKS.find(p => p.key === k)).filter(Boolean); return [...s, ...QUICK_PICKS.filter(p => !s.includes(p))].slice(0, 12); };
 
 export function initContextMenu({ store, cmds, playback }) {
   let menu = null;
@@ -89,6 +95,7 @@ export function initContextMenu({ store, cmds, playback }) {
         d.style.background = it.dot;
         b.prepend(d);
       }
+      if (it.pic) { const p = document.createElement('img'); p.className = 'ctx__pic'; p.src = it.pic; p.alt = ''; b.prepend(p); }
       if (it.id) b.dataset.item = it.id;
       if (it.key) {
         const k = document.createElement('kbd');
@@ -170,6 +177,17 @@ export function initContextMenu({ store, cmds, playback }) {
         on: () => cmds.pasteLook(store.rt.selection.includes(clip.id) ? store.rt.selection : [clip.id]) });
     }
 
+    if (cmds.copiedLook) items.push({ label: 'Paste parts of a look…', key: 'Ctrl+Alt+Shift+V', id: 'pasteParts', on: () => bus.emit('look:parts') });
+    if (!many && (visual || clip.type === 'audio')) {
+      const others = assets.all().filter(a => a.kind === clip.type && !a.missing && !a.bundled && a.id !== clip.assetId).slice(-12).reverse();
+      items.push({ label: others.length ? 'Replace footage, keep the edit' : 'Replace footage (import another first)', id: 'replace', disabled: !others.length,
+        sub: others.length ? others.map(a => ({ label: a.name, pic: a.thumb || (a.kind === 'image' ? a.url : ''), id: 'replace-' + a.id, on: () => {
+          const r = cmds.replaceMedia(clip.id, a.id);
+          bus.emit('toast', r.ok ? { msg: r.shorter ? `Now ${a.name}. It is shorter, so the clip is too.` : `Now ${a.name}`, kind: 'ok', action: { label: 'Undo', run: () => cmds.undo() } } : { msg: r.reason, kind: 'err' });
+          bus.emit('assets'); bus.emit('inspector:refresh');
+        } })) : undefined });
+    }
+
     if (visual) {
       items.push({ sep: true });
       // Only offered when there is actually a cut here. A transition on a clip
@@ -181,7 +199,7 @@ export function initContextMenu({ store, cmds, playback }) {
         label: cut ? 'Transition on the cut before this' : 'Transition (no cut before this clip)',
         disabled: !cut,
         sub: cut ? [
-          ...QUICK_PICKS.map(pick => ({
+          ...quickPicks().map(pick => ({
             label: pick.name,
             on_: cur?.key === pick.key,
             on: () => {
@@ -409,7 +427,7 @@ export function initContextMenu({ store, cmds, playback }) {
     const cur = pickFor(j.next);
     const items = [
       { head: `Cut · ${j.prev.name || 'clip'} → ${j.next.name || 'clip'}` },
-      ...QUICK_PICKS.map(pick => ({
+      ...quickPicks().map(pick => ({
         label: pick.name,
         on_: cur?.key === pick.key,
         on: () => {
@@ -437,11 +455,14 @@ export function initContextMenu({ store, cmds, playback }) {
       { label: 'Add a marker here', key: 'M', on: () => cmds.addMarker(t) },
     ];
     if (near) {
+      items.push({ label: near.label ? 'Change its note…' : 'Add a note…', id: 'mkNote', on: async () => { const v = await askText({ title: 'Marker note', value: near.label || '', ok: 'Save', maxLength: 60 }); if (v != null) cmds.setMarker(near.id, { label: v }); } });
+      items.push({ label: 'Colour', sub: MARK_COLORS.map((c, i) => ({ label: ['Amber', 'Red', 'Green', 'Blue', 'Purple', 'Pink', 'White'][i], dot: c, on_: near.color === c, on: () => cmds.setMarker(near.id, { color: c }) })) });
       items.push({
         label: near.label ? `Remove marker "${near.label}"` : 'Remove this marker',
         on: () => cmds.removeMarker(near.id),
       });
     }
+    items.push({ label: 'Markers list…', key: 'Shift+M', on: () => bus.emit('markers:open') });
     if (store.doc.markers.length) {
       items.push({ label: `Clear all markers (${store.doc.markers.length})`, on: () => cmds.clearMarkers() });
     }

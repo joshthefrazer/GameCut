@@ -60,7 +60,7 @@
 .cape__x{background:none;border:0;color:var(--txt-2);font-size:calc(14px*var(--fs));cursor:pointer;padding:2px 6px;border-radius:calc(6px*var(--rk))}
 .cape__x:hover{background:var(--surface,var(--field));color:var(--txt-0)}
 .cape__sec{padding:0 14px 6px}
-.cape__lbl{font-size:calc(11px*var(--fs));font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt-2);margin:6px 0 5px}
+.cape__lbl{font-size:calc(12.5px*var(--fs));font-weight:700;letter-spacing:0;text-transform:none;color:var(--txt-2);margin:6px 0 5px}
 .cape__tiles{display:flex;flex-wrap:wrap;gap:5px}
 .cape__tile{padding:5px 9px;border-radius:999px;border:1px solid var(--glass-line-2,rgba(255,255,255,.12));background:var(--surface,var(--field));
   color:var(--txt-1,var(--txt-1));font-size:calc(11.5px*var(--fs));font-weight:600;cursor:pointer}
@@ -94,7 +94,7 @@
 .cape__poph b{font-size:calc(12.5px*var(--fs));color:var(--txt-0)}
 .cape__poph button{background:none;border:0;color:var(--txt-2);cursor:pointer}
 .cape__pr{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
-.cape__pr>span{width:48px;font-size:calc(11px*var(--fs));font-weight:700;color:var(--txt-2);text-transform:uppercase;letter-spacing:.05em}
+.cape__pr>span{width:48px;font-size:calc(12.5px*var(--fs));font-weight:700;color:var(--txt-2);text-transform:none;letter-spacing:0}
 .cape__sw{width:20px;height:20px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0}
 .cape__sw.is-on{border-color:var(--txt-0);box-shadow:0 0 0 2px var(--acc)}
 .cape__sw--none{background:var(--surface-hi,var(--bg-2));color:var(--txt-2);font-size:calc(11px*var(--fs));line-height:16px}

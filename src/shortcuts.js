@@ -15,7 +15,7 @@ const TEXT_TYPES = new Set(['', 'text', 'search', 'email', 'number', 'password',
 /** The keyboard editing tools (src/edit/edit-tools.js), once main.js has made them. */
 const tools = () => window.gc?.editTools || null;
 
-const typing = () => {
+export const typing = () => {
   const el = document.activeElement;
   if (!el) return false;
   if (el.isContentEditable || el.tagName === 'TEXTAREA') return true;

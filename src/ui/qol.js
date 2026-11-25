@@ -3,6 +3,7 @@ import { parseTime, fmtTime } from './palette.js';
 import { loadTheme } from './theme.js';
 import { CLIP_COLORS } from '../core/schema.js';
 import { findTheme, themeVars, isLight, mix, themePicture } from './themes/theme-core.js';
+import { setFilmstrips } from '../media/filmstrip.js';
 import { markUrl, dressApp } from './themes/theme-icon.js';
 import { initThemeStudio } from './themes/theme-studio.js';
 
@@ -295,9 +296,10 @@ export function initQol({ store, cmds, history, playback, comp, timeline }) {
           </div>
           <div class="capd__lbl">Help</div>
           <label class="set__row"><input type="checkbox" id="setTips" ${s.tips ? 'checked' : ''}> Show hover hints on buttons</label>
+          <label class="set__row"><input type="checkbox" id="setStrips" ${s.strips !== false ? 'checked' : ''}> Show the real pictures along clips (turn off on a slow PC)</label>
           <div class="set__links">
             <button class="btn btn--ghost btn--sm" data-open="tour">What's new in ${VERSION_TOUR}</button>
-            <button class="btn btn--ghost btn--sm" data-open="keys">Keyboard shortcuts</button>
+            <button class="btn btn--ghost btn--sm" data-open="keys">Change shortcuts…</button>
           </div>
         </div>
       </div>`;
@@ -310,9 +312,10 @@ export function initQol({ store, cmds, history, playback, comp, timeline }) {
     const d = e.target.closest('[data-density]');
     if (d) { applySettings(writeSettings({ density: d.dataset.density })); openSettings(); return; }
     const o = e.target.closest('[data-open]');
-    if (o) { sets.hidden = true; if (o.dataset.open === 'themes') bus.emit('themes:open'); else if (o.dataset.open === 'tour') openTour(); else document.getElementById('btnHelp')?.click(); }
+    if (o) { sets.hidden = true; if (o.dataset.open === 'themes') bus.emit('themes:open'); else if (o.dataset.open === 'keys') bus.emit('keys:open'); else if (o.dataset.open === 'tour') openTour(); else document.getElementById('btnHelp')?.click(); }
   });
   sets.addEventListener('change', (e) => {
+    if (e.target.id === 'setStrips') { writeSettings({ strips: e.target.checked }); setFilmstrips(e.target.checked); bus.emit('layout'); }
     if (e.target.id === 'setTips') {
       writeSettings({ tips: e.target.checked });
       document.documentElement.classList.toggle('no-tips', !e.target.checked);
@@ -322,6 +325,7 @@ export function initQol({ store, cmds, history, playback, comp, timeline }) {
   bus.on('settings:open', openSettings);
   const s0 = readSettings();
   applySettings(s0);
+  setFilmstrips(s0.strips !== false);
   document.documentElement.classList.toggle('no-tips', !s0.tips);
   // A slider's coloured part follows its handle, wherever the slider is.
   const fillOf = (r) => { const a = +r.min || 0, b = r.max === '' ? 100 : +r.max; r.style.setProperty('--fill', `${b > a ? ((r.value - a) / (b - a)) * 100 : 0}%`); };

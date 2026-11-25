@@ -70,7 +70,7 @@
 .help__sec{padding-top:12px}
 .help__sec h3{
   position:sticky;top:0;z-index:1;margin:0 0 4px;padding:7px 0 5px;
-  font-size:calc(11px*var(--fs));font-weight:680;letter-spacing:.11em;text-transform:uppercase;
+  font-size:calc(12.5px*var(--fs));font-weight:680;letter-spacing:0;text-transform:none;
   color:var(--txt-3);background:var(--bg-2);
 }
 .help__row{
@@ -112,8 +112,8 @@
   box-shadow:0 22px 54px -18px rgba(0,0,0,.8), 0 2px 10px rgba(0,0,0,.4);
 }
 .ctx__head{
-  padding:6px 9px 7px;font-size:calc(11px*var(--fs));font-weight:650;
-  letter-spacing:.09em;text-transform:uppercase;color:#7e90b4;
+  padding:6px 9px 7px;font-size:calc(12.5px*var(--fs));font-weight:650;
+  letter-spacing:0;text-transform:none;color:#7e90b4;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
 .ctx__item{

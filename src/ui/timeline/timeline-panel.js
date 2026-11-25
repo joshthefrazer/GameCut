@@ -641,6 +641,7 @@ export function initTimeline({ store, cmds, history, playback, comp }) {
   store.on('playhead', repaint);
   bus.on('layout', () => { repaint(); });
   bus.on('assets', repaint);
+  bus.on('filmstrip', repaint);
   new ResizeObserver(() => { rebuildHeaders(); repaint(); }).observe(view);
 
   setTool(store.ui.tool, { quiet: true });

@@ -1,5 +1,6 @@
 import { EFFECTS } from '../../engine/layers/effects.js';
 import { bus } from '../../core/events.js';
+import { starEl, isStarred } from '../stars.js';
 
 /**
  * The Effects drawer: hit moments you drop at the playhead.
@@ -13,6 +14,7 @@ export function initEffects({ store, cmds, comp }) {
   if (!root) return {};
   root.innerHTML = `
     <p class="fx__lead">Click one to drop it at the playhead. It changes everything on the lanes under it, and leaves your titles alone.</p>
+    <div class="fx__bar"><button class="is-on" data-fxshow="all">All</button><button data-fxshow="star">★ Starred</button></div>
     <div class="fx__grid" id="fxGrid"></div>
     <p class="fx__tip"><kbd>Z</kbd> drops a punch-in zoom right where you are.</p>`;
   const grid = root.querySelector('#fxGrid');
@@ -29,7 +31,13 @@ export function initEffects({ store, cmds, comp }) {
       comp.render();
       bus.emit('toast', { msg: `${e.name} added — drag its ends on the timeline to make it longer or shorter`, ms: 3600 });
     });
+    b.appendChild(starEl('fx', e.id, e.name));
     grid.appendChild(b);
   }
+  let only = 'all';
+  const none = document.createElement('p'); none.className = 'fx__lead'; none.textContent = 'Nothing starred yet. Point at an effect and click its star.'; none.hidden = true; grid.after(none);
+  const sift = () => { let n = 0; for (const b of grid.children) { b.hidden = only === 'star' && !isStarred('fx', b.dataset.fx); if (!b.hidden) n++; } none.hidden = n > 0; };
+  root.querySelector('.fx__bar').addEventListener('click', (ev) => { const b = ev.target.closest('[data-fxshow]'); if (!b) return; only = b.dataset.fxshow; for (const x of b.parentElement.children) x.classList.toggle('is-on', x === b); sift(); });
+  bus.on('stars', sift);
   return {};
 }

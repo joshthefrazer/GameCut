@@ -16,7 +16,7 @@ import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node
 import path from 'node:path';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
-const LIGHT = ['file-body', 'tools-a', 'captions-edit', 'stick', 'features', 'features2', 'timeline', 'timeline-next', 'qol', 'ui-next', 'strike', 'smart-crop', 'crop-box', 'text-motion', 'engine', 'transitions', 'themes'];
+const LIGHT = ['file-body', 'tools-a', 'captions-edit', 'stick', 'features', 'features2', 'timeline', 'timeline-next', 'qol', 'ui-next', 'strike', 'smart-crop', 'crop-box', 'text-motion', 'engine', 'transitions', 'themes', 'qol23'];
 const HEAVY = ['export-sink', 'outline'];
 
 const args = process.argv.slice(2);

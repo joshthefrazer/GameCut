@@ -171,7 +171,7 @@
 .pal__list{max-height:min(420px,55vh);overflow:auto;padding:6px}
 .pal__item{width:100%;display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:calc(9px*var(--rk));text-align:left;font-size:calc(13px*var(--fs));color:var(--txt-1)}
 .pal__item.is-on{background:var(--acc-soft);color:var(--txt-0);box-shadow:0 0 0 1px var(--acc-line) inset}
-.pal__sec{flex:none;width:64px;font-size:calc(11px*var(--fs));font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt-3)}
+.pal__sec{flex:none;width:64px;font-size:calc(12.5px*var(--fs));font-weight:700;letter-spacing:0;text-transform:none;color:var(--txt-3)}
 .pal__name{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pal__meta{font:600 calc(11px*var(--fs)) var(--f-mono);color:var(--txt-2)}
 .pal__none{padding:18px;text-align:center;color:var(--txt-2);font-size:calc(12.5px*var(--fs))}
@@ -257,7 +257,7 @@
 /* ── Auto-captions ───────────────────────────────────────────── */
 .capd__box{width:min(560px,calc(100vw - 32px))}
 .capd__body{padding:14px 16px;display:flex;flex-direction:column;gap:8px}
-.capd__lbl{font-size:calc(11px*var(--fs));font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt-3);margin-top:4px}
+.capd__lbl{font-size:calc(12.5px*var(--fs));font-weight:700;letter-spacing:0;text-transform:none;color:var(--txt-3);margin-top:4px}
 .capd__opts{display:flex;flex-direction:column;gap:6px;font-size:calc(13px*var(--fs));color:var(--txt-1)}
 .capd__opts label{display:flex;gap:8px;align-items:center}
 .capd__opts .is-off{opacity:.45}

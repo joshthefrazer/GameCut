@@ -99,7 +99,7 @@
   height:26px;padding:0 4px 0 9px;border-radius:var(--r-sm);
   border:1px solid var(--glass-line);background:var(--surface);
 }
-.qsel>span{font-size:calc(11px*var(--fs));text-transform:uppercase;letter-spacing:.09em;color:var(--txt-3)}
+.qsel>span{font-size:calc(12.5px*var(--fs));text-transform:none;letter-spacing:0;color:var(--txt-3);font-weight:650}
 .qsel select{
   border:0;background:none;font-size:calc(11.5px*var(--fs));font-weight:540;color:var(--txt-1);
   cursor:pointer;padding:0 2px;

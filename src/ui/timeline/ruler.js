@@ -79,6 +79,12 @@ export function drawRuler(ctx, store, L) {
     ctx.lineTo(x + 6, RH - 7); ctx.lineTo(x + 9, RH - 2);
     ctx.lineTo(x, RH - 2); ctx.closePath(); ctx.fill();
     ctx.fillRect(x - .5, RH - 12, 1, L.H - RH + 12);
+    if (m.label) {
+      ctx.font = '600 10px system-ui, sans-serif';
+      const text = m.label.length > 18 ? m.label.slice(0, 17) + '…' : m.label, w = ctx.measureText(text).width + 8;
+      ctx.globalAlpha = 0.92; ctx.fillRect(x + 8, RH - 14, w, 13); ctx.globalAlpha = 1;
+      ctx.fillStyle = '#0b0f1a'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillText(text, x + 12, RH - 7);
+    }
   }
 
   drawRange(ctx, store, L);

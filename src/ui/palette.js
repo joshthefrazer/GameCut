@@ -134,6 +134,7 @@ export function initPalette({ store, cmds, history, playback, timeline, preview,
       });
     }) });
   }
+  bus.on('palette:list', (fn) => fn(actions));
   bus.on('palette:add', (list) => { for (const a of [].concat(list)) if (!actions.some(x => x.id === a.id)) actions.push(a); });
 
   /* ── The sheet ───────────────────────────────────────────────── */

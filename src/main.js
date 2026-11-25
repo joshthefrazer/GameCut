@@ -34,6 +34,13 @@ import { initInbox } from './ui/inbox/inbox.js';
 import { initThumbnails } from './ui/thumbs/thumbnail-maker.js';
 import { initMarkerNav } from './edit/marker-nav.js';
 import { initEditTools } from './edit/edit-tools.js';
+import { initFilmstrip, filmstripStats } from './media/filmstrip.js';
+import { initKeymap } from './ui/keymap.js';
+import { initWorkspaces } from './ui/workspaces.js';
+import { initLookPaste } from './ui/look-paste.js';
+import { initTrimPreview } from './ui/trim-preview.js';
+import { initMarkersPanel } from './ui/markers-panel.js';
+import { initResume } from './project/resume.js';
 import { initStickTo } from './edit/stick-to.js';
 import { initCaptionFiles } from './captions/caption-files.js';
 import { initWhatsNew } from './ui/whats-new.js';
@@ -89,6 +96,12 @@ const markerNav = initMarkerNav({ store, playback });
 const editTools = initEditTools({ store, cmds, history, playback });
 const stickTo = initStickTo({ store, cmds, history });
 const proxies = initProxies({ store, comp });
+initFilmstrip({ store });
+const keymap = initKeymap();
+const workspaces = initWorkspaces({ store });
+const lookPaste = initLookPaste({ store, cmds });
+initTrimPreview({ store });
+const markersPanel = initMarkersPanel({ store, cmds, playback });
 const desktop = initDesktop({ history });
 const updates = initUpdates({ store });
 
@@ -117,6 +130,7 @@ initExport({ store, playback });
 /* ── Projects: the home screen, saving, and autosave ──────────── */
 const library = createLibrary({ store, comp, history });
 const versions = initVersions({ library });
+const resume = initResume({ store, library, playback, timeline });
 const captions = initCaptions({ store, cmds, history });
 const captionFiles = initCaptionFiles({ store, cmds, history });
 const captionEditor = initCaptionEditor({ store, history, playback, cmds });
@@ -195,6 +209,7 @@ const home = initHome({
     home.hide();
     dropFocus();
     bus.emit('editor:open');
+    resume.restore();
     if (r.missing) {
       bus.emit('toast', {
         msg: `${r.missing} file${r.missing === 1 ? '' : 's'} could not be found — they were moved or deleted. The clips are still on the timeline.`,
@@ -273,6 +288,7 @@ async function assetsClear() {
  * asked to go somewhere else.
  */
 bus.on('home:request', async () => {
+  resume.note();
   if (library.id && library.dirty && library.worthKeeping()) await library.save({ silent: true });
   await home.show();
 });
@@ -323,4 +339,4 @@ home.show();
 // over "What are you making?". The first-run tour covers the keys instead.
 
 /* Expose for console poking during development. */
-Object.assign(window, { gc: { store, history, cmds, comp, playback, timeline, preview, transport, desktop, library, home, help, transitions, updates, assets, graphics, palette, markerNav, editTools, stickTo, versions, proxies, captions, captionFiles, captionEditor, whatsNew, qol, animLib, tour, pads, layouts, inbox, thumbs } });
+Object.assign(window, { gc: { store, history, cmds, comp, playback, timeline, preview, transport, desktop, library, home, help, transitions, updates, assets, graphics, palette, markerNav, editTools, stickTo, versions, proxies, captions, captionFiles, captionEditor, whatsNew, qol, animLib, tour, pads, layouts, inbox, thumbs, keymap, workspaces, lookPaste, markersPanel, resume, filmstripStats } });

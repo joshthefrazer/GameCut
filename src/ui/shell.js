@@ -147,7 +147,7 @@ export function initShell(store) {
 }
 
 const KEY = 'gamecut.layout.v2';
-function savePrefs(store) {
+export function savePrefs(store) {
   try {
     localStorage.setItem(KEY, JSON.stringify({
       leftW: store.ui.leftW, rightW: store.ui.rightW, timelineH: store.ui.timelineH,

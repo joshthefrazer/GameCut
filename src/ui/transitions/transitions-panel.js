@@ -3,6 +3,7 @@ import { createTransPreview, grabCutFrames, demoFrames, drawMoment } from './tra
 import {
   TRANSITION_PICKS, DEFAULT_TRANS_DUR, pickFor, junctions, maxDurFor, freshTransition,
 } from '../../engine/transitions.js';
+import { starEl, isStarred } from '../stars.js';
 import { GROUPS, EASES } from '../../engine/transition-fx.js';
 
 /**
@@ -338,7 +339,7 @@ export function initTransitions({ store, cmds, comp, playback }) {
     find.addEventListener('input', () => { query = find.value; fill(); });
     find.addEventListener('keydown', (ev) => ev.stopPropagation());
     const chips = el('div', 'trs__chips');
-    for (const g of [{ id: 'all', name: 'All' }, ...GROUPS]) {
+    for (const g of [{ id: 'all', name: 'All' }, { id: 'star', name: '★ Starred' }, ...GROUPS]) {
       const b = el('button', g.id === group ? 'is-on' : '', g.name);
       b.dataset.group = g.id;
       b.addEventListener('click', () => { group = g.id; query = ''; find.value = ''; try { localStorage.setItem('strike.transGroup', group); } catch { /* storage off */ } for (const x of chips.children) x.classList.toggle('is-on', x === b); fill(); });
@@ -355,18 +356,18 @@ export function initTransitions({ store, cmds, comp, playback }) {
       const q = query.trim().toLowerCase();
       let shown = 0;
       for (const g of GROUPS) {
-        if (!q && group !== 'all' && group !== g.id) continue;
-        const picks = TRANSITION_PICKS.filter(p => p.group === g.id && (!q || (p.name + ' ' + p.blurb + ' ' + g.name).toLowerCase().includes(q)));
+        if (!q && group !== 'all' && group !== 'star' && group !== g.id) continue;
+        const picks = TRANSITION_PICKS.filter(p => p.group === g.id && (q || group !== 'star' || isStarred('trans', p.key)) && (!q || (p.name + ' ' + p.blurb + ' ' + g.name).toLowerCase().includes(q)));
         if (!picks.length) continue;
         shown += picks.length;
-        if (group === 'all' || q) list.appendChild(el('h4', 'trs__gh', g.name));
+        if (group === 'all' || group === 'star' || q) list.appendChild(el('h4', 'trs__gh', g.name));
         const grid = el('div', 'trs__grid');
         for (const pick of picks) {
           const b = el('button', 'trs' + (cur?.key === pick.key ? ' is-on' : ''));
           b.dataset.pick = pick.key;
           b.title = pick.blurb;
           const pic = tileCanvas(pick);
-          b.append(pic, el('span', 'trs__name', pick.name));
+          b.append(pic, el('span', 'trs__name', pick.name), starEl('trans', pick.key, pick.name));
           b.addEventListener('click', () => apply(pick));
           const on = () => { pic.__play(); previewPick(pick); };
           b.addEventListener('pointerenter', on);
@@ -379,7 +380,7 @@ export function initTransitions({ store, cmds, comp, playback }) {
         grid.addEventListener('pointerleave', showCurrent);
         list.appendChild(grid);
       }
-      if (!shown) list.appendChild(el('p', 'trs__none', `Nothing called “${query}”. Try zoom, glitch or fade.`));
+      if (!shown) list.appendChild(el('p', 'trs__none', !q && group === 'star' ? 'Nothing starred yet. Point at a transition and click its star.' : `Nothing called “${query}”. Try zoom, glitch or fade.`));
       paintTiles();
     }
     fill();

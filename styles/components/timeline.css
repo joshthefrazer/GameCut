@@ -39,9 +39,8 @@
 .tl-overview{flex:none;display:flex;align-items:stretch;height:26px;border-bottom:1px solid var(--glass-line)}
 .tl-overview__label{
   width:var(--track-head-w);flex:none;display:flex;align-items:center;padding:0 12px;
-  font-size:calc(11px*var(--fs));text-transform:uppercase;letter-spacing:.12em;color:var(--txt-3);
-  border-right:1px solid var(--glass-line);background:var(--tl-ruler-bg);
-}
+  font-size:calc(12.5px*var(--fs));text-transform:none;letter-spacing:0;color:var(--txt-3);
+  border-right:1px solid var(--glass-line);background:var(--tl-ruler-bg);font-weight:650}
 .tl-overview canvas{flex:1;min-width:0;height:100%;cursor:pointer}
 
 .timeline__body{flex:1;min-height:0;display:flex;overflow:hidden}
@@ -60,7 +59,7 @@
   background:var(--tl-ruler-bg);
   position:relative;z-index:2;
   display:flex;align-items:center;padding:0 10px;
-  font-size:calc(11px*var(--fs));text-transform:uppercase;letter-spacing:.12em;color:var(--txt-3)}
+  font-size:calc(12.5px*var(--fs));text-transform:none;letter-spacing:0;color:var(--txt-3);font-weight:650}
 .th{
   display:flex;align-items:center;gap:7px;padding:0 9px;
   border-bottom:1px solid var(--glass-line);

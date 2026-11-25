@@ -988,6 +988,8 @@ export function createCommands(store, history) {
       }
       if (clip.type === 'effect') look.effect = structuredClone(clip.effect);
       Object.assign(look, pick(clip, ['fx', 'motion', 'fit', 'crop', 'flipH', 'flipV', 'color', 'blend']));
+      // For “Paste parts of a look”: a plain paste leaves these alone.
+      look.more = pick(clip, ['transIn', 'volume', 'fadeIn', 'fadeOut', 'clean', 'muted']);
       look.transform = pick(clip.transform || {}, ['x', 'y', 'scale', 'rotation', 'opacity']);
       lookClipboard = look;
       bus.emit('toast', { msg: `Copied the look of “${clip.name || clip.type}” — select clips and paste it (Ctrl+Alt+V)`, ms: 3200, key: 'look' });
@@ -996,7 +998,20 @@ export function createCommands(store, history) {
 
     get copiedLook() { return lookClipboard; },
 
-    pasteLook(ids = store.rt.selection) {
+    /** Which parts a copied look has. */
+    lookParts(look = lookClipboard) {
+      if (!look) return [];
+      const pic = look.from !== 'text' && look.from !== 'effect' && look.from !== 'audio';
+      return [look.from !== 'effect' && look.from !== 'audio' && 'transform', ...(pic ? ['crop', 'color', 'fx', 'blend', 'fit'] : []), look.motion && 'motion',
+        look.more?.transIn && 'transIn', look.more && (look.from === 'video' || look.from === 'audio') && 'sound', look.textStyle && 'text'].filter(Boolean);
+    },
+    /** How many of these clips would take any of those parts. */
+    lookTargets(ids, parts) {
+      return store.doc.tracks.reduce((n, t) => n + (t.locked ? 0 : t.clips.filter(c => ids.includes(c.id) && !c.locked && parts.some(p => takesPart(c, p))).length), 0);
+    },
+
+    pasteLook(ids = store.rt.selection, parts = null) {
+      if (parts) return pasteParts(ids, parts);
       const look = lookClipboard;
       if (!look) { bus.emit('toast', { msg: 'Copy a look first: right-click a clip → Copy look.' }); return 0; }
       let n = 0;
@@ -1757,6 +1772,36 @@ export function createCommands(store, history) {
       return next;
     },
 
+    /** A marker's note or colour. */
+    setMarker(id, patch) {
+      history.run('Marker', (doc) => { const m = doc.markers.find(x => x.id === id); if (m) Object.assign(m, patch); });
+    },
+
+    /**
+     * Another recording in this clip's place: its place, length, effects, crop and
+     * transition all stay. Layers cropped out of it that follow it change too.
+     */
+    replaceMedia(clipId, assetId) {
+      const a = assets.get(assetId), { clip } = findClip(store.doc, clipId);
+      if (!a || !clip || a.kind !== clip.type || a.missing) return { ok: false, reason: 'That file cannot go there.' };
+      let shorter = false;
+      history.run('Replace footage', (doc) => {
+        for (const t of doc.tracks) for (const c of t.clips) {
+          if (c.id !== clipId && !(c.linkTo === clipId && c.assetId === clip.assetId && c.type === clip.type)) continue;
+          c.name = c.name === assets.get(c.assetId)?.name || c.id === clipId ? a.name : c.name;
+          if (c.type !== 'image') {
+            const need = c.duration * (c.speed || 1), len = a.duration || need;
+            c.sourceDuration = len;
+            if (need > len + 1e-3) { c.inPoint = 0; c.duration = Math.max(1 / (doc.fps || 30), Math.floor(len / (c.speed || 1) * (doc.fps || 30)) / (doc.fps || 30)); shorter = true; }
+            else c.inPoint = Math.max(0, Math.min(c.inPoint || 0, len - need));
+          }
+          if (c.id !== clipId) c.assetId = assetId;
+        }
+        const me = findClip(doc, clipId).clip; me.assetId = assetId;
+      });
+      return { ok: true, shorter };
+    },
+
     addMarker(t = store.rt.playhead, label = '') {
       history.run('Add marker', (doc) => {
         doc.markers.push({ id: uid('mk'), t: q(t), label, color: '#ffb454' });
@@ -1798,6 +1843,35 @@ export function createCommands(store, history) {
     },
   };
 
+  /** Only the ticked parts of a copied look. */
+  function pasteParts(ids, parts) {
+    const look = lookClipboard;
+    if (!look || !parts.length) return 0;
+    let n = 0;
+    const put = (c, k, from) => { if (from[k] === undefined) delete c[k]; else c[k] = structuredClone(from[k]); };
+    history.run('Paste parts of a look', (doc) => {
+      for (const t of doc.tracks) {
+        if (t.locked) continue;
+        for (const c of t.clips) {
+          if (!ids.includes(c.id) || c.locked) continue;
+          const take = parts.filter(p => takesPart(c, p));
+          if (!take.length) continue;
+          for (const p of take) {
+            if (p === 'transform') c.transform = { ...c.transform, ...look.transform };
+            else if (p === 'text') c.text = { ...c.text, ...structuredClone(look.textStyle) };
+            else if (p === 'sound') { for (const k of ['volume', 'fadeIn', 'fadeOut', 'clean', 'muted']) if (look.more[k] !== undefined) c[k] = structuredClone(look.more[k]); }
+            else if (p === 'transIn') put(c, 'transIn', look.more);
+            else if (p === 'fit') for (const k of ['fit', 'flipH', 'flipV']) put(c, k, look);
+            else put(c, p, look);
+          }
+          n++;
+        }
+      }
+    });
+    bus.emit('toast', n ? { msg: `Pasted onto ${n} clip${n === 1 ? '' : 's'}`, kind: 'ok', key: 'look', action: { label: 'Undo', run: () => history.undo() } } : { msg: 'None of those clips can take that.', key: 'look' });
+    return n;
+  }
+
   return api;
 }
 
@@ -1830,4 +1904,14 @@ function shiftKeys(keys, delta) {
   for (const [k, list] of Object.entries(keys || {}))
     out[k] = list.map(x => ({ ...x, t: x.t + delta }));
   return out;
+}
+
+/** Can this clip take that part of a look? */
+function takesPart(c, p) {
+  const pic = c.type === 'video' || c.type === 'image';
+  if (p === 'transform') return c.type !== 'effect' && c.type !== 'audio';
+  if (p === 'text') return c.type === 'text';
+  if (p === 'sound') return c.type === 'video' || c.type === 'audio';
+  if (p === 'motion') return pic || c.type === 'shape';
+  return pic;
 }

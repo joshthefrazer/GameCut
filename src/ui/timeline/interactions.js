@@ -512,6 +512,7 @@ export function initTimelineInteractions({ view, store, cmds, history, playback,
       cmds.trimClip(clip.id, edge === 'in' ? 'in' : 'out', s.t);
       const now = locate(clip.id)?.clip;
       if (now) say(`${edge === 'in' ? 'Starts' : 'Ends'} at ${fmt(edge === 'in' ? now.start : now.start + now.duration)} · ${fmt(now.duration)} long`);
+      bus.emit('trim:show', { clipId: clip.id, edge, x: ev.clientX, y: ev.clientY });
       autoScroll(p.x);
       repaint();
     };
@@ -519,6 +520,7 @@ export function initTimelineInteractions({ view, store, cmds, history, playback,
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
       window.removeEventListener('pointercancel', up);
+      bus.emit('trim:hide');
       cancelDrag = null;
       store.rt.dragging = null;
       store.rt.snapLine = null;

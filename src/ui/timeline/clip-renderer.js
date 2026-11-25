@@ -4,6 +4,7 @@ import { keyTimes } from '../../engine/keyframes.js';
 import { shortTime } from '../../core/time.js';
 import { TH, alpha as hexA } from '../theme.js';
 import { envelope } from '../../engine/layers/effects.js';
+import { tileAt, stepFor } from '../../media/filmstrip.js';
 
 const imgCache = new Map();
 function thumbFor(assetId) {
@@ -53,8 +54,8 @@ export function drawClip(ctx, { clip, track, rect, full, selected, pps, L, hover
   ctx.fillRect(x, y, w, h);
 
   // Content
-  if (clip.type === 'video' || clip.type === 'image') drawFilmstrip(ctx, clip, rect, full, h);
-  if (clip.type === 'audio' || (clip.type === 'video' && h > 44)) drawWaveform(ctx, clip, rect, full, pps);
+  if (clip.type === 'video' || clip.type === 'image') drawFilmstrip(ctx, clip, rect, full, h, pps);
+  if (clip.type === 'audio' || (clip.type === 'video' && !clip.silent && h >= 30)) drawWaveform(ctx, clip, rect, full, pps);
   if (clip.type === 'text') drawTextPreview(ctx, clip, rect);
   if (clip.type === 'anim') drawAnimPreview(ctx, clip, rect);
   if (clip.type === 'effect') drawEnvelope(ctx, clip, rect, full);
@@ -193,8 +194,9 @@ export function drawClip(ctx, { clip, track, rect, full, selected, pps, L, hover
 
 /* ── content painters ─────────────────────────────────────────── */
 
-function drawFilmstrip(ctx, clip, rect, full, h) {
+function drawFilmstrip(ctx, clip, rect, full, h, pps) {
   const img = thumbFor(clip.assetId);
+  const asset = clip.type === 'video' ? assets.get(clip.assetId) : null;
   const top = Math.min(15, h * .34);
   const bandH = h - top;
   if (bandH < 8) return;
@@ -202,11 +204,16 @@ function drawFilmstrip(ctx, clip, rect, full, h) {
   const tw = (img.naturalWidth / img.naturalHeight) * bandH;
   if (tw < 4) return;
   ctx.save();
-  ctx.globalAlpha = .72;
+  ctx.globalAlpha = .92;
   ctx.beginPath(); ctx.rect(rect.x, rect.y + top, rect.w, bandH); ctx.clip();
   for (let sx = full.x; sx < rect.x + rect.w; sx += tw) {
     if (sx + tw < rect.x) continue;
-    ctx.drawImage(img, sx, rect.y + top, tw, bandH);
+    // Each tile is the moment in the middle of it.
+    const speed = clip.speed || 1;
+    const t = clip.inPoint + ((sx + tw / 2 - full.x) / pps) * speed;
+    const pic = asset && tileAt(asset, t, stepFor((tw / pps) * speed));
+    ctx.drawImage(pic || img, sx, rect.y + top, tw + 0.5, bandH);
+    if (asset && tw > 26) { ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.fillRect(sx + tw - 0.5, rect.y + top, 1, bandH); }
   }
   ctx.restore();
 }
@@ -216,8 +223,11 @@ function drawWaveform(ctx, clip, rect, full, pps) {
   const peaks = a?.peaks;
   if (!peaks) return;
   const top = Math.min(15, rect.h * .34);
-  const bandY = rect.y + top + 1;
-  const bandH = rect.h - top - 3;
+  const video = clip.type === 'video';
+  const all = rect.h - top - 3;
+  // Under the pictures on a video, the whole height on a sound.
+  const bandH = video ? Math.max(8, Math.round(all * 0.38)) : all;
+  const bandY = rect.y + rect.h - 2 - bandH;
   if (bandH < 6) return;
 
   const mid = bandY + bandH / 2;
@@ -228,6 +238,12 @@ function drawWaveform(ctx, clip, rect, full, pps) {
 
   ctx.save();
   ctx.beginPath(); ctx.rect(rect.x, bandY, rect.w, bandH); ctx.clip();
+  if (video) { ctx.fillStyle = 'rgba(4,7,14,.62)'; ctx.fillRect(rect.x, bandY, rect.w, bandH); }
+  // What you hear: quieter when turned down, faint when muted.
+  const vol = Math.min(1.4, clip.volume ?? 1);
+  ctx.globalAlpha = clip.muted ? 0.3 : 1;
+  const per = Math.max(1, Math.min(48, Math.ceil(speed * peaks.rate / pps)));   // summaries under one pixel
+  const peakAt = (arr, i, pick) => { let v = arr[i]; for (let k = 1; k < per && i + k < arr.length; k++) if (pick ? arr[i + k] > v : arr[i + k] < v) v = arr[i + k]; return v; };
 
   // RMS body — white over the saturated clip body reads cleanly at any zoom.
   ctx.fillStyle = 'rgba(255,255,255,.34)';
@@ -235,17 +251,17 @@ function drawWaveform(ctx, clip, rect, full, pps) {
     const st = clip.inPoint + ((x - full.x) / pps) * speed;
     const i = (st * peaks.rate) | 0;
     if (i < 0 || i >= peaks.rms.length) continue;
-    const v = peaks.rms[i] * amp * 1.9;
+    const v = Math.min(amp, peakAt(peaks.rms, i, true) * amp * 1.9 * vol);
     ctx.fillRect(x, mid - v, 1, v * 2);
   }
   // Min/max silhouette — this is the edge you cut against.
-  ctx.fillStyle = 'rgba(255,255,255,.92)';
+  ctx.fillStyle = video ? 'rgba(255,255,255,.8)' : 'rgba(255,255,255,.92)';
   for (let x = x0; x < x1; x++) {
     const st = clip.inPoint + ((x - full.x) / pps) * speed;
     const i = (st * peaks.rate) | 0;
     if (i < 0 || i >= peaks.max.length) continue;
-    const hi = peaks.max[i] * amp;
-    const lo = peaks.min[i] * amp;
+    const hi = Math.min(amp, peakAt(peaks.max, i, true) * amp * vol);
+    const lo = Math.max(-amp, peakAt(peaks.min, i, false) * amp * vol);
     ctx.fillRect(x, mid - hi, 1, Math.max(1, hi - lo));
   }
   ctx.strokeStyle = TH.waveMid;

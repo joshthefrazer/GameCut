@@ -7,6 +7,7 @@ import { CLIP_COLORS } from '../../core/schema.js';
 import { bus, raf } from '../../core/events.js';
 import { ASPECTS } from '../../project/presets.js';
 import { buildTextPanel } from './text-panel.js';
+import { buildMulti } from './multi-panel.js';
 import { DEFAULT_TRANS_DUR, outgoingFor, pickFor, maxDurFor } from '../../engine/transitions.js';
 import { defaultFx } from '../../engine/layers/fx.js';
 import { GFX_LOOKS } from '../graphics/looks.js';
@@ -37,6 +38,7 @@ export function initInspector({ store, cmds, comp, playback }) {
     live = [];
     root = inspectorEl; audioRoot = audioEl;
     root.innerHTML = '';
+    if (sel.length > 1) { audioRoot.dataset.clip = ''; buildMulti({ root, store, cmds, comp, rerender }); return; }
     if (sel.length !== 1) return buildProject(sel.length);
     buildClip(sel[0].clip, sel[0].track);
   }
